@@ -19,13 +19,15 @@ import Documentacion  from "./pages/Documentacion";
 import Resolucion     from "./pages/Resolucion";
 import Reasignacion   from "./pages/Reasignacion";
 import Metas          from "./pages/Metas";
+import AjustadorSiniestros from "./pages/AjustadorSiniestros";
+
 
 const RUTAS_POR_ROL = {
   OPERADOR:             ["/dashboard","/clientes","/polizas","/cotizaciones","/vendedores"],
   ANALISTA:             ["/dashboard","/polizas","/pagos","/reportes"],
   ADMINISTRACION:       ["/dashboard","/polizas","/endosos","/pagos","/usuarios","/reportes","/clientes","/vendedores"],
   CABINERO_SINIESTROS:  ["/dashboard","/siniestros","/siniestros/nuevo"],
-  AJUSTADOR:            ["/dashboard","/siniestros","/documentacion","/resolucion"],
+  AJUSTADOR:            ["/dashboard","/siniestros","/documentacion","/resolucion", "/mis-siniestros"],
   SUPERVISOR_SINIESTROS:["/dashboard","/siniestros","/reasignacion","/reportes"],
   VENTAS:               ["/dashboard","/metas","/reportes"],
 };
@@ -131,6 +133,12 @@ export default function App() {
         ) : (
           <Route path="*" element={<Navigate to="/login" replace />} />
         )}
+
+        <Route path="/mis-siniestros" element={
+  <RutaProtegida rolNombre={rolNombre} path="/mis-siniestros">
+    <AjustadorSiniestros />
+  </RutaProtegida>
+} />
       </Routes>
     </BrowserRouter>
   );
