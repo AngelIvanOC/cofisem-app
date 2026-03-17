@@ -55,7 +55,6 @@ export default function Login({ onLoginSuccess }) {
     }
 
     // ✅ Login exitoso
-window.location.href = "/dashboard"; // Redirige a la página principal};
   }
   return (
     <div className="flex h-screen w-screen overflow-hidden">
