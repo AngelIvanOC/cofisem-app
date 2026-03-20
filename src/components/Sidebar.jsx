@@ -187,7 +187,7 @@ export default function Sidebar({ usuario, rolNombre }) {
             <path d="M12 24C12 17.373 17.373 12 24 12C30.627 12 36 17.373 36 24C36 30.627 30.627 36 24 36"
               stroke="white" strokeWidth="3" strokeLinecap="round"/>
             <path d="M24 36C20 36 16 32 16 28C16 24 20 20 24 20"
-              stroke="#7c8fff" strokeWidth="3" strokeLinecap="round"/>
+              stroke="#fff" strokeWidth="3" strokeLinecap="round"/>
             <circle cx="24" cy="24" r="3" fill="white"/>
           </svg>
         </div>
