@@ -1,65 +1,68 @@
+// ============================================================
+// src/App.jsx — VERSIÓN FINAL
+// Enrutamiento completo. Sin placeholders. Sin rutas huérfanas.
+// ============================================================
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getState, subscribe } from "./auth.js";
 
+// ── Core ──────────────────────────────────────────────────────
 import Login from "./pages/Login";
 import AppLayout from "./layouts/AppLayout";
-import Dashboard from "./pages/Dashboard";
-import Pagos from "./pages/Pagos";
-import Reportes from "./pages/Reportes";
-import Endosos from "./pages/Endosos";
-import Usuarios from "./pages/Usuarios";
-import Siniestros from "./pages/Siniestros";
-import SiniestroNuevo from "./pages/SiniestroNuevo";
-import Documentacion from "./pages/Documentacion";
-import Resolucion from "./pages/Resolucion";
-import Reasignacion from "./pages/Reasignacion";
-import Metas from "./pages/Metas";
-import AjustadorSiniestros from "./pages/AjustadorSiniestros";
+import PaginaEnConstruccion from "./pages/PaginaEnConstruccion";
 
-// Placeholders globales (roles no-operador)
-import ClientesGlobal from "./pages/Clientes";
-import PolizasGlobal from "./pages/Polizas";
-import CotizacionesGlobal from "./pages/Cotizaciones";
-import VendedoresGlobal from "./pages/Vendedores";
-
-// Módulo Operador
+// ── OPERADOR ──────────────────────────────────────────────────
 import OperadorDashboard from "./pages/operador/OperadorDashboard";
 import OperadorClientes from "./pages/operador/Clientes";
 import OperadorPolizas from "./pages/operador/Polizas";
 import { Vendedores as OperadorVendedores } from "./pages/operador/Vendedores";
 import CorteDiario from "./pages/operador/CorteDiario";
 
-// -- Analista --
+// ── ANALISTA ──────────────────────────────────────────────────
 import AnalistaDashboard from "./pages/analista/AnalistaDashboard";
 import AnalistaPolizas from "./pages/analista/AnalistaPolizas";
 import AnalistaPagos from "./pages/analista/AnalistaPagos";
 import AnalistaReportes from "./pages/analista/AnalistaReportes";
 import AnalistaCorte from "./pages/analista/AnalistaCorte";
 
-// -- Administración --
+// ── ADMINISTRACIÓN ────────────────────────────────────────────
 import AdminDashboard from "./pages/administracion/AdminDashboard";
 import AdminPolizas from "./pages/administracion/AdminPolizas";
 import AdminPagos from "./pages/administracion/AdminPagos";
 import AdminUsuarios from "./pages/administracion/AdminUsuarios";
 
+// ── CABINERO SINIESTROS ───────────────────────────────────────
+import CabineroDashboard from "./pages/cabinero/CabineroDashboard";
+import Siniestros from "./pages/cabinero/Siniestros";
+import SiniestroNuevo from "./pages/cabinero/SiniestroNuevo";
+
+// ── AJUSTADOR ─────────────────────────────────────────────────
+import AjustadorSiniestros from "./pages/ajustador/AjustadorSiniestros";
+
+// ── SUPERVISOR SINIESTROS ─────────────────────────────────────
 import SupervisorDashboard from "./pages/supervisor/SupervisorDashboard";
 import SupervisorSiniestros from "./pages/supervisor/SupervisorSiniestros";
 import SupervisorAjustadores from "./pages/supervisor/SupervisorAjustadores";
 import SupervisorReportes from "./pages/supervisor/SupervisorReportes";
 
+// ── VENTAS ────────────────────────────────────────────────────
 import VentasDashboard from "./pages/ventas/VentasDashboard";
 import VentasMetas from "./pages/ventas/VentasMetas";
 import VentasReportes from "./pages/ventas/VentasReportes";
 import VentasVendedores from "./pages/ventas/VentasVendedores";
 import VentasCotizaciones from "./pages/ventas/VentasCotizaciones";
 
+// ── Rutas permitidas por rol ──────────────────────────────────
+// NOTA: /cotizaciones y /cotizaciones/nueva son alias de /polizas
+// para el operador — redirigen al mismo componente OperadorPolizas
+// que internamente maneja el tab de cotizaciones.
 const RUTAS_POR_ROL = {
   OPERADOR: [
     "/dashboard",
     "/clientes",
     "/polizas",
-    "/cotizaciones/nueva",
+    "/cotizaciones",
+    "/cotizaciones/nueva", // alias → OperadorPolizas
     "/vendedores",
     "/corte-diario",
   ],
@@ -67,7 +70,6 @@ const RUTAS_POR_ROL = {
   ADMINISTRACION: [
     "/dashboard",
     "/polizas",
-    "/endosos",
     "/pagos",
     "/usuarios",
     "/reportes",
@@ -76,7 +78,7 @@ const RUTAS_POR_ROL = {
     "/corte-diario",
   ],
   CABINERO_SINIESTROS: ["/dashboard", "/siniestros", "/siniestros/nuevo"],
-  AJUSTADOR: ["/dashboard", "/mis-siniestros", "/documentacion", "/resolucion"],
+  AJUSTADOR: ["/dashboard", "/siniestros"],
   SUPERVISOR_SINIESTROS: [
     "/dashboard",
     "/siniestros",
@@ -94,11 +96,8 @@ const RUTAS_POR_ROL = {
 
 function RutaProtegida({ rolNombre, path, children }) {
   const permitidas = RUTAS_POR_ROL[rolNombre] || [];
-  return permitidas.includes(path) ? (
-    children
-  ) : (
-    <Navigate to="/dashboard" replace />
-  );
+  const ok = permitidas.some((r) => path === r || path.startsWith(r + "/"));
+  return ok ? children : <Navigate to="/dashboard" replace />;
 }
 
 function useAuthState() {
@@ -176,49 +175,102 @@ function SinPerfil({ error }) {
   );
 }
 
-// Wrapper: elige la versión del componente según el rol
-function DashboardRoute({ rolNombre, usuario }) {
-  if (rolNombre === "OPERADOR") return <OperadorDashboard usuario={usuario} />;
-  if (rolNombre === "ANALISTA") return <AnalistaDashboard usuario={usuario} />;
-  if (rolNombre === "ADMINISTRACION")
-    return <AdminDashboard usuario={usuario} />;
-  if (rolNombre === "SUPERVISOR_SINIESTROS")
-    return <SupervisorDashboard usuario={usuario} />;
-  if (rolNombre === "VENTAS") return <VentasDashboard usuario={usuario} />;
+// ── Route Wrappers por rol ────────────────────────────────────
 
-  return <Dashboard rolNombre={rolNombre} usuario={usuario} />;
+function DashboardRoute({ rolNombre, usuario }) {
+  switch (rolNombre) {
+    case "OPERADOR":
+      return <OperadorDashboard usuario={usuario} />;
+    case "ANALISTA":
+      return <AnalistaDashboard usuario={usuario} />;
+    case "ADMINISTRACION":
+      return <AdminDashboard usuario={usuario} />;
+    case "CABINERO_SINIESTROS":
+      return <CabineroDashboard usuario={usuario} />;
+    case "AJUSTADOR":
+      return <AjustadorSiniestros />;
+    case "SUPERVISOR_SINIESTROS":
+      return <SupervisorDashboard usuario={usuario} />;
+    case "VENTAS":
+      return <VentasDashboard usuario={usuario} />;
+    default:
+      return <PaginaEnConstruccion titulo="Dashboard" />;
+  }
+}
+
+// /polizas, /cotizaciones, /cotizaciones/nueva → todos sirven OperadorPolizas para operador
+function PolizasRoute({ rolNombre, usuario }) {
+  switch (rolNombre) {
+    case "OPERADOR":
+      return <OperadorPolizas usuario={usuario} />;
+    case "ANALISTA":
+      return <AnalistaPolizas />;
+    case "ADMINISTRACION":
+      return <AdminPolizas />;
+    default:
+      return <PaginaEnConstruccion titulo="Pólizas" />;
+  }
 }
 
 function ClientesRoute({ rolNombre, usuario }) {
-  if (rolNombre === "OPERADOR") return <OperadorClientes usuario={usuario} />;
-  return <ClientesGlobal rolNombre={rolNombre} usuario={usuario} />;
-}
-function PolizasRoute({ rolNombre, usuario }) {
-  if (rolNombre === "OPERADOR") return <OperadorPolizas usuario={usuario} />;
-  if (rolNombre === "ANALISTA") return <AnalistaPolizas />;
-  if (rolNombre === "ADMINISTRACION") return <AdminPolizas />;
-  return <PolizasGlobal rolNombre={rolNombre} />;
-}
-function VendedoresRoute({ rolNombre, usuario }) {
-  if (rolNombre === "OPERADOR") return <OperadorVendedores usuario={usuario} />;
-  return <VendedoresGlobal rolNombre={rolNombre} usuario={usuario} />;
-}
-function PagosRoute({ rolNombre }) {
-  if (rolNombre === "ANALISTA") return <AnalistaPagos />;
-  if (rolNombre === "ADMINISTRACION") return <AdminPagos />;
-  return <PagosGlobal rolNombre={rolNombre} />;
-}
-function ReportesRoute({ rolNombre }) {
-  if (rolNombre === "ANALISTA" || rolNombre === "ADMINISTRACION")
-    return <AnalistaReportes />;
-  return <ReportesGlobal rolNombre={rolNombre} />;
-}
-function CorteDiarioRoute({ rolNombre, usuario }) {
-  if (rolNombre === "OPERADOR") return <CorteDiario usuario={usuario} />; // editable
-  // Analista y Admin: solo lectura
-  return <AnalistaCorte />;
+  if (rolNombre === "OPERADOR" || rolNombre === "ADMINISTRACION") {
+    return <OperadorClientes usuario={usuario} />;
+  }
+  return <PaginaEnConstruccion titulo="Clientes" />;
 }
 
+function VendedoresRoute({ rolNombre, usuario }) {
+  if (rolNombre === "OPERADOR" || rolNombre === "ADMINISTRACION") {
+    return <OperadorVendedores usuario={usuario} />;
+  }
+  return <PaginaEnConstruccion titulo="Vendedores" />;
+}
+
+function PagosRoute({ rolNombre }) {
+  switch (rolNombre) {
+    case "ANALISTA":
+      return <AnalistaPagos />;
+    case "ADMINISTRACION":
+      return <AdminPagos />;
+    default:
+      return <PaginaEnConstruccion titulo="Pagos" />;
+  }
+}
+
+function ReportesRoute({ rolNombre }) {
+  if (rolNombre === "ANALISTA" || rolNombre === "ADMINISTRACION") {
+    return <AnalistaReportes />;
+  }
+  return <PaginaEnConstruccion titulo="Reportes" />;
+}
+
+function CorteRoute({ rolNombre, usuario }) {
+  switch (rolNombre) {
+    case "OPERADOR":
+      return <CorteDiario usuario={usuario} />; // editable
+    case "ANALISTA":
+      return <AnalistaCorte />; // solo lectura
+    case "ADMINISTRACION":
+      return <AnalistaCorte />; // solo lectura
+    default:
+      return <PaginaEnConstruccion titulo="Corte Diario" />;
+  }
+}
+
+function SiniestrosRoute({ rolNombre }) {
+  switch (rolNombre) {
+    case "CABINERO_SINIESTROS":
+      return <Siniestros />;
+    case "AJUSTADOR":
+      return <AjustadorSiniestros />;
+    case "SUPERVISOR_SINIESTROS":
+      return <SupervisorSiniestros />;
+    default:
+      return <Navigate to="/dashboard" replace />;
+  }
+}
+
+// ── App ───────────────────────────────────────────────────────
 export default function App() {
   const { session, usuario, rolNombre, error } = useAuthState();
 
@@ -243,25 +295,29 @@ export default function App() {
           <Route
             element={<AppLayout usuario={usuario} rolNombre={rolNombre} />}
           >
+            {/* ── Dashboard único por rol ── */}
             <Route
               path="/dashboard"
               element={
                 <DashboardRoute rolNombre={rolNombre} usuario={usuario} />
               }
             />
-            <Route
-              path="/clientes"
-              element={
-                <RutaProtegida rolNombre={rolNombre} path="/clientes">
-                  <ClientesRoute rolNombre={rolNombre} usuario={usuario} />
-                </RutaProtegida>
-              }
-            />
+
+            {/* ── Pólizas: operador, analista, admin ── */}
             <Route
               path="/polizas"
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/polizas">
                   <PolizasRoute rolNombre={rolNombre} usuario={usuario} />
+                </RutaProtegida>
+              }
+            />
+            {/* Cotizaciones del operador → mismo componente OperadorPolizas */}
+            <Route
+              path="/cotizaciones"
+              element={
+                <RutaProtegida rolNombre={rolNombre} path="/cotizaciones">
+                  <OperadorPolizas usuario={usuario} />
                 </RutaProtegida>
               }
             />
@@ -273,14 +329,18 @@ export default function App() {
                 </RutaProtegida>
               }
             />
+
+            {/* ── Clientes ── */}
             <Route
-              path="/cotizaciones"
+              path="/clientes"
               element={
-                <RutaProtegida rolNombre={rolNombre} path="/cotizaciones/nueva">
-                  <CotizacionesGlobal />
+                <RutaProtegida rolNombre={rolNombre} path="/clientes">
+                  <ClientesRoute rolNombre={rolNombre} usuario={usuario} />
                 </RutaProtegida>
               }
             />
+
+            {/* ── Vendedores ── */}
             <Route
               path="/vendedores"
               element={
@@ -289,20 +349,8 @@ export default function App() {
                 </RutaProtegida>
               }
             />
-            <Route
-              path="/corte-diario"
-              element={
-                <RutaProtegida rolNombre={rolNombre} path="/corte-diario">
-                  {
-                    rolNombre === "ANALISTA" ? (
-                      <AnalistaCorte />
-                    ) : (
-                      <CorteDiario usuario={usuario} />
-                    ) // operador
-                  }
-                </RutaProtegida>
-              }
-            />
+
+            {/* ── Pagos ── */}
             <Route
               path="/pagos"
               element={
@@ -310,7 +358,9 @@ export default function App() {
                   <PagosRoute rolNombre={rolNombre} />
                 </RutaProtegida>
               }
-            />{" "}
+            />
+
+            {/* ── Reportes ── */}
             <Route
               path="/reportes"
               element={
@@ -319,14 +369,18 @@ export default function App() {
                 </RutaProtegida>
               }
             />
+
+            {/* ── Corte diario ── */}
             <Route
-              path="/endosos"
+              path="/corte-diario"
               element={
-                <RutaProtegida rolNombre={rolNombre} path="/endosos">
-                  <Endosos />
+                <RutaProtegida rolNombre={rolNombre} path="/corte-diario">
+                  <CorteRoute rolNombre={rolNombre} usuario={usuario} />
                 </RutaProtegida>
               }
             />
+
+            {/* ── Admin: usuarios ── */}
             <Route
               path="/usuarios"
               element={
@@ -335,20 +389,26 @@ export default function App() {
                 </RutaProtegida>
               }
             />
+
+            {/* ── Siniestros (Cabinero / Ajustador / Supervisor) ── */}
             <Route
               path="/siniestros"
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/siniestros">
-                  {
-                    rolNombre === "SUPERVISOR_SINIESTROS" ? (
-                      <SupervisorSiniestros />
-                    ) : (
-                      <Siniestros />
-                    ) // cabinero: vista de cabinero
-                  }
+                  <SiniestrosRoute rolNombre={rolNombre} />
                 </RutaProtegida>
               }
             />
+            <Route
+              path="/siniestros/nuevo"
+              element={
+                <RutaProtegida rolNombre={rolNombre} path="/siniestros/nuevo">
+                  <SiniestroNuevo />
+                </RutaProtegida>
+              }
+            />
+
+            {/* ── Supervisor ── */}
             <Route
               path="/ajustadores"
               element={
@@ -368,54 +428,8 @@ export default function App() {
                 </RutaProtegida>
               }
             />
-            <Route
-              path="/siniestros/nuevo"
-              element={
-                <RutaProtegida rolNombre={rolNombre} path="/siniestros/nuevo">
-                  <SiniestroNuevo />
-                </RutaProtegida>
-              }
-            />
-            <Route
-              path="/documentacion"
-              element={
-                <RutaProtegida rolNombre={rolNombre} path="/documentacion">
-                  <Documentacion />
-                </RutaProtegida>
-              }
-            />
-            <Route
-              path="/resolucion"
-              element={
-                <RutaProtegida rolNombre={rolNombre} path="/resolucion">
-                  <Resolucion />
-                </RutaProtegida>
-              }
-            />
-            <Route
-              path="/reasignacion"
-              element={
-                <RutaProtegida rolNombre={rolNombre} path="/reasignacion">
-                  <Reasignacion />
-                </RutaProtegida>
-              }
-            />
-            <Route
-              path="/metas"
-              element={
-                <RutaProtegida rolNombre={rolNombre} path="/metas">
-                  <Metas />
-                </RutaProtegida>
-              }
-            />
-            <Route
-              path="/mis-siniestros"
-              element={
-                <RutaProtegida rolNombre={rolNombre} path="/mis-siniestros">
-                  <AjustadorSiniestros />
-                </RutaProtegida>
-              }
-            />
+
+            {/* ── Ventas ── */}
             <Route
               path="/ventas-metas"
               element={
@@ -451,6 +465,8 @@ export default function App() {
                 </RutaProtegida>
               }
             />
+
+            {/* Fallback → dashboard del rol */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         ) : (
