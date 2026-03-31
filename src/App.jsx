@@ -33,8 +33,8 @@ import AdminUsuarios from "./pages/administracion/AdminUsuarios";
 
 // ── CABINERO SINIESTROS ───────────────────────────────────────
 import CabineroDashboard from "./pages/cabinero/CabineroDashboard";
-import Siniestros from "./pages/cabinero/Siniestros";
-import SiniestroNuevo from "./pages/cabinero/SiniestroNuevo";
+import Siniestros from "./pages/cabinero/CabiSiniestros.jsx";
+import SiniestroNuevo from "./pages/cabinero/CabiReportar.jsx";
 
 // ── AJUSTADOR ─────────────────────────────────────────────────
 import AjustadorSiniestros from "./pages/ajustador/AjustadorSiniestros";
