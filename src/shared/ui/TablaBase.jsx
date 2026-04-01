@@ -1,7 +1,5 @@
 // ============================================================
-// src/shared/ui/TablaBase.jsx
-// Wrapper de tabla con header, filtros, footer y scroll horizontal
-// Todos los roles usan la misma base visual
+// src/shared/ui/TablaBase.jsx — RESPONSIVE
 // ============================================================
 
 export function TablaBase({ children, footer }) {
@@ -9,7 +7,7 @@ export function TablaBase({ children, footer }) {
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       {children}
       {footer && (
-        <div className="px-5 py-3 border-t border-gray-100">
+        <div className="px-4 sm:px-5 py-3 border-t border-gray-100">
           {footer}
         </div>
       )}
@@ -19,7 +17,7 @@ export function TablaBase({ children, footer }) {
 
 export function TablaHeader({ children }) {
   return (
-    <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
+    <div className="flex flex-wrap items-center gap-3 px-4 sm:px-5 py-4 border-b border-gray-100">
       {children}
     </div>
   );
@@ -27,13 +25,13 @@ export function TablaHeader({ children }) {
 
 export function TablaTabs({ tabs, activeTab, onTabChange }) {
   return (
-    <div className="flex items-center border-b border-gray-100 px-2 overflow-x-auto">
+    <div className="flex items-center border-b border-gray-100 px-2 overflow-x-auto scrollbar-none">
       {tabs.map((t) => (
         <button
           key={t.key}
           onClick={() => onTabChange(t.key)}
           className={[
-            "flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap",
+            "flex items-center gap-2 px-3 sm:px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap",
             activeTab === t.key
               ? "border-[#13193a] text-[#13193a]"
               : "border-transparent text-gray-400 hover:text-gray-600",
@@ -41,7 +39,9 @@ export function TablaTabs({ tabs, activeTab, onTabChange }) {
         >
           {t.label}
           {t.badge > 0 && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${t.badgeCls ?? "bg-blue-100 text-blue-700"}`}>
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${t.badgeCls ?? "bg-blue-100 text-blue-700"}`}
+            >
               {t.badge}
             </span>
           )}
@@ -53,7 +53,7 @@ export function TablaTabs({ tabs, activeTab, onTabChange }) {
 
 export function TablaScroll({ children }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
       <table className="w-full text-sm">{children}</table>
     </div>
   );
@@ -61,7 +61,9 @@ export function TablaScroll({ children }) {
 
 export function Th({ children, className = "" }) {
   return (
-    <th className={`text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap ${className}`}>
+    <th
+      className={`text-left text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-3 sm:px-4 py-2.5 sm:py-3 whitespace-nowrap ${className}`}
+    >
       {children}
     </th>
   );
@@ -69,16 +71,35 @@ export function Th({ children, className = "" }) {
 
 export function Td({ children, className = "" }) {
   return (
-    <td className={`px-4 py-3.5 ${className}`}>{children}</td>
+    <td className={`px-3 sm:px-4 py-3 sm:py-3.5 ${className}`}>{children}</td>
   );
 }
 
 export function FilaVacia({ cols, mensaje = "No se encontraron registros." }) {
   return (
     <tr>
-      <td colSpan={cols} className="text-center py-12 text-sm text-gray-400">
+      <td
+        colSpan={cols}
+        className="text-center py-10 sm:py-12 text-sm text-gray-400"
+      >
         {mensaje}
       </td>
     </tr>
+  );
+}
+
+// ── Cards view para mobile (alternativa a la tabla) ─────────
+export function CardsMobile({ children }) {
+  return <div className="sm:hidden divide-y divide-gray-50">{children}</div>;
+}
+
+export function CardMobile({ children, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      className={`px-4 py-4 ${onClick ? "cursor-pointer active:bg-gray-50" : ""}`}
+    >
+      {children}
+    </div>
   );
 }
