@@ -1,13 +1,20 @@
 // ============================================================
-// src/components/Sidebar.jsx — VERSIÓN RESPONSIVE
-// Desktop: sidebar colapsable lateral
-// Mobile: top bar + bottom nav tab bar
+// src/components/Sidebar.jsx — RESPONSIVE FINAL
+//
+// Props:
+//   desktopOnly → solo renderiza el sidebar lateral (para el flex row desktop)
+//   mobileOnly  → solo renderiza la navegación mobile (topbar + drawer/bottomnav)
+//
+// Roles:
+//   AJUSTADOR mobile → top bar mínimo + bottom nav fija
+//   TODOS LOS DEMÁS mobile → top bar + drawer hamburguesa
 // ============================================================
 import { NavLink, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { logout } from "../auth.js";
 import { NAV_POR_ROL } from "../config/navConfig";
 
+// ── Iconos ───────────────────────────────────────────────────
 const ICONS = {
   home: (
     <svg
@@ -53,19 +60,6 @@ const ICONS = {
       <polyline points="10 9 9 9 8 9" />
     </svg>
   ),
-  "dollar-sign": (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <line x1="12" y1="1" x2="12" y2="23" />
-      <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-    </svg>
-  ),
   "hard-hat": (
     <svg
       viewBox="0 0 24 24"
@@ -108,19 +102,6 @@ const ICONS = {
       <line x1="2" y1="20" x2="22" y2="20" />
     </svg>
   ),
-  edit: (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  ),
   shield: (
     <svg
       viewBox="0 0 24 24"
@@ -146,61 +127,6 @@ const ICONS = {
       <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
     </svg>
   ),
-  upload: (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="16 16 12 12 8 16" />
-      <line x1="12" y1="12" x2="12" y2="21" />
-      <path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3" />
-    </svg>
-  ),
-  "check-circle": (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </svg>
-  ),
-  "refresh-cw": (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="23 4 23 10 17 10" />
-      <polyline points="1 20 1 14 7 14" />
-      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-    </svg>
-  ),
-  target: (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="6" />
-      <circle cx="12" cy="12" r="2" />
-    </svg>
-  ),
   calendar: (
     <svg
       viewBox="0 0 24 24"
@@ -214,21 +140,6 @@ const ICONS = {
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
       <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  ),
-  "edit-square": (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
-      <rect x="9" y="3" width="6" height="4" rx="1" />
-      <line x1="9" y1="12" x2="15" y2="12" />
-      <line x1="9" y1="16" x2="13" y2="16" />
     </svg>
   ),
   "log-out": (
@@ -323,7 +234,26 @@ const ICONS = {
       <line x1="8" y1="12" x2="16" y2="12" />
     </svg>
   ),
+  "edit-square": (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+      <rect x="9" y="3" width="6" height="4" rx="1" />
+      <line x1="9" y1="12" x2="15" y2="12" />
+      <line x1="9" y1="16" x2="13" y2="16" />
+    </svg>
+  ),
 };
+
+function getIcon(name) {
+  return ICONS[name] ?? ICONS["file-text"];
+}
 
 function formatRol(rol = "") {
   return rol
@@ -332,15 +262,31 @@ function formatRol(rol = "") {
     .join(" ");
 }
 
-// ── DESKTOP SIDEBAR ──────────────────────────────────────────
-function DesktopSidebar({
-  usuario,
-  rolNombre,
-  navItems,
-  collapsed,
-  setCollapsed,
-}) {
+const LogoSVG = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+    <path
+      d="M12 24C12 17.373 17.373 12 24 12C30.627 12 36 17.373 36 24C36 30.627 30.627 36 24 36"
+      stroke="white"
+      strokeWidth="3"
+      strokeLinecap="round"
+    />
+    <path
+      d="M24 36C20 36 16 32 16 28C16 24 20 20 24 20"
+      stroke="#fff"
+      strokeWidth="3"
+      strokeLinecap="round"
+    />
+    <circle cx="24" cy="24" r="3" fill="white" />
+  </svg>
+);
+
+// ============================================================
+// DESKTOP SIDEBAR — sidebar lateral colapsable
+// Sólo se renderiza cuando desktopOnly=true (dentro del flex row desktop)
+// ============================================================
+function DesktopSidebar({ usuario, rolNombre, navItems }) {
   const location = useLocation();
+  const [collapsed, setCollapsed] = useState(false);
 
   const iniciales =
     [usuario?.nombre?.[0], usuario?.apellido?.[0]]
@@ -354,12 +300,11 @@ function DesktopSidebar({
   return (
     <aside
       style={{ width: collapsed ? 68 : 224, minWidth: collapsed ? 68 : 224 }}
-      className="relative flex-col h-screen bg-[#13193a] transition-all duration-300 ease-in-out select-none hidden md:flex"
+      className="relative flex flex-col h-full bg-[#13193a] transition-all duration-300 ease-in-out select-none shrink-0"
     >
-      {/* Botón colapsar */}
       <button
         onClick={() => setCollapsed((c) => !c)}
-        aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
+        aria-label={collapsed ? "Expandir" : "Colapsar"}
         className="cursor-pointer absolute -right-3 top-6 z-20 w-6 h-6 rounded-full bg-white border border-gray-200 shadow-md flex items-center justify-center text-[#13193a] hover:bg-gray-50 transition-colors"
       >
         <span className="w-3.5 h-3.5">
@@ -372,21 +317,7 @@ function DesktopSidebar({
         className={`flex items-center border-b border-white/10 shrink-0 ${collapsed ? "justify-center px-0 py-5" : "gap-3 px-4 py-5"}`}
       >
         <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-          <svg width="18" height="18" viewBox="0 0 48 48" fill="none">
-            <path
-              d="M12 24C12 17.373 17.373 12 24 12C30.627 12 36 17.373 36 24C36 30.627 30.627 36 24 36"
-              stroke="white"
-              strokeWidth="3"
-              strokeLinecap="round"
-            />
-            <path
-              d="M24 36C20 36 16 32 16 28C16 24 20 20 24 20"
-              stroke="#fff"
-              strokeWidth="3"
-              strokeLinecap="round"
-            />
-            <circle cx="24" cy="24" r="3" fill="white" />
-          </svg>
+          <LogoSVG size={18} />
         </div>
         {!collapsed && (
           <div className="min-w-0">
@@ -398,11 +329,10 @@ function DesktopSidebar({
         )}
       </div>
 
-      {/* Navegación */}
+      {/* Nav items */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 scrollbar-none">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
-          const icon = ICONS[item.icon] ?? ICONS["file-text"];
           return (
             <NavLink
               key={item.path}
@@ -422,7 +352,7 @@ function DesktopSidebar({
               <span
                 className={`w-[18px] h-[18px] shrink-0 ${isActive ? "text-[#13193a]" : "text-white/55 group-hover:text-white"}`}
               >
-                {icon}
+                {getIcon(item.icon)}
               </span>
               {!collapsed && <span className="truncate">{item.label}</span>}
             </NavLink>
@@ -465,45 +395,36 @@ function DesktopSidebar({
   );
 }
 
-// ── MOBILE TOP BAR ───────────────────────────────────────────
-function MobileTopBar({ usuario, rolNombre, navItems, menuOpen, setMenuOpen }) {
+// ============================================================
+// MOBILE DRAWER — top bar + panel deslizable
+// Para todos los roles EXCEPTO AJUSTADOR
+// ============================================================
+function MobileDrawer({ usuario, rolNombre, navItems }) {
   const location = useLocation();
+  const [open, setOpen] = useState(false);
 
   const iniciales =
     [usuario?.nombre?.[0], usuario?.apellido?.[0]]
       .filter(Boolean)
       .join("")
       .toUpperCase() || "?";
-
-  // Página activa para mostrar título
+  const nombreCompleto = [usuario?.nombre, usuario?.apellido]
+    .filter(Boolean)
+    .join(" ");
   const paginaActiva = navItems.find((i) => i.path === location.pathname);
 
   return (
     <>
-      {/* Top bar */}
-      <header className="md:hidden flex items-center justify-between px-4 h-14 bg-[#13193a] shrink-0 z-30">
+      {/* Top bar — ocupa todo el ancho */}
+      <header className="flex items-center justify-between px-4 h-14 bg-[#13193a] shrink-0 w-full">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-            <svg width="14" height="14" viewBox="0 0 48 48" fill="none">
-              <path
-                d="M12 24C12 17.373 17.373 12 24 12C30.627 12 36 17.373 36 24C36 30.627 30.627 36 24 36"
-                stroke="white"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-              <path
-                d="M24 36C20 36 16 32 16 28C16 24 20 20 24 20"
-                stroke="#fff"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-              <circle cx="24" cy="24" r="3" fill="white" />
-            </svg>
+            <LogoSVG size={14} />
           </div>
           <div>
             <p className="text-white font-bold text-sm leading-none">Cofisem</p>
             {paginaActiva && (
-              <p className="text-white/40 text-[10px] leading-none mt-0.5">
+              <p className="text-white/45 text-[10px] leading-none mt-0.5">
                 {paginaActiva.label}
               </p>
             )}
@@ -511,44 +432,43 @@ function MobileTopBar({ usuario, rolNombre, navItems, menuOpen, setMenuOpen }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center text-white text-[11px] font-bold">
+          <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center text-white text-[11px] font-bold">
             {iniciales}
           </div>
           <button
-            onClick={() => setMenuOpen((o) => !o)}
-            className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white"
+            onClick={() => setOpen(true)}
+            className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white active:bg-white/20"
           >
-            <span className="w-4 h-4">
-              {menuOpen ? ICONS["x"] : ICONS["menu"]}
-            </span>
+            <span className="w-4 h-4">{ICONS["menu"]}</span>
           </button>
         </div>
       </header>
 
-      {/* Drawer overlay */}
-      {menuOpen && (
+      {/* Overlay oscuro */}
+      {open && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-          onClick={() => setMenuOpen(false)}
+          className="fixed inset-0 z-40 bg-black/50"
+          onClick={() => setOpen(false)}
         />
       )}
 
-      {/* Drawer panel */}
+      {/* Panel deslizable */}
       <div
         className={[
-          "md:hidden fixed top-0 right-0 h-full w-72 bg-[#13193a] z-50 flex flex-col transition-transform duration-300 ease-in-out shadow-2xl",
-          menuOpen ? "translate-x-0" : "translate-x-full",
+          "fixed top-0 right-0 bottom-0 w-[280px] bg-[#13193a] z-50 flex flex-col",
+          "transition-transform duration-300 ease-in-out shadow-2xl",
+          open ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
       >
-        {/* Drawer header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center text-white font-bold text-sm">
+        {/* Cabecera del drawer */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center text-white font-bold text-sm shrink-0">
               {iniciales}
             </div>
-            <div>
-              <p className="text-white text-sm font-semibold leading-none">
-                {[usuario?.nombre, usuario?.apellido].filter(Boolean).join(" ")}
+            <div className="min-w-0">
+              <p className="text-white text-sm font-semibold leading-none truncate">
+                {nombreCompleto}
               </p>
               <p className="text-white/40 text-[11px] mt-0.5">
                 {formatRol(rolNombre)}
@@ -556,26 +476,25 @@ function MobileTopBar({ usuario, rolNombre, navItems, menuOpen, setMenuOpen }) {
             </div>
           </div>
           <button
-            onClick={() => setMenuOpen(false)}
-            className="text-white/50 hover:text-white transition-colors"
+            onClick={() => setOpen(false)}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-colors shrink-0 ml-2"
           >
-            <span className="w-5 h-5 block">{ICONS["x"]}</span>
+            <span className="w-4 h-4">{ICONS["x"]}</span>
           </button>
         </div>
 
-        {/* Drawer nav */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2">
+        {/* Links de navegación */}
+        <nav className="flex-1 overflow-y-auto py-3 px-3">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
-            const icon = ICONS[item.icon] ?? ICONS["file-text"];
             return (
               <NavLink
                 key={item.path}
                 to={item.path}
                 end
-                onClick={() => setMenuOpen(false)}
+                onClick={() => setOpen(false)}
                 className={[
-                  "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 my-0.5",
+                  "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all my-0.5",
                   isActive
                     ? "bg-white text-[#13193a]"
                     : "text-white/65 hover:bg-white/8 hover:text-white",
@@ -584,7 +503,7 @@ function MobileTopBar({ usuario, rolNombre, navItems, menuOpen, setMenuOpen }) {
                 <span
                   className={`w-[18px] h-[18px] shrink-0 ${isActive ? "text-[#13193a]" : "text-white/55"}`}
                 >
-                  {icon}
+                  {getIcon(item.icon)}
                 </span>
                 <span>{item.label}</span>
               </NavLink>
@@ -592,14 +511,14 @@ function MobileTopBar({ usuario, rolNombre, navItems, menuOpen, setMenuOpen }) {
           })}
         </nav>
 
-        {/* Drawer footer */}
-        <div className="border-t border-white/10 p-4">
+        {/* Cerrar sesión */}
+        <div className="border-t border-white/10 p-4 shrink-0">
           <button
             onClick={() => {
               logout();
-              setMenuOpen(false);
+              setOpen(false);
             }}
-            className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-white/50 hover:bg-white/8 hover:text-white transition-all text-sm cursor-pointer"
+            className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-white/50 hover:bg-white/8 hover:text-white transition-all text-sm"
           >
             <span className="w-[18px] h-[18px] shrink-0">
               {ICONS["log-out"]}
@@ -612,99 +531,113 @@ function MobileTopBar({ usuario, rolNombre, navItems, menuOpen, setMenuOpen }) {
   );
 }
 
-// ── MOBILE BOTTOM NAV ────────────────────────────────────────
-// Muestra máximo 5 tabs; si hay más, el último abre el drawer
-function MobileBottomNav({ navItems, onMorePress }) {
+// ============================================================
+// MOBILE BOTTOM NAV — EXCLUSIVO para AJUSTADOR
+// ============================================================
+function AjustadorBottomNav({ navItems }) {
   const location = useLocation();
-
-  // Mostrar hasta 4 items + "Más" si hay más de 4
-  const MAX_VISIBLE = 4;
-  const showMore = navItems.length > MAX_VISIBLE;
-  const visibleItems = showMore ? navItems.slice(0, MAX_VISIBLE) : navItems;
-
-  return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 safe-area-inset-bottom">
-      <div className="flex items-stretch h-16">
-        {visibleItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          const icon = ICONS[item.icon] ?? ICONS["file-text"];
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end
-              className={[
-                "flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative",
-                isActive ? "text-[#13193a]" : "text-gray-400",
-              ].join(" ")}
-            >
-              {isActive && (
-                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#13193a] rounded-full" />
-              )}
-              <span
-                className={`w-5 h-5 ${isActive ? "text-[#13193a]" : "text-gray-400"}`}
-              >
-                {icon}
-              </span>
-              <span
-                className={`text-[10px] font-semibold leading-none ${isActive ? "text-[#13193a]" : "text-gray-400"}`}
-              >
-                {item.label.length > 8
-                  ? item.label.slice(0, 7) + "…"
-                  : item.label}
-              </span>
-            </NavLink>
-          );
-        })}
-
-        {showMore && (
-          <button
-            onClick={onMorePress}
-            className="flex-1 flex flex-col items-center justify-center gap-0.5 text-gray-400"
-          >
-            <span className="w-5 h-5">{ICONS["menu"]}</span>
-            <span className="text-[10px] font-semibold leading-none">Más</span>
-          </button>
-        )}
-      </div>
-      {/* Safe area padding for devices with home indicator */}
-      <div className="h-safe-area-inset-bottom bg-white" />
-    </nav>
-  );
-}
-
-// ── EXPORT PRINCIPAL ─────────────────────────────────────────
-export default function Sidebar({ usuario, rolNombre }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const navItems = NAV_POR_ROL[rolNombre] ?? [];
 
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* Top bar mínimo */}
+      <header className="flex items-center px-4 h-14 bg-[#13193a] shrink-0 w-full">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+            <LogoSVG size={14} />
+          </div>
+          <div>
+            <p className="text-white font-bold text-sm leading-none">Cofisem</p>
+            <p className="text-white/40 text-[10px] leading-none mt-0.5">
+              Ajustador
+            </p>
+          </div>
+        </div>
+      </header>
+
+      {/* Bottom nav fija */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200">
+        <div className="flex items-stretch h-[60px]">
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end
+                className={[
+                  "flex-1 flex flex-col items-center justify-center gap-1 relative transition-colors",
+                  isActive ? "text-[#13193a]" : "text-gray-400",
+                ].join(" ")}
+              >
+                {isActive && (
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-[#13193a] rounded-full" />
+                )}
+                <span className="w-5 h-5">{getIcon(item.icon)}</span>
+                <span className="text-[10px] font-semibold leading-none">
+                  {item.label.length > 9
+                    ? item.label.slice(0, 8) + "…"
+                    : item.label}
+                </span>
+              </NavLink>
+            );
+          })}
+          <button
+            onClick={() => logout()}
+            className="flex flex-col items-center justify-center gap-1 px-4 text-gray-400 active:text-gray-600 border-l border-gray-100"
+          >
+            <span className="w-5 h-5">{ICONS["log-out"]}</span>
+            <span className="text-[10px] font-semibold leading-none">
+              Salir
+            </span>
+          </button>
+        </div>
+        <div
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          className="bg-white"
+        />
+      </nav>
+    </>
+  );
+}
+
+// ============================================================
+// EXPORT PRINCIPAL
+// Recibe desktopOnly o mobileOnly para renderizar solo lo que
+// corresponde a cada contenedor del AppLayout
+// ============================================================
+export default function Sidebar({
+  usuario,
+  rolNombre,
+  desktopOnly = false,
+  mobileOnly = false,
+}) {
+  const navItems = NAV_POR_ROL[rolNombre] ?? [];
+  const esAjustador = rolNombre === "AJUSTADOR";
+
+  // Modo desktop: solo el sidebar lateral
+  if (desktopOnly) {
+    return (
       <DesktopSidebar
         usuario={usuario}
         rolNombre={rolNombre}
         navItems={navItems}
-        collapsed={collapsed}
-        setCollapsed={setCollapsed}
       />
+    );
+  }
 
-      {/* Mobile top bar + drawer */}
-      <MobileTopBar
+  // Modo mobile: topbar + drawer O topbar + bottom nav
+  if (mobileOnly) {
+    return esAjustador ? (
+      <AjustadorBottomNav navItems={navItems} />
+    ) : (
+      <MobileDrawer
         usuario={usuario}
         rolNombre={rolNombre}
         navItems={navItems}
-        menuOpen={menuOpen}
-        setMenuOpen={setMenuOpen}
       />
+    );
+  }
 
-      {/* Mobile bottom nav */}
-      <MobileBottomNav
-        navItems={navItems}
-        onMorePress={() => setMenuOpen(true)}
-      />
-    </>
-  );
+  // Fallback (no debería usarse directamente)
+  return null;
 }
