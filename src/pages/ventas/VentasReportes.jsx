@@ -1,1 +1,1 @@
-export { default } from "../../features/ventas/reportes/ReportesPage";
+export { default } from "../../features/ventas/VentasReportes";

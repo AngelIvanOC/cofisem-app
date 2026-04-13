@@ -1,1 +1,1 @@
-export { default } from "../../features/cabinero/dashboard/DashboardPage";
+export { default } from "../../features/cabinero/CabineroDashboard";

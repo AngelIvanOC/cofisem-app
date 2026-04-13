@@ -1,1 +1,1 @@
-export { default } from "../../features/analista/polizas/PolizasPage";
+export { default } from "../../features/analista/AnalistaPolizas";

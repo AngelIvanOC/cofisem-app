@@ -1,1 +1,1 @@
-export { default } from "../../features/administracion/polizas/PolizasPage";
+export { default } from "../../features/administracion/AdminPolizas";

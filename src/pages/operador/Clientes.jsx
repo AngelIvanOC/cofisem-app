@@ -1,1 +1,1 @@
-export { default } from "../../features/operador/clientes/ClientesPage";
+export { default } from "../../features/operador/Clientes";

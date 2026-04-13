@@ -1,1 +1,1 @@
-export { default } from "../../features/administracion/usuarios/UsuariosPage";
+export { default } from "../../features/administracion/AdminUsuarios";

@@ -1,1 +1,1 @@
-export { default } from "../../features/ventas/metas/MetasPage";
+export { default } from "../../features/ventas/VentasMetas";

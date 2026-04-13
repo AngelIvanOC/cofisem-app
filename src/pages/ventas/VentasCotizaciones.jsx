@@ -1,1 +1,1 @@
-export { default } from "../../features/ventas/cotizaciones/CotizacionesPage";
+export { default } from "../../features/ventas/VentasCotizaciones";

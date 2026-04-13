@@ -1,1 +1,1 @@
-export { default } from "../../features/analista/pagos/PagosPage";
+export { default } from "../../features/analista/AnalistaPagos";

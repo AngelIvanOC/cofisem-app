@@ -1,1 +1,1 @@
-export { default } from "../../features/operador/corte/CortePage";
+export { default } from "../../features/operador/CorteDiario";

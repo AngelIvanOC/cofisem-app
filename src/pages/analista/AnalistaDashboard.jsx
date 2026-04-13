@@ -1,1 +1,1 @@
-export { default } from "../../features/analista/dashboard/DashboardPage";
+export { default } from "../../features/analista/AnalistaDashboard";

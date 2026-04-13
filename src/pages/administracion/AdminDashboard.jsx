@@ -1,1 +1,1 @@
-export { default } from "../../features/administracion/dashboard/DashboardPage";
+export { default } from "../../features/administracion/AdminDashboard";

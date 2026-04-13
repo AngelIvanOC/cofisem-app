@@ -1,1 +1,1 @@
-export { default } from "../../features/supervisor/dashboard/DashboardPage";
+export { default } from "../../features/supervisor/SupervisorDashboard";

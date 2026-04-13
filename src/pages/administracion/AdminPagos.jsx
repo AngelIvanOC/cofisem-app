@@ -1,1 +1,1 @@
-export { default } from "../../features/administracion/pagos/PagosPage";
+export { default } from "../../features/administracion/AdminPagos";
