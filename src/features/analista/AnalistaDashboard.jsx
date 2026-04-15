@@ -1,7 +1,5 @@
 // ============================================================
-// src/pages/analista/AnalistaDashboard.jsx
-// Dashboard limpio — sin scroll
-// Todas las rutas verificadas contra App.jsx
+// src/features/analista/AnalistaDashboard.jsx
 // ============================================================
 import { useNavigate } from "react-router-dom";
 
@@ -12,153 +10,88 @@ const HOY = new Date().toLocaleDateString("es-MX", {
   year: "numeric",
 });
 
-const KPIS = [
+const OFICINAS = [
+  { nombre: "CIVAC", polizas: 30, cobrado: 72000, pctMeta: 100 },
+  { nombre: "ZAPATA", polizas: 22, cobrado: 50600, pctMeta: 88 },
+  { nombre: "TEMIXCO", polizas: 10, cobrado: 23000, pctMeta: 67 },
+  { nombre: "CUAUTLA", polizas: 6, cobrado: 13800, pctMeta: 60 },
+];
+
+const PENDIENTES = [
   {
-    label: "Pólizas vigentes",
-    value: "186",
-    accent: "emerald",
-    path: "/polizas",
-    sub: "+5 esta semana",
+    poliza: "3414001",
+    asegurado: "Pedro Ramos",
+    oficina: "TEMIXCO",
+    tipo: "Pend. aplicar",
   },
   {
-    label: "Pend. de aplicar",
-    value: "4",
-    accent: "blue",
-    path: "/polizas",
-    sub: "Requieren acción",
+    poliza: "3414002",
+    asegurado: "Rosa Mendoza",
+    oficina: "CIVAC",
+    tipo: "Pend. aplicar",
   },
   {
-    label: "Cuotas vencidas",
-    value: "7",
-    accent: "red",
-    path: "/pagos",
-    sub: "Sin cobrar",
+    poliza: "3410888",
+    asegurado: "José Martínez",
+    oficina: "CIVAC",
+    tipo: "Pago vencido",
   },
   {
-    label: "Por vencer (7d)",
-    value: "5",
-    accent: "amber",
-    path: "/polizas",
-    sub: "Próximas a expirar",
-  },
-  {
-    label: "Cobrado este mes",
-    value: "$186k",
-    accent: "emerald",
-    path: "/reportes",
-    sub: "Todas las oficinas",
-  },
-  {
-    label: "Cortes pendientes",
-    value: "1/4",
-    accent: "amber",
-    path: "/corte-diario",
-    sub: "1 oficina abierta",
+    poliza: "3411002",
+    asegurado: "Carmen López",
+    oficina: "TEMIXCO",
+    tipo: "Por vencer",
   },
 ];
 
-const SECCIONES = [
+const COBROS_DIA = [
   {
-    label: "Pólizas",
-    desc: "Aplicar · Consultar · Cambiar estatus",
-    path: "/polizas",
-    badge: "4 pend.",
-    badgeAccent: "blue",
-    icon: (
-      <svg
-        className="w-6 h-6"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z"
-        />
-      </svg>
-    ),
+    asegurado: "Angel Ivan Ortega",
+    poliza: "3413241",
+    monto: 785.7,
+    forma: "Efectivo",
+    hora: "09:13",
   },
   {
-    label: "Pagos",
-    desc: "Consultar · Aplicar cobros",
-    path: "/pagos",
-    badge: "7 vencidas",
-    badgeAccent: "red",
-    icon: (
-      <svg
-        className="w-6 h-6"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"
-        />
-      </svg>
-    ),
+    asegurado: "María García López",
+    poliza: "3413198",
+    monto: 2200.0,
+    forma: "Efectivo",
+    hora: "10:42",
   },
   {
-    label: "Reportes",
-    desc: "Producción · Cobros · Vencimientos",
-    path: "/reportes",
-    badge: null,
-    badgeAccent: null,
-    icon: (
-      <svg
-        className="w-6 h-6"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"
-        />
-      </svg>
-    ),
-  },
-  {
-    label: "Corte diario",
-    desc: "Pólizas por oficina · Solo lectura",
-    path: "/corte-diario",
-    badge: null,
-    badgeAccent: null,
-    icon: (
-      <svg
-        className="w-6 h-6"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185z"
-        />
-      </svg>
-    ),
+    asegurado: "Roberto Díaz",
+    poliza: "3413167",
+    monto: 637.0,
+    forma: "Transferencia",
+    hora: "11:30",
   },
 ];
 
-const AC = {
-  emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
-  blue: "bg-blue-50    border-blue-200    text-blue-700",
-  amber: "bg-amber-50   border-amber-200   text-amber-700",
-  red: "bg-red-50     border-red-200     text-red-600",
+const TIPO_CLS = {
+  "Pend. aplicar": "bg-blue-50 text-blue-700",
+  "Pago vencido": "bg-red-50 text-red-600",
+  "Por vencer": "bg-amber-50 text-amber-700",
 };
 
-const BADGE_MAP = {
-  blue: "bg-blue-100 text-blue-700 border-blue-300",
-  red: "bg-red-100  text-red-600  border-red-300",
-};
+function BarHoriz({ pct, color }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${Math.min(pct, 100)}%`, background: color }}
+        />
+      </div>
+      <span
+        className="text-[11px] font-bold tabular-nums"
+        style={{ color, minWidth: 32 }}
+      >
+        {pct}%
+      </span>
+    </div>
+  );
+}
 
 export default function AnalistaDashboard({ usuario }) {
   const navigate = useNavigate();
@@ -166,81 +99,276 @@ export default function AnalistaDashboard({ usuario }) {
   const saludo =
     h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
 
-  return (
-    <div className="h-full flex flex-col gap-6 p-6 bg-gray-50 overflow-hidden">
-      {/* Encabezado */}
-      <div>
-        <p className="text-sm text-gray-400">
-          {saludo},{" "}
-          <span className="font-semibold text-[#13193a]">
-            {usuario?.nombre ?? "Analista"}
-          </span>
-        </p>
-        <h1 className="text-2xl font-bold text-[#13193a] mt-0.5">
-          Panel de analista
-        </h1>
-        <p className="text-xs text-gray-400 mt-0.5 capitalize">{HOY}</p>
-      </div>
+  const totalPolizas = OFICINAS.reduce((s, o) => s + o.polizas, 0);
+  const totalCobrado = OFICINAS.reduce((s, o) => s + o.cobrado, 0);
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {KPIS.map((k) => {
-          const {} = AC[k.accent];
-          return (
+  return (
+    <div className="h-full overflow-y-auto bg-[#f7f8fa]">
+      <div className="max-w-7xl mx-auto p-6 space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-xs text-gray-400 capitalize">{HOY}</p>
+            <h1 className="text-2xl font-bold text-[#13193a] mt-0.5">
+              {saludo},{" "}
+              <span className="font-light">
+                {usuario?.nombre ?? "Analista"}
+              </span>
+            </h1>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Panel de analista · Todas las oficinas
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => navigate("/polizas")}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-semibold hover:bg-[#1e2a50] transition-all"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 12h3.75M9 15h3.75m-5.25 6h12A2.25 2.25 0 0021 18.75V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12.75A2.25 2.25 0 005.25 21z"
+                />
+              </svg>
+              Pólizas pendientes
+            </button>
+            <button
+              onClick={() => navigate("/reportes")}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+            >
+              Reportes
+            </button>
+          </div>
+        </div>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            {
+              label: "Pólizas vigentes",
+              value: "186",
+              sub: "+5 esta semana",
+              accent: "#059669",
+              path: "/polizas",
+            },
+            {
+              label: "Pend. de aplicar",
+              value: "4",
+              sub: "Requieren acción",
+              accent: "#3b82f6",
+              path: "/polizas",
+            },
+            {
+              label: "Cuotas vencidas",
+              value: "7",
+              sub: "Sin cobrar",
+              accent: "#ef4444",
+              path: "/pagos",
+            },
+            {
+              label: "Cortes pendientes",
+              value: "1/4",
+              sub: "1 oficina abierta",
+              accent: "#d97706",
+              path: "/corte-diario",
+            },
+          ].map((k) => (
             <button
               key={k.label}
               onClick={() => navigate(k.path)}
-              className={`${AC[k.accent]} border rounded-2xl p-4 text-left hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all duration-150`}
+              className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
             >
-              <p className="text-2xl font-bold tabular-nums">{k.value}</p>
-              <p className="text-xs font-semibold text-[#13193a] mt-1.5 leading-tight">
+              <div
+                className="w-8 h-1 rounded-full mb-3"
+                style={{ background: k.accent }}
+              />
+              <p className="text-2xl font-black text-[#13193a] tabular-nums">
+                {k.value}
+              </p>
+              <p className="text-xs font-semibold text-gray-600 mt-1">
                 {k.label}
               </p>
               <p className="text-[11px] text-gray-400 mt-0.5">{k.sub}</p>
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
 
-      {/* Secciones */}
-      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 min-h-0">
-        {SECCIONES.map((s) => (
-          <button
-            key={s.label}
-            onClick={() => navigate(s.path)}
-            className="bg-white border border-gray-100 rounded-2xl p-5 flex items-center gap-4 text-left hover:shadow-md hover:border-gray-200 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 shadow-sm"
-          >
-            <div className="w-12 h-12 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center text-[#13193a] shrink-0">
-              {s.icon}
+        {/* Fila 2: Oficinas + Pendientes */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          {/* Producción por oficina — 3/5 */}
+          <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+              <p className="text-sm font-bold text-[#13193a]">
+                Producción mensual por oficina
+              </p>
+              <p className="text-xs text-gray-400">
+                {totalPolizas} pólizas · ${(totalCobrado / 1000).toFixed(0)}k
+              </p>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-sm font-bold text-[#13193a]">{s.label}</p>
-                {s.badge && (
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${BADGE_MAP[s.badgeAccent]}`}
-                  >
-                    {s.badge}
-                  </span>
-                )}
+            <div className="divide-y divide-gray-50">
+              {OFICINAS.map((o) => (
+                <div key={o.nombre} className="px-5 py-3.5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-bold text-[#13193a]">
+                      {o.nombre}
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs text-gray-500">{o.polizas} pól.</p>
+                      <p className="text-xs font-bold text-emerald-700">
+                        ${(o.cobrado / 1000).toFixed(0)}k
+                      </p>
+                    </div>
+                  </div>
+                  <BarHoriz
+                    pct={o.pctMeta}
+                    color={
+                      o.pctMeta >= 100
+                        ? "#059669"
+                        : o.pctMeta >= 80
+                          ? "#3b82f6"
+                          : o.pctMeta >= 60
+                            ? "#d97706"
+                            : "#ef4444"
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-50">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-400">Promedio de meta global</p>
+                <p className="text-sm font-black text-[#13193a]">78%</p>
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">{s.desc}</p>
             </div>
-            <svg
-              className="w-4 h-4 text-gray-300 shrink-0"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2.5"
+          </div>
+
+          {/* Acciones pendientes — 2/5 */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+              <p className="text-sm font-bold text-[#13193a]">
+                Requieren acción
+              </p>
+              <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                {PENDIENTES.length}
+              </span>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {PENDIENTES.map((p, i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-[#13193a] truncate">
+                      {p.asegurado}
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-mono">
+                      {p.poliza} · {p.oficina}
+                    </p>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${TIPO_CLS[p.tipo]}`}
+                  >
+                    {p.tipo}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-gray-50">
+              <button
+                onClick={() => navigate("/polizas")}
+                className="w-full py-2 rounded-xl bg-[#13193a] text-white text-xs font-bold hover:bg-[#1e2a50] transition-all"
+              >
+                Ver todas las pólizas
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Fila 3: Cobros del día + Corte */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Cobros registrados hoy */}
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+              <p className="text-sm font-bold text-[#13193a]">
+                Cobros registrados hoy
+              </p>
+              <p className="text-xs font-bold text-emerald-700">
+                ${COBROS_DIA.reduce((s, c) => s + c.monto, 0).toFixed(2)}
+              </p>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {COBROS_DIA.map((c, i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-3">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+                    <svg
+                      className="w-4 h-4 text-emerald-600"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-[#13193a]">
+                      {c.asegurado}
+                    </p>
+                    <p className="text-[10px] text-gray-400">
+                      {c.forma} · {c.hora}
+                    </p>
+                  </div>
+                  <p className="text-xs font-bold text-emerald-700 shrink-0">
+                    ${c.monto.toFixed(2)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Estado de cortes */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5">
+            <p className="text-sm font-bold text-[#13193a] mb-4">
+              Estado de cortes — hoy
+            </p>
+            <div className="space-y-3">
+              {[
+                { oficina: "COFISEM AV. E.ZAPATA", cerrado: true, polizas: 3 },
+                { oficina: "OFICINA CIVAC", cerrado: true, polizas: 4 },
+                { oficina: "COFISEM TEMIXCO", cerrado: false, polizas: 2 },
+                { oficina: "COFISEM CUAUTLA", cerrado: true, polizas: 1 },
+              ].map((c) => (
+                <div key={c.oficina} className="flex items-center gap-3">
+                  <div
+                    className={`w-2 h-2 rounded-full shrink-0 ${c.cerrado ? "bg-emerald-500" : "bg-amber-500"}`}
+                  />
+                  <p className="text-xs text-gray-700 flex-1">{c.oficina}</p>
+                  <p className="text-[11px] text-gray-400">{c.polizas} pól.</p>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.cerrado ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
+                  >
+                    {c.cerrado ? "Cerrado" : "Abierto"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => navigate("/corte-diario")}
+              className="w-full mt-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-all"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8.25 4.5l7.5 7.5-7.5 7.5"
-              />
-            </svg>
-          </button>
-        ))}
+              Ver corte completo
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

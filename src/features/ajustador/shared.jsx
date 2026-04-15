@@ -1,7 +1,5 @@
 // ============================================================
 // src/features/ajustador/shared.jsx
-// Constantes, datos mock y componentes pequeños reutilizados
-// en los distintos pasos del flujo del ajustador.
 // ============================================================
 
 export const SINIESTROS_MOCK = [
@@ -56,56 +54,99 @@ export const SINIESTROS_MOCK = [
 ];
 
 export const METRICAS = [
-  { label: "Asignados",    value: 3, color: "text-[#13193a]",  bg: "bg-[#13193a]/8" },
-  { label: "Pend. arribo", value: 2, color: "text-amber-600",  bg: "bg-amber-50"    },
-  { label: "En proceso",   value: 5, color: "text-blue-600",   bg: "bg-blue-50"     },
+  {
+    label: "Asignados",
+    value: 3,
+    color: "text-[#13193a]",
+    bg: "bg-[#13193a]/8",
+  },
+  {
+    label: "Pend. arribo",
+    value: 2,
+    color: "text-amber-600",
+    bg: "bg-amber-50",
+  },
+  { label: "En proceso", value: 5, color: "text-blue-600", bg: "bg-blue-50" },
 ];
 
 export const ESTATUS_CLS = {
-  "Asignado":            "bg-[#13193a]/8  text-[#13193a]   border border-[#13193a]/15",
-  "Pendiente de arribo": "bg-amber-50     text-amber-700   border border-amber-200",
-  "En proceso":          "bg-blue-50      text-blue-700    border border-blue-200",
-  "Atendido":            "bg-emerald-50   text-emerald-700 border border-emerald-200",
+  Asignado: "bg-[#13193a]/8  text-[#13193a]   border border-[#13193a]/15",
+  "Pendiente de arribo":
+    "bg-amber-50     text-amber-700   border border-amber-200",
+  "En proceso": "bg-blue-50      text-blue-700    border border-blue-200",
+  Atendido: "bg-emerald-50   text-emerald-700 border border-emerald-200",
 };
 
-export const STEP_LABELS = ["Arribo", "Datos", "Evidencia", "Documentos"];
-
-export const VISTAS_AUTO = [
-  { id: "frente",    label: "Frente"    },
-  { id: "lateral_i", label: "Lat. Izq." },
-  { id: "trasera",   label: "Trasera"   },
-  { id: "lateral_d", label: "Lat. Der." },
-  { id: "techo",     label: "Techo"     },
+// 3 pasos ahora (sin paso separado de evidencia)
+export const STEP_LABELS_DEFAULT = [
+  "Arribo",
+  "Datos y Evidencia",
+  "Documentos",
 ];
 
-// ── StepBar ───────────────────────────────────────────────────
-export function StepBar({ paso }) {
+export const VISTAS_AUTO = [
+  { id: "frente", label: "Frente" },
+  { id: "lateral_i", label: "Lat. Izq." },
+  { id: "trasera", label: "Trasera" },
+  { id: "lateral_d", label: "Lat. Der." },
+  { id: "techo", label: "Techo" },
+];
+
+// ── StepBar — acepta labels custom ────────────────────────────
+export function StepBar({ paso, labels }) {
+  const LABELS = labels ?? STEP_LABELS_DEFAULT;
   return (
     <div className="flex items-center px-1">
-      {STEP_LABELS.map((label, i) => {
-        const done   = i < paso;
+      {LABELS.map((label, i) => {
+        const done = i < paso;
         const active = i === paso;
         return (
           <div key={i} className="flex items-center flex-1 last:flex-none">
             <div className="flex flex-col items-center gap-1 shrink-0">
-              <div className={[
-                "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300",
-                done   ? "bg-emerald-500 text-white" :
-                active ? "bg-[#13193a] text-white"   :
-                         "bg-gray-100 text-gray-400",
-              ].join(" ")}>
+              <div
+                className={[
+                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300",
+                  done
+                    ? "bg-emerald-500 text-white"
+                    : active
+                      ? "bg-[#13193a] text-white"
+                      : "bg-gray-100 text-gray-400",
+                ].join(" ")}
+              >
                 {done ? (
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
-                ) : i + 1}
+                ) : (
+                  i + 1
+                )}
               </div>
-              <span className={`text-[10px] font-semibold hidden sm:block whitespace-nowrap ${
-                active ? "text-[#13193a]" : done ? "text-emerald-600" : "text-gray-400"
-              }`}>{label}</span>
+              <span
+                className={`text-[10px] font-semibold hidden sm:block whitespace-nowrap ${
+                  active
+                    ? "text-[#13193a]"
+                    : done
+                      ? "text-emerald-600"
+                      : "text-gray-400"
+                }`}
+              >
+                {label}
+              </span>
             </div>
-            {i < STEP_LABELS.length - 1 && (
-              <div className={`h-0.5 flex-1 mx-1.5 rounded-full transition-all duration-500 ${done ? "bg-emerald-400" : "bg-gray-200"}`}/>
+            {i < LABELS.length - 1 && (
+              <div
+                className={`h-0.5 flex-1 mx-1.5 rounded-full transition-all duration-500 ${done ? "bg-emerald-400" : "bg-gray-200"}`}
+              />
             )}
           </div>
         );
@@ -115,17 +156,40 @@ export function StepBar({ paso }) {
 }
 
 // ── Campo de formulario ───────────────────────────────────────
-export function Campo({ label, placeholder, value, onChange, type = "text", readonly, rows }) {
+export function Campo({
+  label,
+  placeholder,
+  value,
+  onChange,
+  type = "text",
+  readonly,
+  rows,
+}) {
   const cls = readonly
     ? "w-full px-3 py-2.5 rounded-xl border border-gray-100 bg-gray-50 text-sm font-semibold text-[#13193a] cursor-default select-none"
     : "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
   return (
     <div>
-      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">{label}</label>
+      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+        {label}
+      </label>
       {rows ? (
-        <textarea rows={rows} placeholder={placeholder} value={value ?? ""} onChange={onChange ? e => onChange(e.target.value) : undefined} className={cls + " resize-none"}/>
+        <textarea
+          rows={rows}
+          placeholder={placeholder}
+          value={value ?? ""}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+          className={cls + " resize-none"}
+        />
       ) : (
-        <input type={type} readOnly={readonly} value={value ?? ""} placeholder={placeholder} onChange={onChange ? e => onChange(e.target.value) : undefined} className={cls}/>
+        <input
+          type={type}
+          readOnly={readonly}
+          value={value ?? ""}
+          placeholder={placeholder}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+          className={cls}
+        />
       )}
     </div>
   );
@@ -147,11 +211,15 @@ export function Seccion({ titulo, children, accion }) {
 // ── Tag de afectado ───────────────────────────────────────────
 export function AfectadoTag({ label, active, onClick }) {
   return (
-    <button onClick={onClick} className={[
-      "px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all",
-      active ? "bg-[#13193a] text-white border-[#13193a]"
-             : "bg-white text-gray-500 border-gray-200 hover:border-gray-300",
-    ].join(" ")}>
+    <button
+      onClick={onClick}
+      className={[
+        "px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all",
+        active
+          ? "bg-[#13193a] text-white border-[#13193a]"
+          : "bg-white text-gray-500 border-gray-200 hover:border-gray-300",
+      ].join(" ")}
+    >
       {label}
     </button>
   );

@@ -1,161 +1,364 @@
 // ============================================================
-// src/pages/supervisor/SupervisorDashboard.jsx
-// Dashboard limpio — sin scroll, control de siniestros
-// KPIs clave + alertas urgentes + atajos a secciones
+// SUPERVISOR SINIESTROS DASHBOARD
+// src/features/supervisor/SupervisorDashboard.jsx
 // ============================================================
 import { useNavigate } from "react-router-dom";
 
-const HOY = new Date().toLocaleDateString("es-MX", {
-  weekday: "long", day: "2-digit", month: "long", year: "numeric",
+const HOY_SUP = new Date().toLocaleDateString("es-MX", {
+  weekday: "long",
+  day: "2-digit",
+  month: "long",
+  year: "numeric",
 });
 
-// ── KPIs clickeables ─────────────────────────────────────────
-const KPIS = [
-  { label: "Activos hoy",         value: "8",  sub: "En atención",          accent: "blue",    path: "/siniestros" },
-  { label: "Sin asignar",         value: "3",  sub: "Requieren ajustador",   accent: "red",     path: "/siniestros" },
-  { label: "Pendientes de arribo",value: "2",  sub: "Ajustador en camino",   accent: "amber",   path: "/siniestros" },
-  { label: "Asistencia jurídica", value: "2",  sub: "Casos canalizados",     accent: "purple",  path: "/siniestros" },
-  { label: "Cerrados hoy",        value: "5",  sub: "+2 vs ayer",            accent: "emerald", path: "/siniestros" },
-  { label: "Tiempo prom. cierre", value: "3.2h",sub: "Esta semana",          accent: "blue",    path: "/reportes-siniestros" },
-];
-
-// ── Alertas urgentes ─────────────────────────────────────────
-const ALERTAS = [
+const ALERTAS_SUP = [
   {
-    msg:     "SN-10231 sin ajustador asignado",
-    detalle: "Ana Martínez · Honda Civic · 2h sin atención",
-    path:    "/siniestros",
-    accent:  "red",
+    msg: "SN-10231 sin ajustador asignado",
+    detalle: "Ana Martínez · 2h sin atención",
+    path: "/siniestros",
+    urgente: true,
   },
   {
-    msg:     "SN-10220 sin ajustador asignado",
-    detalle: "Laura González · KIA Sportage · 1h sin atención",
-    path:    "/siniestros",
-    accent:  "red",
+    msg: "SN-10220 sin ajustador asignado",
+    detalle: "Laura González · 1h sin atención",
+    path: "/siniestros",
+    urgente: true,
   },
   {
-    msg:     "SN-10208 requiere asistencia jurídica",
-    detalle: "Luis Torres · VW Vento · Caso complejo",
-    path:    "/siniestros",
-    accent:  "amber",
+    msg: "SN-10208 requiere asistencia jurídica",
+    detalle: "Luis Torres · Caso complejo",
+    path: "/siniestros",
+    urgente: false,
   },
 ];
 
-// ── Secciones del módulo ──────────────────────────────────────
-const SECCIONES = [
+const AJUSTADORES_SUP = [
   {
-    label: "Siniestros",
-    desc:  "Reasignar · Canalizar · Desglose de casos",
-    path:  "/siniestros",
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-      </svg>
-    ),
+    nombre: "Félix Hernández",
+    activos: 2,
+    max: 4,
+    completados: 18,
+    tiempo: "2.8h",
   },
   {
-    label: "Ajustadores",
-    desc:  "Carga de trabajo · Rendimiento",
-    path:  "/ajustadores",
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
-      </svg>
-    ),
+    nombre: "Luis Martínez",
+    activos: 3,
+    max: 4,
+    completados: 22,
+    tiempo: "3.1h",
   },
+  { nombre: "Ana García", activos: 1, max: 4, completados: 15, tiempo: "2.4h" },
   {
-    label: "Reportes",
-    desc:  "Tiempos · Tipos · Resolución",
-    path:  "/reportes-siniestros",
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/>
-      </svg>
-    ),
+    nombre: "Roberto Vega",
+    activos: 0,
+    max: 4,
+    completados: 9,
+    tiempo: "3.8h",
   },
 ];
 
-const AC = {
-  blue:   "bg-blue-50   border-blue-200   text-blue-700",
-  red:    "bg-red-50    border-red-200    text-red-600",
-  amber:  "bg-amber-50  border-amber-200  text-amber-700",
-  purple: "bg-purple-50 border-purple-200 text-purple-700",
-  emerald:"bg-emerald-50 border-emerald-200 text-emerald-700",
-};
-const DOT = { red:"bg-red-500", amber:"bg-amber-500", blue:"bg-blue-500" };
+function CargaBar({ activos, max }) {
+  return (
+    <div className="flex gap-0.5">
+      {Array.from({ length: max }).map((_, i) => (
+        <div
+          key={i}
+          className={`h-1.5 flex-1 rounded-full ${
+            i < activos
+              ? activos === max
+                ? "bg-red-500"
+                : activos >= max - 1
+                  ? "bg-amber-500"
+                  : "bg-blue-500"
+              : "bg-gray-200"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
 
-export default function SupervisorDashboard({ usuario }) {
+export function SupervisorDashboard({ usuario }) {
   const navigate = useNavigate();
   const h = new Date().getHours();
-  const saludo = h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
+  const saludo =
+    h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
 
   return (
-    <div className="h-full flex flex-col gap-5 p-6 bg-gray-50 overflow-hidden">
-
-      {/* Header */}
-      <div>
-        <p className="text-sm text-gray-400">
-          {saludo},{" "}
-          <span className="font-semibold text-[#13193a]">{usuario?.nombre ?? "Supervisor"}</span>
-        </p>
-        <h1 className="text-2xl font-bold text-[#13193a] mt-0.5">Supervisión de siniestros</h1>
-        <p className="text-xs text-gray-400 mt-0.5 capitalize">{HOY}</p>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {KPIS.map(k => (
-          <button key={k.label} onClick={() => navigate(k.path)}
-            className={`${AC[k.accent]} border rounded-2xl p-4 text-left hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all duration-150`}>
-            <p className="text-2xl font-bold tabular-nums">{k.value}</p>
-            <p className="text-xs font-semibold text-[#13193a] mt-1.5 leading-tight">{k.label}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">{k.sub}</p>
-          </button>
-        ))}
-      </div>
-
-      {/* Fila inferior: Alertas + Secciones */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-4 min-h-0">
-
-        {/* Alertas — 2/5 */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5 shrink-0">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/>
-            <p className="text-sm font-bold text-[#13193a]">Requiere atención inmediata</p>
-          </div>
-          <div className="flex-1 flex flex-col divide-y divide-gray-50 justify-evenly">
-            {ALERTAS.map((al, i) => (
-              <button key={i} onClick={() => navigate(al.path)}
-                className="flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50/70 transition-colors group">
-                <div className={`w-2 h-2 rounded-full shrink-0 ${DOT[al.accent] ?? DOT.blue}`}/>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-gray-800 leading-snug">{al.msg}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{al.detalle}</p>
-                </div>
-                <svg className="w-4 h-4 text-gray-300 shrink-0 group-hover:text-gray-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>
-                </svg>
-              </button>
-            ))}
+    <div className="h-full overflow-y-auto bg-[#f7f8fa]">
+      <div className="max-w-7xl mx-auto p-6 space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-xs text-gray-400 capitalize">{HOY_SUP}</p>
+            <h1 className="text-2xl font-bold text-[#13193a] mt-0.5">
+              {saludo},{" "}
+              <span className="font-light">
+                {usuario?.nombre ?? "Supervisor"}
+              </span>
+            </h1>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Supervisión de siniestros
+            </p>
           </div>
         </div>
 
-        {/* Secciones — 3/5 */}
-        <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5 content-start">
-          {SECCIONES.map(s => (
-            <button key={s.label} onClick={() => navigate(s.path)}
-              className="bg-white border border-gray-100 rounded-2xl p-5 flex flex-col gap-3 text-left hover:shadow-md hover:border-gray-200 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150 shadow-sm">
-              <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-[#13193a]">
-                {s.icon}
-              </div>
-              <div>
-                <p className="text-sm font-bold text-[#13193a]">{s.label}</p>
-                <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{s.desc}</p>
-              </div>
+        {/* KPIs */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            {
+              label: "Activos hoy",
+              value: "8",
+              accent: "#3b82f6",
+              path: "/siniestros",
+            },
+            {
+              label: "Sin asignar",
+              value: "3",
+              accent: "#ef4444",
+              path: "/siniestros",
+            },
+            {
+              label: "Pend. de arribo",
+              value: "2",
+              accent: "#d97706",
+              path: "/siniestros",
+            },
+            {
+              label: "Asistencia jurídica",
+              value: "2",
+              accent: "#8b5cf6",
+              path: "/siniestros",
+            },
+            {
+              label: "Cerrados hoy",
+              value: "5",
+              accent: "#059669",
+              path: "/siniestros",
+            },
+            {
+              label: "Tiempo prom.",
+              value: "3.2h",
+              accent: "#13193a",
+              path: "/reportes-siniestros",
+            },
+          ].map((k) => (
+            <button
+              key={k.label}
+              onClick={() => navigate(k.path)}
+              className="bg-white rounded-2xl border border-gray-100 p-3.5 text-left hover:shadow-md hover:border-gray-200 transition-all"
+            >
+              <div
+                className="w-6 h-0.5 rounded-full mb-2.5"
+                style={{ background: k.accent }}
+              />
+              <p className="text-2xl font-black text-[#13193a] tabular-nums">
+                {k.value}
+              </p>
+              <p className="text-[11px] font-semibold text-gray-600 mt-1 leading-tight">
+                {k.label}
+              </p>
             </button>
           ))}
+        </div>
+
+        {/* Fila 2: Alertas + Ajustadores */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          {/* Alertas — 2/5 */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <p className="text-sm font-bold text-[#13193a]">
+                Requiere atención inmediata
+              </p>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {ALERTAS_SUP.map((al, i) => (
+                <button
+                  key={i}
+                  onClick={() => navigate(al.path)}
+                  className="w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-gray-50/70 transition-colors group"
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 mt-0.5 ${al.urgente ? "bg-red-500" : "bg-amber-400"}`}
+                  />
+                  <div className="flex-1">
+                    <p className="text-xs font-semibold text-gray-800 leading-snug">
+                      {al.msg}
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      {al.detalle}
+                    </p>
+                  </div>
+                  <svg
+                    className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-500 shrink-0 mt-0.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M8.25 4.5l7.5 7.5-7.5 7.5"
+                    />
+                  </svg>
+                </button>
+              ))}
+            </div>
+            <div className="p-4 border-t border-gray-50">
+              <button
+                onClick={() => navigate("/siniestros")}
+                className="w-full py-2 rounded-xl bg-[#13193a] text-white text-xs font-bold hover:bg-[#1e2a50] transition-all"
+              >
+                Ver todos los siniestros
+              </button>
+            </div>
+          </div>
+
+          {/* Ajustadores — 3/5 */}
+          <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+              <p className="text-sm font-bold text-[#13193a]">
+                Carga de ajustadores
+              </p>
+              <button
+                onClick={() => navigate("/ajustadores")}
+                className="text-xs text-blue-500 font-semibold hover:underline"
+              >
+                Ver detalle
+              </button>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {AJUSTADORES_SUP.map((aj) => {
+                const lleno = aj.activos >= aj.max;
+                return (
+                  <div
+                    key={aj.nombre}
+                    className="flex items-center gap-4 px-5 py-3.5"
+                  >
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 ${lleno ? "bg-red-500" : aj.activos === 0 ? "bg-gray-400" : "bg-[#13193a]"}`}
+                    >
+                      {aj.nombre
+                        .split(" ")
+                        .map((w) => w[0])
+                        .join("")
+                        .slice(0, 2)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-bold text-[#13193a]">
+                          {aj.nombre}
+                        </p>
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span className="text-gray-400">
+                            {aj.tiempo} prom.
+                          </span>
+                          <span
+                            className={`font-bold ${lleno ? "text-red-600" : aj.activos === 0 ? "text-gray-400" : "text-blue-600"}`}
+                          >
+                            {aj.activos}/{aj.max}
+                          </span>
+                        </div>
+                      </div>
+                      <CargaBar activos={aj.activos} max={aj.max} />
+                    </div>
+                    <p className="text-[11px] text-gray-400 shrink-0">
+                      {aj.completados} casos
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Fila 3: Tipos + Tiempos */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Por tipo */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5">
+            <p className="text-sm font-bold text-[#13193a] mb-4">
+              Siniestros por tipo — este mes
+            </p>
+            <div className="space-y-2.5">
+              {[
+                { tipo: "Colisión", n: 28, juridicos: 1, color: "#13193a" },
+                {
+                  tipo: "Daño a terceros",
+                  n: 12,
+                  juridicos: 2,
+                  color: "#3b82f6",
+                },
+                { tipo: "Robo total", n: 6, juridicos: 3, color: "#ef4444" },
+                { tipo: "Robo parcial", n: 8, juridicos: 0, color: "#d97706" },
+                { tipo: "Cristales", n: 10, juridicos: 0, color: "#059669" },
+              ].map((t) => (
+                <div key={t.tipo} className="flex items-center gap-3">
+                  <div
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: t.color }}
+                  />
+                  <p className="text-xs text-gray-700 flex-1">{t.tipo}</p>
+                  <div className="w-28 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${(t.n / 28) * 100}%`,
+                        background: t.color,
+                      }}
+                    />
+                  </div>
+                  <span className="text-[11px] font-bold text-[#13193a] w-4 text-right">
+                    {t.n}
+                  </span>
+                  {t.juridicos > 0 && (
+                    <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">
+                      {t.juridicos}J
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Resumen de resolución */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5">
+            <p className="text-sm font-bold text-[#13193a] mb-4">
+              Resolución semanal
+            </p>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              {[
+                { label: "Total cerrados", value: "34", color: "#059669" },
+                { label: "Casos jurídicos", value: "6", color: "#8b5cf6" },
+                { label: "Tiempo promedio", value: "2.8h", color: "#13193a" },
+                { label: "Satisfacción", value: "4.7★", color: "#d97706" },
+              ].map((f) => (
+                <div
+                  key={f.label}
+                  className="bg-gray-50 rounded-xl p-3 border border-gray-100"
+                >
+                  <p
+                    className="text-lg font-black tabular-nums"
+                    style={{ color: f.color }}
+                  >
+                    {f.value}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{f.label}</p>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => navigate("/reportes-siniestros")}
+              className="w-full py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-all"
+            >
+              Ver reporte completo →
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+export default SupervisorDashboard;
