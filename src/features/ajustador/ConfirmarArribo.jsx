@@ -1,5 +1,7 @@
 // ============================================================
-// src/features/ajustador/ConfirmarArribo.jsx — mobile scroll fix
+// src/features/ajustador/ConfirmarArribo.jsx
+// Mobile: fluye en el main, botón sticky bottom-0
+// Desktop: fluye dentro del flex-1 overflow-y-auto del padre
 // ============================================================
 import { useState, useRef } from "react";
 
@@ -23,9 +25,10 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
     : null;
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Contenido scrolleable */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+    // Sin h-full, sin overflow. Fluye libremente.
+    <div>
+      {/* Contenido con padding */}
+      <div className="px-4 py-4 space-y-4">
         {/* Estado arribo */}
         <div
           className={[
@@ -90,7 +93,7 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-[#13193a]/8 flex items-center justify-center shrink-0">
               <svg
-                className="w-4.5 h-4.5 text-[#13193a]"
+                className="w-5 h-5 text-[#13193a]"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -110,6 +113,7 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
               <p className="text-xs text-gray-400">{siniestro.vehiculo}</p>
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-gray-50 rounded-xl p-3">
               <p className="text-[10px] text-gray-400 uppercase tracking-wide">
@@ -134,7 +138,7 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
               href={mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 border border-blue-100 group hover:bg-blue-100 transition-colors"
+              className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-colors"
             >
               <svg
                 className="w-4 h-4 text-blue-600 shrink-0"
@@ -162,19 +166,6 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
                   {siniestro.ubicacion}
                 </p>
               </div>
-              <svg
-                className="w-4 h-4 text-blue-400 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-                />
-              </svg>
             </a>
           ) : (
             <a
@@ -199,7 +190,7 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
                   {siniestro.telefono}
                 </p>
                 <p className="text-[10px] text-amber-500">
-                  Asegurado sin ubicación
+                  Sin ubicación — coordinar por teléfono
                 </p>
               </div>
             </a>
@@ -280,13 +271,10 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
             </button>
           )}
         </div>
-
-        {/* Espacio extra al fondo */}
-        <div className="h-4" />
       </div>
 
-      {/* Botón fijo al fondo */}
-      <div className="px-4 py-4 border-t border-gray-100 bg-white shrink-0">
+      {/* Botón: sticky al fondo de la pantalla en mobile */}
+      <div className="sticky bottom-0 px-4 py-4 bg-white border-t border-gray-100">
         <button
           onClick={() => {
             setConfirmado(true);
