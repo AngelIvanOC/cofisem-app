@@ -1,1 +1,53 @@
 @import "tailwindcss";
+
+/* ============================================================
+   FIX: ALTURA DE PÁGINAS EN MOBILE
+   
+   PROBLEMA:
+     Varias páginas (dashboards principalmente) tienen un div
+     raíz con `h-full overflow-y-auto`. En desktop esto es
+     correcto porque el <main> no scrollea (tiene overflow-hidden
+     implícito por el flex).
+     
+     En mobile, el <main> SÍ scrollea (tiene overflow-y-auto).
+     Al tener TAMBIÉN el hijo con overflow-y-auto + h-full,
+     se crea un contenedor de altura 0 o scroll fantasma donde
+     el contenido no es visible o no scrollea correctamente.
+   
+   SOLUCIÓN:
+     Cuando el <main> tiene la clase `mobile-scroll-host`,
+     sus hijos directos pierden h-full y overflow en mobile.
+     El <main> se convierte en el único scrolleable.
+     
+   EXCEPCIÓN (Ajustador):
+     El Ajustador usa `overflow-hidden` en <main>, por lo que
+     esta regla no aplica (no tiene mobile-scroll-host).
+     Su scroll interno ya fue corregido específicamente.
+   ============================================================ */
+
+@media (max-width: 767px) {
+
+  /* El hijo directo del main en mobile pierde su propio scroll */
+  main.mobile-scroll-host > * {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    overflow-y: visible !important;
+    overflow-x: visible !important;
+  }
+
+  /* Tablas: siempre pueden hacer scroll horizontal */
+  main.mobile-scroll-host .overflow-x-auto {
+    overflow-x: auto !important;
+  }
+
+  /* Modales y overlays fixed: no les afecta esta regla */
+  .fixed .overflow-y-auto {
+    overflow-y: auto !important;
+  }
+
+  /* Modales con altura máxima: mantener su scroll interno */
+  [style*="height"] .overflow-y-auto {
+    overflow-y: auto !important;
+  }
+}
