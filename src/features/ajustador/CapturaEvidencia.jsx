@@ -20,7 +20,7 @@ function Sep({ label }) {
   );
 }
 
-function BtnEvidencia({ label, evidencias, onAdd, onRemove }) {
+function BtnEvidencia({ label, evidencias, onAdd, onRemove, icon }) {
   const ref = useRef();
   return (
     <div>
@@ -40,27 +40,26 @@ function BtnEvidencia({ label, evidencias, onAdd, onRemove }) {
       />
       <button
         onClick={() => ref.current?.click()}
-        className="w-full border-2 border-dashed border-gray-200 rounded-2xl p-3 flex flex-col items-center gap-1.5 hover:border-[#13193a]/25 hover:bg-gray-50 transition-all active:scale-[0.98]"
+        className="w-full py-10 border-2 border-dashed border-gray-200 rounded-2xl p-3 flex flex-col items-center gap-1.5 hover:border-[#13193a]/25 hover:bg-gray-50 transition-all active:scale-[0.98]"
       >
         <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
-          <svg
-            className="w-4 h-4 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"
-            />
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"
-            />
-          </svg>
+          {icon ? (
+            <span className="text-lg">{icon}</span>
+          ) : (
+            <svg
+              className="w-4 h-4 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 9l7.89 5.26a2 2 0 002.22 0L21 9M5 10a2 2 0 11-4 0 2 2 0 014 0zm7-1a2 2 0 11-4 0 2 2 0 014 0zm7-1a2 2 0 11-4 0 2 2 0 014 0z"
+              />
+            </svg>
+          )}
         </div>
         <p className="text-xs font-semibold text-gray-500 text-center leading-snug">
           {label}
@@ -266,12 +265,14 @@ function PanelVehiculo({ esNA, datos, onDatos, modeloKey }) {
         <div className="grid grid-cols-2 gap-3">
           <BtnEvidencia
             label="Fotos del siniestro"
+            icon="📸"
             evidencias={ev.fotos}
             onAdd={(u) => addEv("fotos", u)}
             onRemove={(i) => remEv("fotos", i)}
           />
           <BtnEvidencia
             label="Licencia de conducir"
+            icon="🪪"
             evidencias={ev.licencia}
             onAdd={(u) => addEv("licencia", u)}
             onRemove={(i) => remEv("licencia", i)}
@@ -280,11 +281,13 @@ function PanelVehiculo({ esNA, datos, onDatos, modeloKey }) {
             label="Fotos del vehículo"
             evidencias={ev.vehiculo}
             onAdd={(u) => addEv("vehiculo", u)}
+            icon="🚗"
             onRemove={(i) => remEv("vehiculo", i)}
           />
           {esNA && (
             <BtnEvidencia
               label="Póliza física"
+              icon="📄"
               evidencias={ev.poliza}
               onAdd={(u) => addEv("poliza", u)}
               onRemove={(i) => remEv("poliza", i)}
