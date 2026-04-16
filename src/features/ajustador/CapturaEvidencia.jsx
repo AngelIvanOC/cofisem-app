@@ -1,14 +1,13 @@
 // ============================================================
 // src/features/ajustador/CapturaDatosEvidencia.jsx
-// Paso 2: Datos + Evidencia + Mapa por vehículo
-// Sin emojis | 1 afectado por default | botón sticky bottom
-// Mobile: fluye libremente. Desktop: fluye en el overflow-y-auto del padre.
+// Bloque normal — fluye dentro del flex-1 overflow-y-auto del padre
+// Selector de participante en la parte superior (parte del flujo, no sticky)
+// Botón al final del contenido
 // ============================================================
 import { useState, useRef, useCallback } from "react";
 import { Campo, AfectadoTag } from "./shared";
-import ModeloDanos from "./ModeloDanos";
+import ModeloDanos3D from "./ModeloDanos";
 
-// ── Separador con etiqueta ────────────────────────────────────
 function Sep({ label }) {
   return (
     <div className="flex items-center gap-3 py-1">
@@ -21,7 +20,6 @@ function Sep({ label }) {
   );
 }
 
-// ── Botón de evidencia ────────────────────────────────────────
 function BtnEvidencia({ label, evidencias, onAdd, onRemove }) {
   const ref = useRef();
   return (
@@ -36,7 +34,7 @@ function BtnEvidencia({ label, evidencias, onAdd, onRemove }) {
         onChange={(e) => {
           Array.from(e.target.files || [])
             .map((f) => URL.createObjectURL(f))
-            .forEach((url) => onAdd(url));
+            .forEach((u) => onAdd(u));
           e.target.value = "";
         }}
       />
@@ -107,7 +105,6 @@ function BtnEvidencia({ label, evidencias, onAdd, onRemove }) {
   );
 }
 
-// ── Panel de un vehículo ──────────────────────────────────────
 function PanelVehiculo({ esNA, datos, onDatos, modeloKey }) {
   const [ev, setEv] = useState({
     fotos: [],
@@ -126,14 +123,11 @@ function PanelVehiculo({ esNA, datos, onDatos, modeloKey }) {
           {esNA ? "NA" : "Afectado"}
         </p>
         <p className="text-white/50 text-xs mt-0.5">
-          {esNA
-            ? "Datos del vehículo asegurado"
-            : "Datos del tercero involucrado"}
+          {esNA ? "Vehículo asegurado" : "Tercero involucrado"}
         </p>
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Datos personales */}
         <Sep label="Datos personales" />
         <div className="space-y-3">
           <Campo
@@ -171,7 +165,6 @@ function PanelVehiculo({ esNA, datos, onDatos, modeloKey }) {
           />
         </div>
 
-        {/* Datos del vehículo */}
         <Sep label="Datos del vehículo" />
         {esNA ? (
           <div className="grid grid-cols-2 gap-3">
@@ -233,7 +226,6 @@ function PanelVehiculo({ esNA, datos, onDatos, modeloKey }) {
           </div>
         )}
 
-        {/* Declaración */}
         <Sep label="Declaración" />
         <Campo
           label={
@@ -270,7 +262,6 @@ function PanelVehiculo({ esNA, datos, onDatos, modeloKey }) {
           </div>
         )}
 
-        {/* Evidencia */}
         <Sep label="Evidencia y documentos" />
         <div className="grid grid-cols-2 gap-3">
           <BtnEvidencia
@@ -301,18 +292,17 @@ function PanelVehiculo({ esNA, datos, onDatos, modeloKey }) {
           )}
         </div>
 
-        {/* Mapa de daños */}
-        <Sep label="Mapa de daños — 360°" />
+        <Sep label="Mapa de daños 3D" />
         <p className="text-[11px] text-gray-400 -mt-2">
-          Toca sobre la silueta del vehículo para marcar zonas dañadas
+          Arrastra para girar el vehículo · Toca la carrocería para marcar zonas
+          dañadas
         </p>
-        <ModeloDanos instanceKey={modeloKey} />
+        <ModeloDanos3D instanceKey={modeloKey} />
       </div>
     </div>
   );
 }
 
-// ── Estado vacío por participante ─────────────────────────────
 const datosVacios = (extra = {}) => ({
   nombre: "",
   rfc: "",
@@ -331,13 +321,9 @@ const datosVacios = (extra = {}) => ({
   ...extra,
 });
 
-// ── Componente principal ──────────────────────────────────────
 export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
   const [activo, setActivo] = useState("NA");
-
-  // 1 afectado por default
   const [afectadosIds, setAfectadosIds] = useState(["AF1"]);
-
   const [participantes, setParticipantes] = useState({
     NA: datosVacios({
       poliza: siniestro.poliza,
@@ -356,7 +342,7 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
   };
 
   const eliminarAfectado = (id) => {
-    if (afectadosIds.length <= 1) return; // mínimo 1
+    if (afectadosIds.length <= 1) return;
     setAfectadosIds((ids) => ids.filter((x) => x !== id));
     setParticipantes((p) => {
       const np = { ...p };
@@ -373,10 +359,12 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
   const todos = ["NA", ...afectadosIds];
 
   return (
-    // Sin h-full, sin overflow. Fluye libremente.
-    <div>
-      {/* Selector de participante — sticky debajo del stepbar */}
-      <div className="sticky top-[117px] z-10 px-4 pt-3 pb-3 bg-white border-b border-gray-100">
+    <div className="px-4 py-4 space-y-4">
+      {/* Selector de participante */}
+      <div className="bg-gray-50 rounded-2xl p-3">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+          Partes involucradas
+        </p>
         <div className="flex items-center gap-2 flex-wrap">
           {todos.map((id) => {
             const label =
@@ -391,7 +379,7 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
                 {id !== "NA" && afectadosIds.length > 1 && (
                   <button
                     onClick={() => eliminarAfectado(id)}
-                    className="w-4 h-4 rounded-full bg-gray-200 hover:bg-red-100 hover:text-red-600 flex items-center justify-center text-gray-400 transition-all"
+                    className="w-4 h-4 rounded-full bg-gray-200 hover:bg-red-100 hover:text-red-500 flex items-center justify-center text-gray-400 transition-all"
                   >
                     <svg
                       className="w-2.5 h-2.5"
@@ -414,29 +402,26 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
           <button
             onClick={agregarAfectado}
             className="w-7 h-7 rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-[#13193a]/40 hover:text-[#13193a] flex items-center justify-center font-bold text-base transition-all"
-            title="Agregar afectado"
           >
             +
           </button>
         </div>
       </div>
 
-      {/* Contenido de los paneles */}
-      <div className="px-4 py-4">
-        {todos.map((id) => (
-          <div key={id} className={id === activo ? "block" : "hidden"}>
-            <PanelVehiculo
-              esNA={id === "NA"}
-              datos={participantes[id] ?? datosVacios()}
-              onDatos={(campo, valor) => actualizarDato(id, campo, valor)}
-              modeloKey={id}
-            />
-          </div>
-        ))}
-      </div>
+      {/* Panel del participante activo */}
+      {todos.map((id) => (
+        <div key={id} className={id === activo ? "block" : "hidden"}>
+          <PanelVehiculo
+            esNA={id === "NA"}
+            datos={participantes[id] ?? datosVacios()}
+            onDatos={(campo, valor) => actualizarDato(id, campo, valor)}
+            modeloKey={id}
+          />
+        </div>
+      ))}
 
-      {/* Botón sticky al fondo */}
-      <div className="sticky bottom-0 px-4 py-4 bg-white border-t border-gray-100">
+      {/* Botón al fondo del contenido */}
+      <div className="pt-2 pb-6">
         <button
           onClick={onSiguiente}
           className="w-full py-3.5 rounded-2xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-[#13193a]/15"
