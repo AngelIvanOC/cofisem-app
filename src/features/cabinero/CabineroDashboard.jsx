@@ -136,10 +136,11 @@ export function CabineroDashboard({ usuario }) {
           ].map((k) => (
             <button
               key={k.label}
-              onClick={() => navigate(k.path)}
-              className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
+              //onClick={() => navigate(k.path)}
+              className="bg-white rounded-2xl border border-gray-100 p-4 text-left  transition-all group"
+              //hover:shadow-md hover:border-gray-200
             >
-              <div className="flex items-start justify-between mb-3">
+              {/**<div className="flex items-start justify-between mb-3">
                 <div
                   className="w-8 h-8 rounded-xl flex items-center justify-center"
                   style={{ background: k.accent + "18" }}
@@ -162,7 +163,7 @@ export function CabineroDashboard({ usuario }) {
                     d="M8.25 4.5l7.5 7.5-7.5 7.5"
                   />
                 </svg>
-              </div>
+              </div>*/}
               <p className="text-3xl font-black text-[#13193a] tabular-nums">
                 {k.value}
               </p>
@@ -212,8 +213,8 @@ export function CabineroDashboard({ usuario }) {
                 {ULTIMOS_SN.map((s, i) => (
                   <tr
                     key={i}
-                    onClick={() => navigate("/siniestros")}
-                    className={`hover:bg-gray-50/60 transition-colors cursor-pointer ${s.estatus === "Sin asignar" ? "bg-red-50/20" : ""}`}
+                    //onClick={() => navigate("/siniestros")}
+                    className={`hover:bg-gray-50/60 transition-colors ${s.estatus === "Sin asignar" ? "bg-red-50/20" : ""}`}
                   >
                     <td className="px-5 py-3 font-mono text-xs font-bold text-[#13193a]">
                       {s.folio}
