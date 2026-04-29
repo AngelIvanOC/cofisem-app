@@ -1,5 +1,5 @@
 // ============================================================
-// src/pages/operador/Polizas.jsx
+// src/features/operador/Polizas.jsx
 // Módulo principal de pólizas:
 //   - Lista de pólizas + búsqueda + filtros
 //   - Cotizar (nueva cotización con tabla de coberturas)
@@ -280,6 +280,150 @@ const COTIZACIONES_MOCK = [
   },
 ];
 
+// ── Catálogo de vehículos en cascada ─────────────────────────
+const CATALOGO_VEHICULOS = {
+  "Nissan": {
+    "Sedán":     ["Tsuru GSI", "Sentra Sense", "Versa Advance", "Altima Exclusive"],
+    "SUV":       ["X-Trail Advance", "Kicks Sense", "Pathfinder"],
+    "Hatchback": ["March Sense", "Note SR"],
+    "Pickup":    ["NP300 Frontier", "Frontier Pro-4X"],
+  },
+  "Toyota": {
+    "Sedán":     ["Yaris Core", "Corolla LE", "Camry SE"],
+    "SUV":       ["RAV4 XLE", "Highlander LE", "Land Cruiser"],
+    "Hatchback": ["Yaris Hatchback"],
+    "Pickup":    ["Hilux SR", "Tacoma TRD"],
+  },
+  "Volkswagen": {
+    "Sedán":     ["Vento Comfortline", "Jetta Trendline", "Passat Highline"],
+    "SUV":       ["Tiguan Comfortline", "Teramont"],
+    "Hatchback": ["Polo Comfortline", "Gol Trendline"],
+  },
+  "Chevrolet": {
+    "Sedán":     ["Aveo LS", "Cavalier LT", "Malibu LT"],
+    "SUV":       ["Tracker LT", "Equinox LT", "Captiva"],
+    "Hatchback": ["Spark LT"],
+    "Pickup":    ["S10 Max", "Silverado"],
+  },
+  "Honda": {
+    "Sedán":     ["City LX", "Civic Turbo", "Accord Sport"],
+    "SUV":       ["HR-V Prime", "CR-V Touring"],
+  },
+};
+
+const MARCAS = Object.keys(CATALOGO_VEHICULOS);
+
+// ── Modal "Nuevo asegurado" ──────────────────────────────────
+const ESTADOS_MX = [
+  "Aguascalientes","Baja California","Baja California Sur","Campeche",
+  "Chiapas","Chihuahua","Ciudad de México","Coahuila","Colima","Durango",
+  "Estado de México","Guanajuato","Guerrero","Hidalgo","Jalisco",
+  "Michoacán","Morelos","Nayarit","Nuevo León","Oaxaca","Puebla",
+  "Querétaro","Quintana Roo","San Luis Potosí","Sinaloa","Sonora",
+  "Tabasco","Tamaulipas","Tlaxcala","Veracruz","Yucatán","Zacatecas",
+];
+const EMPTY_ASEG = { nombre: "", rfc: "", curp: "", telefono: "", email: "", calle: "", colonia: "", municipio: "", cp: "", estado: "Morelos" };
+
+function CampoModal({ label, value, onChange, placeholder, type = "text", req }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+        {label}{req && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      <input
+        type={type}
+        value={value ?? ""}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all"
+      />
+    </div>
+  );
+}
+
+function ModalNuevoAsegurado({ onClose, onGuardar }) {
+  const [form, setForm] = useState(EMPTY_ASEG);
+  const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const guardar = () => {
+    if (!form.nombre || !form.rfc) return;
+    onGuardar(form.nombre);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.5)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+          <div>
+            <h2 className="text-base font-bold text-[#13193a]">Nuevo asegurado</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Registra un nuevo asegurado</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Datos personales</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <CampoModal label="Nombre completo" value={form.nombre} onChange={v => setF("nombre", v)} placeholder="Nombre completo del asegurado" req />
+              </div>
+              <CampoModal label="RFC" value={form.rfc} onChange={v => setF("rfc", v)} placeholder="RFC con homoclave" req />
+              <CampoModal label="CURP" value={form.curp} onChange={v => setF("curp", v)} placeholder="CURP" />
+              <CampoModal label="Teléfono" type="tel" value={form.telefono} onChange={v => setF("telefono", v)} placeholder="55 0000 0000" req />
+              <CampoModal label="Correo electrónico" type="email" value={form.email} onChange={v => setF("email", v)} placeholder="correo@ejemplo.com" />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Domicilio</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <CampoModal label="Calle y número" value={form.calle} onChange={v => setF("calle", v)} placeholder="Av. Emiliano Zapata 145" />
+              </div>
+              <CampoModal label="Colonia" value={form.colonia} onChange={v => setF("colonia", v)} placeholder="Colonia" />
+              <CampoModal label="Municipio" value={form.municipio} onChange={v => setF("municipio", v)} placeholder="Municipio" />
+              <CampoModal label="C.P." value={form.cp} onChange={v => setF("cp", v)} placeholder="62000" />
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Estado</label>
+                <select
+                  value={form.estado}
+                  onChange={e => setF("estado", e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]"
+                >
+                  {ESTADOS_MX.map(e => <option key={e}>{e}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button
+            onClick={guardar}
+            disabled={!form.nombre || !form.rfc}
+            className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all"
+          >
+            Registrar asegurado
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Componentes pequeños ──────────────────────────────────────
 function Tab({ active, onClick, children }) {
   return (
@@ -326,24 +470,30 @@ function FormCotizacion({
     `COT-${OFICINA.codigo}01${Date.now().toString().slice(-6)}`;
 
   const [form, setForm] = useState({
-    cliente: cotizacionInicial?.cliente ?? "",
-    vendedor: cotizacionInicial?.vendedor ?? VENDEDORES_MOCK[0],
-    cobertura: cotizacionInicial?.cobertura ?? "",
-    codAMIS: "",
-    unidad: "",
-    capacidad: "",
-    modelo: "",
-    formaPago: "CONTADO",
-    descPct: 0,
-    inciso: "",
-    uso: "",
+    cliente:    cotizacionInicial?.cliente   ?? "",
+    vendedor:   cotizacionInicial?.vendedor  ?? VENDEDORES_MOCK[0],
+    cobertura:  cotizacionInicial?.cobertura ?? "",
+    formaPago:  "CONTADO",
+    descPct:    0,
+    // Vehículo en cascada
+    marca:      "",
+    tipo:       "",
+    version:    "",
+    modelo:     "",
+    serie:      "",
+    motor:      "",
+    placas:     "",
+    codAMIS:    "",
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const coverturaData = COBERTURAS_CATALOGO[form.cobertura] ?? null;
-  const formasPago = coverturaData?.formasPago ?? ["CONTADO"];
-  const primaNeta = coverturaData?.primaNeta ?? 0;
-  const derechos = coverturaData?.derechos ?? 0;
+  const [clientesLocal, setClientesLocal] = useState(CLIENTES_MOCK);
+  const [modalAseg, setModalAseg] = useState(false);
+
+  const coberturaData = COBERTURAS_CATALOGO[form.cobertura] ?? null;
+  const formasPago = coberturaData?.formasPago ?? ["CONTADO"];
+  const primaNeta = coberturaData?.primaNeta ?? 0;
+  const derechos = coberturaData?.derechos ?? 0;
   const descMonto = +((primaNeta * form.descPct) / 100).toFixed(2);
   const iva = +((primaNeta - descMonto + derechos) * 0.16).toFixed(2);
   const total = +(primaNeta - descMonto + derechos + iva).toFixed(2);
@@ -359,6 +509,23 @@ function FormCotizacion({
     second: "2-digit",
     hour12: false,
   });
+
+  // Cascada de vehículo
+  const tiposDisponibles = form.marca ? Object.keys(CATALOGO_VEHICULOS[form.marca]) : [];
+  const versionesDisponibles = form.marca && form.tipo ? CATALOGO_VEHICULOS[form.marca][form.tipo] : [];
+
+  const onCambiarMarca = (v) => {
+    setForm((f) => ({ ...f, marca: v, tipo: "", version: "" }));
+  };
+  const onCambiarTipo = (v) => {
+    setForm((f) => ({ ...f, tipo: v, version: "" }));
+  };
+
+  const onGuardarAsegurado = (nombre) => {
+    setClientesLocal((cs) => [...cs, nombre]);
+    setF("cliente", nombre);
+    setModalAseg(false);
+  };
 
   const inpCls =
     "w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
@@ -393,7 +560,7 @@ function FormCotizacion({
         </div>
       </div>
 
-      {/* Datos principales */}
+      {/* Datos de la cotización */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">
           Datos de la cotización
@@ -415,21 +582,46 @@ function FormCotizacion({
             <label className={lblCls}>Empresa</label>
             <input readOnly value="GAMAN, S.A. DE C.V." className={roCls} />
           </div>
+
+          {/* Asegurado + botón nuevo */}
           <div className="sm:col-span-2">
             <label className={lblCls}>
               Asegurado <span className="text-red-400">*</span>
             </label>
-            <select
-              value={form.cliente}
-              onChange={(e) => setF("cliente", e.target.value)}
-              className={inpCls}
-            >
-              <option value="">Seleccione un cliente</option>
-              {CLIENTES_MOCK.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={form.cliente}
+                onChange={(e) => setF("cliente", e.target.value)}
+                className={inpCls + " flex-1"}
+              >
+                <option value="">Seleccione un asegurado</option>
+                {clientesLocal.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setModalAseg(true)}
+                title="Registrar nuevo asegurado"
+                className="shrink-0 w-10 h-10 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white flex items-center justify-center transition-all shadow-sm shadow-[#13193a]/15"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 4.5v15m7.5-7.5h-15"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
+
           <div className="sm:col-span-2">
             <label className={lblCls}>
               Cobertura <span className="text-red-400">*</span>
@@ -445,17 +637,53 @@ function FormCotizacion({
               ))}
             </select>
           </div>
+
+          {/* Uso · Forma de pago · % Descuento (movidos aquí) */}
+          {coberturaData && (
+            <>
+              <div>
+                <label className={lblCls}>Uso</label>
+                <input readOnly value={coberturaData.uso} className={roCls} />
+              </div>
+              <div>
+                <label className={lblCls}>Forma de pago</label>
+                <select
+                  value={form.formaPago}
+                  onChange={(e) => setF("formaPago", e.target.value)}
+                  className={inpCls}
+                >
+                  {formasPago.map((f) => (
+                    <option key={f}>{f}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className={lblCls}>% Descuento</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="30"
+                  step="0.5"
+                  value={form.descPct}
+                  onChange={(e) =>
+                    setF("descPct", parseFloat(e.target.value) || 0)
+                  }
+                  className={inpCls}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* Tabla de coberturas — aparece al seleccionar */}
-      {coverturaData && (
+      {coberturaData && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="bg-[#13193a] px-5 py-3 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-white">{form.cobertura}</h3>
               <p className="text-white/40 text-xs mt-0.5">
-                Uso: {coverturaData.uso}
+                Uso: {coberturaData.uso}
               </p>
             </div>
           </div>
@@ -478,7 +706,7 @@ function FormCotizacion({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {coverturaData.coberturas.map((c, i) => (
+                {coberturaData.coberturas.map((c, i) => (
                   <tr key={i} className="hover:bg-gray-50/60">
                     <td className="px-4 py-2.5 text-gray-700 font-medium">
                       {c.desc}
@@ -505,7 +733,9 @@ function FormCotizacion({
         <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
           Vehículo y condiciones
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+        {/* Cód. AMIS + Capacidad fija */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={lblCls}>Cód. AMIS</label>
             <input
@@ -515,83 +745,106 @@ function FormCotizacion({
               className={inpCls}
             />
           </div>
-          <div className="sm:col-span-2">
-            <label className={lblCls}>Buscar unidad por nombre</label>
-            <input
-              value={form.unidad}
-              onChange={(e) => setF("unidad", e.target.value)}
-              placeholder="Marca, modelo o descripción del vehículo"
-              className={inpCls}
-            />
-          </div>
           <div>
             <label className={lblCls}>Capacidad</label>
-            <input
-              value={form.capacidad}
-              onChange={(e) => setF("capacidad", e.target.value)}
-              placeholder="Pasajeros"
+            <input readOnly value="4 pasajeros" className={roCls} />
+          </div>
+        </div>
+
+        {/* Cascada Marca → Tipo → Versión */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className={lblCls}>
+              Marca <span className="text-red-400">*</span>
+            </label>
+            <select
+              value={form.marca}
+              onChange={(e) => onCambiarMarca(e.target.value)}
               className={inpCls}
-            />
+            >
+              <option value="">Selecciona marca</option>
+              {MARCAS.map((m) => (
+                <option key={m}>{m}</option>
+              ))}
+            </select>
           </div>
           <div>
-            <label className={lblCls}>Modelo</label>
+            <label className={lblCls}>Tipo</label>
+            <select
+              value={form.tipo}
+              onChange={(e) => onCambiarTipo(e.target.value)}
+              disabled={!form.marca}
+              className={inpCls + (form.marca ? "" : " opacity-50 cursor-not-allowed")}
+            >
+              <option value="">
+                {form.marca ? "Selecciona tipo" : "Selecciona marca primero"}
+              </option>
+              {tiposDisponibles.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={lblCls}>Versión</label>
+            <select
+              value={form.version}
+              onChange={(e) => setF("version", e.target.value)}
+              disabled={!form.tipo}
+              className={inpCls + (form.tipo ? "" : " opacity-50 cursor-not-allowed")}
+            >
+              <option value="">
+                {form.tipo ? "Selecciona versión" : "Selecciona tipo primero"}
+              </option>
+              {versionesDisponibles.map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Datos del vehículo: Modelo + Serie + Motor + Placas */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div>
+            <label className={lblCls}>Modelo (año)</label>
             <input
               value={form.modelo}
               onChange={(e) => setF("modelo", e.target.value)}
-              placeholder="Año"
+              placeholder="2020"
               className={inpCls}
             />
           </div>
           <div>
-            <label className={lblCls}>Inciso</label>
+            <label className={lblCls}>No. Serie</label>
             <input
-              value={form.inciso}
-              onChange={(e) => setF("inciso", e.target.value)}
-              placeholder="Inciso"
+              value={form.serie}
+              onChange={(e) => setF("serie", e.target.value)}
+              placeholder="17 dígitos"
+              className={inpCls}
+            />
+          </div>
+          <div>
+            <label className={lblCls}>Motor</label>
+            <input
+              value={form.motor}
+              onChange={(e) => setF("motor", e.target.value)}
+              placeholder="No. de motor"
+              className={inpCls}
+            />
+          </div>
+          <div>
+            <label className={lblCls}>Placas</label>
+            <input
+              value={form.placas}
+              onChange={(e) => setF("placas", e.target.value)}
+              placeholder="ABC-123"
               className={inpCls}
             />
           </div>
         </div>
-
-        {/* Forma de pago y descuento */}
-        {coverturaData && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-gray-100">
-            <div>
-              <label className={lblCls}>Uso</label>
-              <input readOnly value={coverturaData.uso} className={roCls} />
-            </div>
-            <div>
-              <label className={lblCls}>Forma de pago</label>
-              <select
-                value={form.formaPago}
-                onChange={(e) => setF("formaPago", e.target.value)}
-                className={inpCls}
-              >
-                {formasPago.map((f) => (
-                  <option key={f}>{f}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={lblCls}>% Descuento</label>
-              <input
-                type="number"
-                min="0"
-                max="30"
-                step="0.5"
-                value={form.descPct}
-                onChange={(e) =>
-                  setF("descPct", parseFloat(e.target.value) || 0)
-                }
-                className={inpCls}
-              />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Resumen de prima */}
-      {coverturaData && (
+      {coberturaData && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">
             Resumen de prima
@@ -656,7 +909,7 @@ function FormCotizacion({
               fecha: `${fechaHoy} ${horaHoy}`,
             })
           }
-          disabled={!form.cliente || !form.cobertura || !form.unidad}
+          disabled={!form.cliente || !form.cobertura || !form.marca || !form.tipo || !form.version}
           className="flex-1 sm:flex-none px-8 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all flex items-center gap-2 shadow-lg shadow-[#13193a]/15"
         >
           <svg
@@ -675,6 +928,14 @@ function FormCotizacion({
           Tramitar póliza
         </button>
       </div>
+
+      {/* Modal nuevo asegurado */}
+      {modalAseg && (
+        <ModalNuevoAsegurado
+          onClose={() => setModalAseg(false)}
+          onGuardar={onGuardarAsegurado}
+        />
+      )}
     </div>
   );
 }
