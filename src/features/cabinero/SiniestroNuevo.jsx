@@ -1,17 +1,24 @@
 // ============================================================
-// src/pages/SiniestroNuevo.jsx
-// ── Fixes aplicados:
-//   • nroReporte: usa useRef → no cambia en cada re-render
-//   • Indicador de pasos: más limpio y visible
-//   • Sección de terceros: hint solo cuando hay 1 vacío
-//   • Botones de acción: separados visualmente del formulario
-//   • labels: tipografía consistente con el resto del sistema
-//   • Buscador: mejor feedback de "no encontrado"
-//   • PolizaCard: header más compacto, info más legible
-//   • Inputs readonly: fondo diferenciado claramente
+// src/features/cabinero/SiniestroNuevo.jsx
+//
+// AJUSTES APLICADOS:
+//   ✓ "Conductor del Asegurado": nombre + teléfono + checkbox
+//     en UNA sola fila. Sin texto descriptivo extra.
+//   ✓ Cuando se marca "tercero": solo 2 inputs en columna,
+//     sin borde, sin subtítulo, sin énfasis visual.
+//   ✓ Vehículos terceros: ELIMINADOS nombre y teléfono del
+//     conductor. Solo datos del vehículo.
+//   ✓ Localización compacta:
+//        Fila 1: Estado | Municipio | CP
+//        Fila 2: Colonia | Calle | Número
+//        Fila 3: Referencia (sola, full width)
 // ============================================================
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ESTADOS_MX,
+  getMunicipios,
+} from "../../shared/data/mexicoMunicipios";
 
 // ── Mock de datos ─────────────────────────────────────────────
 const POLIZAS_MOCK = [
@@ -42,85 +49,19 @@ const POLIZAS_MOCK = [
       capacidad: "4 PASAJEROS",
     },
     coberturas: [
-      {
-        desc: "RESP. CIVIL A TERCEROS BIENES Y PERSONAS",
-        monto: "$1,700,000.00",
-        ded: "0.00",
-        imp: "0 UMAS",
-        sub: false,
-      },
-      {
-        desc: "RESPONSABILIDAD CIVIL COMPLEMENT. PERSONAS",
-        monto: "$3,000,000.00",
-        ded: "0.00",
-        imp: "0 UMAS",
-        sub: false,
-      },
-      {
-        desc: "GASTOS MÉDICOS CONDUCTOR Y FAMILIARES",
-        monto: "$50,000.00",
-        ded: "0.00",
-        imp: "0",
-        sub: false,
-      },
-      {
-        desc: "MUERTE DE CONDUCTOR P/AA",
-        monto: "$50,000.00",
-        ded: "0.00",
-        imp: "0",
-        sub: false,
-      },
-      {
-        desc: "GASTOS LEGALES",
-        monto: "AMPARADOS",
-        ded: "0.00",
-        imp: "0",
-        sub: false,
-      },
-      {
-        desc: "RESPONSABILIDAD CIVIL VIAJERO",
-        monto: "5,000 UMAS/PASAJERO",
-        ded: "0.00",
-        imp: "0",
-        sub: false,
-      },
-      {
-        desc: "└ Muerte o Incapacidad Total y Permanente",
-        monto: "Sublímite 5,000 UMA",
-        ded: "0.00",
-        imp: "0",
-        sub: true,
-      },
-      {
-        desc: "└ Gastos Médicos",
-        monto: "Sublímite 5,000 UMA",
-        ded: "0.00",
-        imp: "0",
-        sub: true,
-      },
-      {
-        desc: "└ Gastos Funerarios",
-        monto: "Sublímite 300 UMA",
-        ded: "0.00",
-        imp: "0",
-        sub: true,
-      },
-      {
-        desc: "└ Equipaje",
-        monto: "Sublímite 80 UMA",
-        ded: "0.00",
-        imp: "0",
-        sub: true,
-      },
+      { desc: "RESP. CIVIL A TERCEROS BIENES Y PERSONAS",   monto: "$1,700,000.00",       ded: "0.00", imp: "0 UMAS",          sub: false },
+      { desc: "RESPONSABILIDAD CIVIL COMPLEMENT. PERSONAS", monto: "$3,000,000.00",       ded: "0.00", imp: "0 UMAS",          sub: false },
+      { desc: "GASTOS MÉDICOS CONDUCTOR Y FAMILIARES",      monto: "$50,000.00",          ded: "0.00", imp: "0",                sub: false },
+      { desc: "MUERTE DE CONDUCTOR P/AA",                    monto: "$50,000.00",          ded: "0.00", imp: "0",                sub: false },
+      { desc: "GASTOS LEGALES",                              monto: "AMPARADOS",           ded: "0.00", imp: "0",                sub: false },
+      { desc: "RESPONSABILIDAD CIVIL VIAJERO",               monto: "5,000 UMAS/PASAJERO", ded: "0.00", imp: "0",                sub: false },
+      { desc: "└ Muerte o Incapacidad Total y Permanente",  monto: "Sublímite 5,000 UMA", ded: "0.00", imp: "0",                sub: true },
+      { desc: "└ Gastos Médicos",                            monto: "Sublímite 5,000 UMA", ded: "0.00", imp: "0",                sub: true },
+      { desc: "└ Gastos Funerarios",                         monto: "Sublímite 300 UMA",   ded: "0.00", imp: "0",                sub: true },
+      { desc: "└ Equipaje",                                  monto: "Sublímite 80 UMA",    ded: "0.00", imp: "0",                sub: true },
     ],
     siniestros: [
-      {
-        reporte: "250423",
-        folio: "250423",
-        fecha: "28/06/2025",
-        ajustador: "ALICIA HERNANDEZ VARGAS",
-        estatus: "Asignado",
-      },
+      { reporte: "250423", folio: "250423", fecha: "28/06/2025", ajustador: "ALICIA HERNANDEZ VARGAS", estatus: "Asignado" },
     ],
   },
 ];
@@ -183,40 +124,7 @@ const CIRCUNSTANCIAS = [
   "Estacionamiento privado",
   "Otra",
 ];
-const ENTIDADES = [
-  "Aguascalientes",
-  "Baja California",
-  "Baja California Sur",
-  "Campeche",
-  "Chiapas",
-  "Chihuahua",
-  "Ciudad de México",
-  "Coahuila",
-  "Colima",
-  "Durango",
-  "Estado de México",
-  "Guanajuato",
-  "Guerrero",
-  "Hidalgo",
-  "Jalisco",
-  "Michoacán",
-  "Morelos",
-  "Nayarit",
-  "Nuevo León",
-  "Oaxaca",
-  "Puebla",
-  "Querétaro",
-  "Quintana Roo",
-  "San Luis Potosí",
-  "Sinaloa",
-  "Sonora",
-  "Tabasco",
-  "Tamaulipas",
-  "Tlaxcala",
-  "Veracruz",
-  "Yucatán",
-  "Zacatecas",
-];
+
 const AJUSTADORES = [
   "Félix Hernández",
   "Luis Martínez",
@@ -225,11 +133,9 @@ const AJUSTADORES = [
   "Alicia Hernández Vargas",
 ];
 
-// Tercero vacío
+// Tercero: SOLO datos del vehículo (sin nombre/teléfono del conductor)
 const TERCERO_VACIO = () => ({
   id: Date.now() + Math.random(),
-  conductorNombre: "",
-  conductorTelefono: "",
   vehiculoDesc: "",
   vehiculoTipo: "",
   vehiculoColor: "",
@@ -244,6 +150,8 @@ const INP =
   "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 placeholder-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
 const INP_RO =
   "w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm font-semibold text-[#13193a] bg-[#13193a]/4 cursor-default select-none";
+const INP_DISABLED =
+  "w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm text-gray-400 bg-gray-50 cursor-not-allowed";
 const LBL =
   "block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5";
 
@@ -253,12 +161,8 @@ function Seccion({ titulo, subtitulo, children, accion }) {
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="bg-[#13193a] px-5 py-3.5 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-bold text-white tracking-wide">
-            {titulo}
-          </h3>
-          {subtitulo && (
-            <p className="text-white/40 text-xs mt-0.5">{subtitulo}</p>
-          )}
+          <h3 className="text-sm font-bold text-white tracking-wide">{titulo}</h3>
+          {subtitulo && <p className="text-white/40 text-xs mt-0.5">{subtitulo}</p>}
         </div>
         {accion}
       </div>
@@ -270,19 +174,15 @@ function Seccion({ titulo, subtitulo, children, accion }) {
 function DatoCard({ label, value, mono, highlight }) {
   return (
     <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">
-        {label}
-      </p>
-      <p
-        className={`text-xs font-semibold truncate ${highlight ? "text-emerald-600" : "text-[#13193a]"} ${mono ? "font-mono" : ""}`}
-      >
+      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
+      <p className={`text-xs font-semibold truncate ${highlight ? "text-emerald-600" : "text-[#13193a]"} ${mono ? "font-mono" : ""}`}>
         {value || "—"}
       </p>
     </div>
   );
 }
 
-// ── Tarjeta de tercero/afectado ───────────────────────────────
+// ── Tarjeta de tercero — SOLO VEHÍCULO ────────────────────────
 function TerceroCard({ tercero, index, onChange, onRemove }) {
   const set = useCallback(
     (k, v) => onChange(tercero.id, k, v),
@@ -298,7 +198,7 @@ function TerceroCard({ tercero, index, onChange, onRemove }) {
             {index + 1}
           </div>
           <span className="text-sm font-bold text-[#13193a]">
-            Tercero / Afectado #{index + 1}
+            Vehículo tercero #{index + 1}
           </span>
         </div>
         <button
@@ -306,123 +206,54 @@ function TerceroCard({ tercero, index, onChange, onRemove }) {
           onClick={() => onRemove(tercero.id)}
           className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-all"
         >
-          <svg
-            className="w-3.5 h-3.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-            />
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
           </svg>
           Eliminar
         </button>
       </div>
 
-      <div className="p-4 space-y-4">
-        {/* Conductor */}
-        <div>
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-              />
-            </svg>
-            Datos del Conductor
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={LBL}>Nombre completo</label>
-              <input
-                value={tercero.conductorNombre}
-                onChange={(e) => set("conductorNombre", e.target.value)}
-                placeholder="Nombre del conductor"
-                className={INP}
-              />
-            </div>
-            <div>
-              <label className={LBL}>Teléfono</label>
-              <input
-                value={tercero.conductorTelefono}
-                onChange={(e) => set("conductorTelefono", e.target.value)}
-                placeholder="55 0000 0000"
-                className={INP}
-              />
-            </div>
+      <div className="p-4 space-y-3">
+        {/* Solo datos del vehículo — sin sección de conductor */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className={LBL}>Marca / Descripción</label>
+            <input
+              value={tercero.vehiculoDesc}
+              onChange={(e) => set("vehiculoDesc", e.target.value)}
+              placeholder="Marca y modelo"
+              className={INP}
+            />
+          </div>
+          <div>
+            <label className={LBL}>Tipo</label>
+            <input
+              value={tercero.vehiculoTipo}
+              onChange={(e) => set("vehiculoTipo", e.target.value)}
+              placeholder="Automóvil, camión, moto..."
+              className={INP}
+            />
           </div>
         </div>
-
-        <div className="border-t border-gray-100" />
-
-        {/* Vehículo */}
-        <div>
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"
-              />
-            </svg>
-            Datos del Vehículo
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className={LBL}>Marca / Descripción</label>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {[
+            { k: "vehiculoColor",  p: "Color"     },
+            { k: "vehiculoModelo", p: "Modelo"    },
+            { k: "vehiculoPlacas", p: "Placas"    },
+            { k: "vehiculoSerie",  p: "No. Serie" },
+            { k: "vehiculoMotor",  p: "Motor"     },
+          ].map((f) => (
+            <div key={f.k}>
+              <label className={LBL}>{f.p}</label>
               <input
-                value={tercero.vehiculoDesc}
-                onChange={(e) => set("vehiculoDesc", e.target.value)}
-                placeholder="Marca y modelo"
+                value={tercero[f.k]}
+                onChange={(e) => set(f.k, e.target.value)}
+                placeholder={f.p}
                 className={INP}
               />
             </div>
-            <div>
-              <label className={LBL}>Tipo</label>
-              <input
-                value={tercero.vehiculoTipo}
-                onChange={(e) => set("vehiculoTipo", e.target.value)}
-                placeholder="Automóvil, camión, moto..."
-                className={INP}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {[
-              { k: "vehiculoColor", p: "Color" },
-              { k: "vehiculoModelo", p: "Modelo" },
-              { k: "vehiculoPlacas", p: "Placas" },
-              { k: "vehiculoSerie", p: "No. Serie" },
-              { k: "vehiculoMotor", p: "Motor" },
-            ].map((f) => (
-              <div key={f.k}>
-                <label className={LBL}>{f.p}</label>
-                <input
-                  value={tercero[f.k]}
-                  onChange={(e) => set(f.k, e.target.value)}
-                  placeholder={f.p}
-                  className={INP}
-                />
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
     </div>
@@ -438,25 +269,14 @@ function PolizaCard({ poliza, onConfirmar, onLimpiar }) {
         <div className="flex items-start justify-between">
           <div>
             <span className="inline-flex items-center text-[11px] font-bold text-emerald-400 uppercase tracking-widest mb-2">
-              <svg
-                className="w-3 h-3 mr-1"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                  clipRule="evenodd"
-                />
+              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" clipRule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
               </svg>
               Póliza encontrada · Vigente
             </span>
-            <p className="text-white text-lg font-bold font-mono leading-none">
-              {poliza.numero}
-            </p>
-            <p className="text-white/60 text-sm mt-1.5 leading-snug max-w-md">
-              {poliza.titular}
-            </p>
+            <p className="text-white text-lg font-bold font-mono leading-none">{poliza.numero}</p>
+            <p className="text-white/60 text-sm mt-1.5 leading-snug max-w-md">{poliza.titular}</p>
           </div>
           <div className="text-right shrink-0 ml-4">
             <p className="text-white/40 text-xs">Prima total</p>
@@ -471,49 +291,25 @@ function PolizaCard({ poliza, onConfirmar, onLimpiar }) {
         {poliza.siniestros.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
             <p className="text-[11px] font-bold text-amber-700 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-                />
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
               </svg>
               Siniestros relacionados a este certificado
             </p>
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-amber-200">
-                  {[
-                    "# Reporte",
-                    "# Folio",
-                    "Fecha",
-                    "Ajustador",
-                    "Estatus",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="text-left pb-2 text-amber-600 font-semibold"
-                    >
-                      {h}
-                    </th>
+                  {["# Reporte", "# Folio", "Fecha", "Ajustador", "Estatus"].map((h) => (
+                    <th key={h} className="text-left pb-2 text-amber-600 font-semibold">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {poliza.siniestros.map((s, i) => (
                   <tr key={i}>
-                    <td className="py-1.5 font-mono text-amber-800 font-semibold">
-                      {s.reporte}
-                    </td>
-                    <td className="py-1.5 font-mono text-amber-800">
-                      {s.folio}
-                    </td>
+                    <td className="py-1.5 font-mono text-amber-800 font-semibold">{s.reporte}</td>
+                    <td className="py-1.5 font-mono text-amber-800">{s.folio}</td>
                     <td className="py-1.5 text-amber-700">{s.fecha}</td>
                     <td className="py-1.5 text-amber-700">{s.ajustador}</td>
                     <td className="py-1.5">
@@ -530,28 +326,21 @@ function PolizaCard({ poliza, onConfirmar, onLimpiar }) {
 
         {/* Info general */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <DatoCard label="Agencia" value={poliza.agencia} />
-          <DatoCard label="Vigencia desde" value={poliza.vigenciaDesde} />
-          <DatoCard label="Vigencia hasta" value={poliza.vigenciaHasta} />
-          <DatoCard label="Saldo" value={poliza.saldo} highlight />
+          <DatoCard label="Agencia"         value={poliza.agencia} />
+          <DatoCard label="Vigencia desde"   value={poliza.vigenciaDesde} />
+          <DatoCard label="Vigencia hasta"   value={poliza.vigenciaHasta} />
+          <DatoCard label="Saldo"            value={poliza.saldo} highlight />
         </div>
 
         {/* Cuotas */}
         <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Cuotas de Pago
-          </p>
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Cuotas de Pago</p>
           <div className="grid grid-cols-4 gap-2">
             {poliza.cuotas.map((c) => (
-              <div
-                key={c.num}
-                className="bg-white rounded-xl border border-gray-100 p-2.5 text-center"
-              >
+              <div key={c.num} className="bg-white rounded-xl border border-gray-100 p-2.5 text-center">
                 <p className="text-[10px] text-gray-400 mb-1">Cuota {c.num}</p>
                 <p className="text-sm font-bold text-[#13193a]">{c.monto}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5 mb-1.5">
-                  {c.vto}
-                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5 mb-1.5">{c.vto}</p>
                 <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
                   {c.estatus}
                 </span>
@@ -562,26 +351,17 @@ function PolizaCard({ poliza, onConfirmar, onLimpiar }) {
 
         {/* Vehículo */}
         <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-            Vehículo Asegurado
-          </p>
-          <p className="text-sm font-bold text-[#13193a] mb-3">
-            {poliza.vehiculo.descripcion}
-          </p>
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Vehículo Asegurado</p>
+          <p className="text-sm font-bold text-[#13193a] mb-3">{poliza.vehiculo.descripcion}</p>
           <div className="grid grid-cols-3 lg:grid-cols-5 gap-2">
             {[
-              { k: "Modelo", v: poliza.vehiculo.modelo },
-              { k: "Placas", v: poliza.vehiculo.placas },
-              { k: "Serie", v: poliza.vehiculo.serie },
-              { k: "Motor", v: poliza.vehiculo.motor },
-              { k: "Capac.", v: poliza.vehiculo.capacidad },
+              { k: "Modelo", v: poliza.vehiculo.modelo   },
+              { k: "Placas", v: poliza.vehiculo.placas   },
+              { k: "Serie",  v: poliza.vehiculo.serie    },
+              { k: "Motor",  v: poliza.vehiculo.motor    },
+              { k: "Capac.", v: poliza.vehiculo.capacidad},
             ].map((f) => (
-              <DatoCard
-                key={f.k}
-                label={f.k}
-                value={f.v}
-                mono={f.k === "Serie"}
-              />
+              <DatoCard key={f.k} label={f.k} value={f.v} mono={f.k === "Serie"} />
             ))}
           </div>
         </div>
@@ -589,53 +369,26 @@ function PolizaCard({ poliza, onConfirmar, onLimpiar }) {
         {/* Coberturas */}
         <div>
           <div className="mb-3">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-              Coberturas
-            </p>
-            <p className="text-sm font-bold text-[#13193a] mt-0.5">
-              {poliza.cobertura}
-            </p>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Coberturas</p>
+            <p className="text-sm font-bold text-[#13193a] mt-0.5">{poliza.cobertura}</p>
           </div>
           <div className="rounded-xl border border-gray-100 overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-[#13193a]">
-                  <th className="text-left px-4 py-2.5 font-semibold text-white">
-                    Descripción
-                  </th>
-                  <th className="text-right px-4 py-2.5 font-semibold text-white">
-                    Monto Máx.
-                  </th>
-                  <th className="text-right px-4 py-2.5 font-semibold text-white hidden sm:table-cell">
-                    % Ded.
-                  </th>
-                  <th className="text-right px-4 py-2.5 font-semibold text-white hidden sm:table-cell">
-                    Imp. Ded.
-                  </th>
+                  <th className="text-left  px-4 py-2.5 font-semibold text-white">Descripción</th>
+                  <th className="text-right px-4 py-2.5 font-semibold text-white">Monto Máx.</th>
+                  <th className="text-right px-4 py-2.5 font-semibold text-white hidden sm:table-cell">% Ded.</th>
+                  <th className="text-right px-4 py-2.5 font-semibold text-white hidden sm:table-cell">Imp. Ded.</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {poliza.coberturas.map((c, i) => (
-                  <tr
-                    key={i}
-                    className={c.sub ? "bg-gray-50/60" : "hover:bg-gray-50"}
-                  >
-                    <td
-                      className={`px-4 py-2.5 ${c.sub ? "text-gray-400 pl-7" : "text-gray-700 font-medium"}`}
-                    >
-                      {c.desc}
-                    </td>
-                    <td
-                      className={`px-4 py-2.5 text-right ${c.sub ? "text-gray-400" : "font-semibold text-[#13193a]"}`}
-                    >
-                      {c.monto}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-gray-400 hidden sm:table-cell">
-                      {c.ded}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-gray-400 hidden sm:table-cell">
-                      {c.imp}
-                    </td>
+                  <tr key={i} className={c.sub ? "bg-gray-50/60" : "hover:bg-gray-50"}>
+                    <td className={`px-4 py-2.5 ${c.sub ? "text-gray-400 pl-7" : "text-gray-700 font-medium"}`}>{c.desc}</td>
+                    <td className={`px-4 py-2.5 text-right ${c.sub ? "text-gray-400" : "font-semibold text-[#13193a]"}`}>{c.monto}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-400 hidden sm:table-cell">{c.ded}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-400 hidden sm:table-cell">{c.imp}</td>
                   </tr>
                 ))}
               </tbody>
@@ -657,18 +410,8 @@ function PolizaCard({ poliza, onConfirmar, onLimpiar }) {
           className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#13193a]/15"
         >
           Continuar con esta póliza
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2.5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M13 7l5 5m0 0l-5 5m5-5H6"
-            />
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
           </svg>
         </button>
       </div>
@@ -676,9 +419,208 @@ function PolizaCard({ poliza, onConfirmar, onLimpiar }) {
   );
 }
 
+// ── Sección: Conductor del asegurado (NA / Operador) ──────────
+// Compacta: nombre + teléfono + checkbox en una fila.
+// Si se marca tercero: 2 inputs simples en columna abajo, sin borde.
+function SeccionConductorNA({ data, onChange }) {
+  const set = (k, v) => onChange({ ...data, [k]: v });
+
+  return (
+    <Seccion titulo="Conductor del Asegurado (NA / Operador)">
+      <div className="space-y-3">
+        {/* Una sola fila: nombre | teléfono | checkbox */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+          <div className="flex-1">
+            <label className={LBL}>Nombre del conductor</label>
+            <input
+              value={data.nombre}
+              onChange={(e) => set("nombre", e.target.value)}
+              placeholder="Nombre completo"
+              className={INP}
+            />
+          </div>
+          <div className="flex-1">
+            <label className={LBL}>Teléfono</label>
+            <input
+              type="tel"
+              value={data.telefono}
+              onChange={(e) => set("telefono", e.target.value)}
+              placeholder="55 0000 0000"
+              className={INP}
+            />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer shrink-0 pb-2.5 sm:pl-2">
+            <button
+              type="button"
+              onClick={() => set("esTercero", !data.esTercero)}
+              role="checkbox"
+              aria-checked={data.esTercero}
+              className={[
+                "w-4 h-4 rounded border-2 flex items-center justify-center transition-all",
+                data.esTercero
+                  ? "bg-[#13193a] border-[#13193a]"
+                  : "bg-white border-gray-300 hover:border-gray-400",
+              ].join(" ")}
+            >
+              {data.esTercero && (
+                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                </svg>
+              )}
+            </button>
+            <span
+              onClick={() => set("esTercero", !data.esTercero)}
+              className="text-xs font-medium text-gray-600 select-none whitespace-nowrap"
+            >
+              El conductor es un tercero
+            </span>
+          </label>
+        </div>
+
+        {/* Cuando se marca: dos inputs en columna, sin borde, sin subtítulo */}
+        {data.esTercero && (
+          <div className="space-y-3 pt-1">
+            <div>
+              <label className={LBL}>Nombre de contacto extra</label>
+              <input
+                value={data.contactoExtraNombre}
+                onChange={(e) => set("contactoExtraNombre", e.target.value)}
+                placeholder="Nombre"
+                className={INP}
+              />
+            </div>
+            <div>
+              <label className={LBL}>Número de contacto extra</label>
+              <input
+                type="tel"
+                value={data.contactoExtraTelefono}
+                onChange={(e) => set("contactoExtraTelefono", e.target.value)}
+                placeholder="55 0000 0000"
+                className={INP}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </Seccion>
+  );
+}
+
+// ── Sección: Localización en cascada (compacta) ───────────────
+function SeccionLocalizacion({ data, onChange }) {
+  const set = (k, v) => onChange({ ...data, [k]: v });
+
+  const onCambiarEstado = (estado) => {
+    onChange({ ...data, estado, municipio: "" });
+  };
+
+  const municipios = useMemo(
+    () => (data.estado ? getMunicipios(data.estado) : []),
+    [data.estado],
+  );
+
+  return (
+    <Seccion titulo="Localización del Siniestro">
+      <div className="space-y-3">
+        {/* Fila 1: Estado | Municipio | CP */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className={LBL}>Estado <span className="text-red-400">*</span></label>
+            <select
+              value={data.estado}
+              onChange={(e) => onCambiarEstado(e.target.value)}
+              className={INP}
+            >
+              <option value="">Selecciona</option>
+              {ESTADOS_MX.map((e) => (
+                <option key={e}>{e}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={LBL}>
+              Municipio
+              {data.estado && <span className="text-red-400"> *</span>}
+            </label>
+            <select
+              value={data.municipio}
+              onChange={(e) => set("municipio", e.target.value)}
+              disabled={!data.estado}
+              className={data.estado ? INP : INP_DISABLED}
+            >
+              <option value="">
+                {data.estado ? "Selecciona" : "Primero estado"}
+              </option>
+              {municipios.map((m) => (
+                <option key={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={LBL}>Código Postal</label>
+            <input
+              value={data.cp}
+              onChange={(e) => set("cp", e.target.value)}
+              disabled={!data.municipio}
+              placeholder="00000"
+              maxLength={5}
+              className={data.municipio ? INP : INP_DISABLED}
+            />
+          </div>
+        </div>
+
+        {/* Fila 2: Colonia | Calle | Número */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className={LBL}>Colonia</label>
+            <input
+              value={data.colonia}
+              onChange={(e) => set("colonia", e.target.value)}
+              disabled={!data.municipio}
+              placeholder={data.municipio ? "Nombre de la colonia" : "Primero municipio"}
+              className={data.municipio ? INP : INP_DISABLED}
+            />
+          </div>
+          <div>
+            <label className={LBL}>Calle</label>
+            <input
+              value={data.calle}
+              onChange={(e) => set("calle", e.target.value)}
+              disabled={!data.colonia}
+              placeholder={data.colonia ? "Av. Emiliano Zapata" : "Primero colonia"}
+              className={data.colonia ? INP : INP_DISABLED}
+            />
+          </div>
+          <div>
+            <label className={LBL}>Número</label>
+            <input
+              value={data.numero}
+              onChange={(e) => set("numero", e.target.value)}
+              disabled={!data.calle}
+              placeholder="145"
+              className={data.calle ? INP : INP_DISABLED}
+            />
+          </div>
+        </div>
+
+        {/* Fila 3: Referencia (sola, full width) */}
+        <div>
+          <label className={LBL}>Referencia / Punto de ubicación</label>
+          <textarea
+            rows={2}
+            value={data.referencia}
+            onChange={(e) => set("referencia", e.target.value)}
+            placeholder="Ej: Frente al OXXO, esquina con Av. Plan de Ayala..."
+            className={INP + " resize-none"}
+          />
+        </div>
+      </div>
+    </Seccion>
+  );
+}
+
 // ── Formulario del siniestro (Paso 2) ─────────────────────────
 function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
-  // ✅ Fix: useRef para que no cambie en cada render
   const nroReporteRef = useRef(
     String(Math.floor(200000 + Math.random() * 99999)),
   );
@@ -695,16 +637,31 @@ function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
     hour12: true,
   });
 
-  const [form, setForm] = useState({
+  const [siniestro, setSiniestro] = useState({
     causa: "",
     circunstancia: "",
     detalles: "",
-    entidad: "",
-    conductorNA: "",
-    telefono: "",
     ajustador: "",
   });
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const setS = (k, v) => setSiniestro((s) => ({ ...s, [k]: v }));
+
+  const [conductorNA, setConductorNA] = useState({
+    nombre: "",
+    telefono: "",
+    esTercero: false,
+    contactoExtraNombre: "",
+    contactoExtraTelefono: "",
+  });
+
+  const [localizacion, setLocalizacion] = useState({
+    estado: "",
+    municipio: "",
+    cp: "",
+    colonia: "",
+    calle: "",
+    numero: "",
+    referencia: "",
+  });
 
   const [terceros, setTerceros] = useState([TERCERO_VACIO()]);
   const agregarTercero = () => setTerceros((t) => [...t, TERCERO_VACIO()]);
@@ -718,9 +675,7 @@ function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
   }, []);
 
   const terceroVacio =
-    terceros.length === 1 &&
-    !terceros[0].conductorNombre &&
-    !terceros[0].vehiculoPlacas;
+    terceros.length === 1 && !terceros[0].vehiculoPlacas && !terceros[0].vehiculoDesc;
 
   return (
     <div className="space-y-4 pb-10">
@@ -728,44 +683,24 @@ function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
       <div className="bg-[#13193a] rounded-2xl px-5 py-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center shrink-0">
-            <svg
-              className="w-4 h-4 text-emerald-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M5 13l4 4L19 7"
-              />
+            <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
             </svg>
           </div>
           <div>
-            <p className="text-emerald-400 text-[11px] font-bold uppercase tracking-widest">
-              Póliza confirmada
-            </p>
-            <p className="text-white font-bold font-mono text-sm mt-0.5">
-              {poliza.numero}
-            </p>
-            <p className="text-white/50 text-xs mt-0.5 max-w-xs truncate">
-              {poliza.titular}
-            </p>
+            <p className="text-emerald-400 text-[11px] font-bold uppercase tracking-widest">Póliza confirmada</p>
+            <p className="text-white font-bold font-mono text-sm mt-0.5">{poliza.numero}</p>
+            <p className="text-white/50 text-xs mt-0.5 max-w-xs truncate">{poliza.titular}</p>
           </div>
         </div>
         <div className="flex items-center gap-5">
           <div className="text-right">
             <p className="text-white/35 text-[11px]">Nro. Reporte</p>
-            <p className="text-white font-bold font-mono text-xl leading-none mt-0.5">
-              {nroReporte}
-            </p>
+            <p className="text-white font-bold font-mono text-xl leading-none mt-0.5">{nroReporte}</p>
           </div>
           <div className="text-right hidden sm:block">
             <p className="text-white/35 text-[11px]">Fecha y Hora</p>
-            <p className="text-white/70 text-xs mt-0.5">
-              {fechaHoy} · {horaActual}
-            </p>
+            <p className="text-white/70 text-xs mt-0.5">{fechaHoy} · {horaActual}</p>
           </div>
           <button
             onClick={onBack}
@@ -793,15 +728,13 @@ function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
       {/* Vehículo asegurado */}
       <Seccion titulo="Vehículo Asegurado">
         <div className="space-y-3">
-          <p className="text-sm font-bold text-[#13193a]">
-            {poliza.vehiculo.descripcion}
-          </p>
+          <p className="text-sm font-bold text-[#13193a]">{poliza.vehiculo.descripcion}</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
             {[
-              { k: "Modelo", v: poliza.vehiculo.modelo },
-              { k: "Placas", v: poliza.vehiculo.placas },
-              { k: "Serie", v: poliza.vehiculo.serie },
-              { k: "Motor", v: poliza.vehiculo.motor },
+              { k: "Modelo",    v: poliza.vehiculo.modelo    },
+              { k: "Placas",    v: poliza.vehiculo.placas    },
+              { k: "Serie",     v: poliza.vehiculo.serie     },
+              { k: "Motor",     v: poliza.vehiculo.motor     },
               { k: "Capacidad", v: poliza.vehiculo.capacidad },
             ].map((c) => (
               <DatoCard key={c.k} label={c.k} value={c.v} />
@@ -810,17 +743,20 @@ function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
         </div>
       </Seccion>
 
-      {/* Terceros / Afectados */}
+      {/* Conductor del asegurado (NA / Operador) */}
+      <SeccionConductorNA data={conductorNA} onChange={setConductorNA} />
+
+      {/* Vehículos terceros — solo datos del vehículo */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="bg-[#13193a] px-5 py-3.5 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-white tracking-wide">
-              Vehículos y Conductores Terceros / Afectados
+              Vehículos Terceros / Afectados
             </h3>
             <p className="text-white/40 text-xs mt-0.5">
               {terceroVacio
-                ? "Sin afectados registrados aún"
-                : `${terceros.length} ${terceros.length === 1 ? "persona" : "personas"} registrada${terceros.length !== 1 ? "s" : ""}`}
+                ? "Sin vehículos terceros registrados"
+                : `${terceros.length} ${terceros.length === 1 ? "vehículo" : "vehículos"}`}
             </p>
           </div>
           <button
@@ -828,29 +764,13 @@ function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
             onClick={agregarTercero}
             className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all border border-white/20"
           >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4.5v15m7.5-7.5h-15"
-              />
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
             </svg>
-            Agregar afectado
+            Agregar tercero
           </button>
         </div>
         <div className="p-5 space-y-4">
-          {terceroVacio && (
-            <p className="text-xs text-gray-400 -mt-1 mb-1">
-              Si no hay terceros involucrados, puedes dejar estos campos en
-              blanco o eliminar la tarjeta.
-            </p>
-          )}
           {terceros.map((t, i) => (
             <TerceroCard
               key={t.id}
@@ -866,20 +786,10 @@ function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
               onClick={agregarTercero}
               className="w-full py-3 border-2 border-dashed border-gray-200 rounded-2xl text-sm text-gray-400 hover:border-[#13193a]/25 hover:text-[#13193a] hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 4.5v15m7.5-7.5h-15"
-                />
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
               </svg>
-              Agregar otro afectado
+              Agregar otro vehículo tercero
             </button>
           )}
         </div>
@@ -892,35 +802,31 @@ function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
             <div>
               <label className={LBL}>Causa</label>
               <select
-                value={form.causa}
-                onChange={(e) => set("causa", e.target.value)}
+                value={siniestro.causa}
+                onChange={(e) => setS("causa", e.target.value)}
                 className={INP}
               >
                 <option value="">Selecciona una causa</option>
-                {CAUSAS.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
+                {CAUSAS.map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className={LBL}>Circunstancia</label>
               <select
-                value={form.circunstancia}
-                onChange={(e) => set("circunstancia", e.target.value)}
+                value={siniestro.circunstancia}
+                onChange={(e) => setS("circunstancia", e.target.value)}
                 className={INP}
               >
                 <option value="">Selecciona una circunstancia</option>
-                {CIRCUNSTANCIAS.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
+                {CIRCUNSTANCIAS.map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
           </div>
           <div>
             <label className={LBL}>Descripción del siniestro</label>
             <textarea
-              value={form.detalles}
-              onChange={(e) => set("detalles", e.target.value)}
+              value={siniestro.detalles}
+              onChange={(e) => setS("detalles", e.target.value)}
               rows={3}
               placeholder="Describe lo que ocurrió con el mayor detalle posible..."
               className={INP + " resize-none"}
@@ -929,76 +835,20 @@ function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
         </div>
       </Seccion>
 
-      {/* Localización */}
-      <Seccion titulo="Localización del Siniestro">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className={LBL}>Estado (Entidad)</label>
-            <select
-              value={form.entidad}
-              onChange={(e) => set("entidad", e.target.value)}
-              className={INP}
-            >
-              <option value="">Selecciona un estado</option>
-              {ENTIDADES.map((e) => (
-                <option key={e}>{e}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={LBL}>Conductor del asegurado (NA)</label>
-            <input
-              value={form.conductorNA}
-              onChange={(e) => set("conductorNA", e.target.value)}
-              placeholder="Nombre del conductor"
-              className={INP}
-            />
-          </div>
-          <div>
-            <label className={LBL}>Teléfono de afectado</label>
-            <input
-              value={form.telefono}
-              onChange={(e) => set("telefono", e.target.value)}
-              placeholder="55 0000 0000"
-              className={INP}
-            />
-          </div>
-
-          <div>
-            <label className={LBL}>Teléfono de compañia</label>
-            <input
-              value={form.telefono}
-              onChange={(e) => set("telefono", e.target.value)}
-              placeholder="55 0000 0000"
-              className={INP}
-            />
-          </div>
-
-          <div>
-            <label className={LBL}>Teléfono de quien reporta</label>
-            <input
-              value={form.telefono}
-              onChange={(e) => set("telefono", e.target.value)}
-              placeholder="55 0000 0000"
-              className={INP}
-            />
-          </div>
-        </div>
-      </Seccion>
+      {/* Localización del siniestro */}
+      <SeccionLocalizacion data={localizacion} onChange={setLocalizacion} />
 
       {/* Ajustador */}
       <Seccion titulo="Ajustador Asignado">
         <div className="max-w-xs">
           <label className={LBL}>Selecciona el ajustador</label>
           <select
-            value={form.ajustador}
-            onChange={(e) => set("ajustador", e.target.value)}
+            value={siniestro.ajustador}
+            onChange={(e) => setS("ajustador", e.target.value)}
             className={INP}
           >
             <option value="">Selecciona un ajustador</option>
-            {AJUSTADORES.map((a) => (
-              <option key={a}>{a}</option>
-            ))}
+            {AJUSTADORES.map((a) => <option key={a}>{a}</option>)}
           </select>
         </div>
       </Seccion>
@@ -1010,64 +860,38 @@ function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
           onClick={onBack}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all"
         >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15 19l-7-7 7-7"
-            />
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
           </svg>
           Regresar
         </button>
         <button
           type="button"
-          onClick={() => onSubmit({ ...form, nroReporte, terceros })}
+          onClick={() =>
+            onSubmit({
+              ...siniestro,
+              nroReporte,
+              conductorNA,
+              localizacion,
+              terceros,
+            })
+          }
           disabled={loading}
           className="flex items-center gap-2 px-8 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all disabled:opacity-60 shadow-lg shadow-[#13193a]/15"
         >
           {loading ? (
             <>
-              <svg
-                className="animate-spin w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v8z"
-                />
+              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
               </svg>
               Generando reporte...
             </>
           ) : (
             <>
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
               </svg>
               Generar Reporte
             </>
@@ -1083,7 +907,7 @@ export default function SiniestroNuevo() {
   const navigate = useNavigate();
   const inputRef = useRef(null);
 
-  const [paso, setPaso] = useState("buscar"); // "buscar" | "confirmar" | "formulario"
+  const [paso, setPaso] = useState("buscar");
   const [query, setQuery] = useState("");
   const [tipoDetect, setTipoDetect] = useState(null);
   const [buscando, setBuscando] = useState(false);
@@ -1129,7 +953,6 @@ export default function SiniestroNuevo() {
     setPaso("buscar");
   };
 
-  // ── Render ─────────────────────────────────────────────────
   return (
     <div className="p-6 min-h-full bg-gray-50">
       {/* Header + indicador de pasos */}
@@ -1138,25 +961,13 @@ export default function SiniestroNuevo() {
           onClick={() => navigate(-1)}
           className="w-8 h-8 rounded-xl border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-[#13193a] hover:border-gray-300 transition-all shrink-0 mt-0.5"
         >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15 19l-7-7 7-7"
-            />
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
           </svg>
         </button>
 
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-[#13193a]">
-            Reportar Siniestro
-          </h1>
+          <h1 className="text-2xl font-bold text-[#13193a]">Reportar Siniestro</h1>
           <p className="text-gray-400 text-sm mt-0.5">
             {paso !== "formulario"
               ? "Paso 1 de 2 — Busca y confirma la póliza"
@@ -1164,11 +975,10 @@ export default function SiniestroNuevo() {
           </p>
         </div>
 
-        {/* Pasos visuales */}
         <div className="hidden sm:flex items-center gap-2 shrink-0 mt-1">
           {[
-            { n: 1, label: "Póliza", done: paso === "formulario" },
-            { n: 2, label: "Siniestro", done: false },
+            { n: 1, label: "Póliza",    done: paso === "formulario" },
+            { n: 2, label: "Siniestro", done: false                   },
           ].map((s, i) => {
             const isActive =
               (i === 0 && paso !== "formulario") ||
@@ -1176,9 +986,7 @@ export default function SiniestroNuevo() {
             return (
               <div key={s.n} className="flex items-center gap-2">
                 {i > 0 && (
-                  <div
-                    className={`w-8 h-px ${s.done || isActive ? "bg-[#13193a]" : "bg-gray-200"}`}
-                  />
+                  <div className={`w-8 h-px ${s.done || isActive ? "bg-[#13193a]" : "bg-gray-200"}`}/>
                 )}
                 <div className="flex items-center gap-1.5">
                   <div
@@ -1191,26 +999,12 @@ export default function SiniestroNuevo() {
                     }`}
                   >
                     {s.done ? (
-                      <svg
-                        className="w-3.5 h-3.5"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="3"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M5 13l4 4L19 7"
-                        />
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
                       </svg>
-                    ) : (
-                      s.n
-                    )}
+                    ) : s.n}
                   </div>
-                  <span
-                    className={`text-xs font-medium ${isActive ? "text-[#13193a]" : "text-gray-400"}`}
-                  >
+                  <span className={`text-xs font-medium ${isActive ? "text-[#13193a]" : "text-gray-400"}`}>
                     {s.label}
                   </span>
                 </div>
@@ -1220,19 +1014,15 @@ export default function SiniestroNuevo() {
         </div>
       </div>
 
-      {/* ── Paso 1: Buscador ── */}
+      {/* Paso 1: Buscador */}
       {paso === "buscar" && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-sm font-bold text-[#13193a] mb-1">
-            Buscar póliza
-          </h2>
+          <h2 className="text-sm font-bold text-[#13193a] mb-1">Buscar póliza</h2>
           <p className="text-xs text-gray-400 mb-5">
-            Ingresa el{" "}
-            <strong className="text-gray-600">número de póliza</strong>,{" "}
+            Ingresa el <strong className="text-gray-600">número de póliza</strong>,{" "}
             <strong className="text-gray-600">No. de serie</strong>,{" "}
             <strong className="text-gray-600">placas</strong> o{" "}
-            <strong className="text-gray-600">número de reporte</strong>. El
-            sistema detecta automáticamente el tipo.
+            <strong className="text-gray-600">número de reporte</strong>. El sistema detecta automáticamente el tipo.
           </p>
 
           <div className="flex gap-3">
@@ -1268,41 +1058,17 @@ export default function SiniestroNuevo() {
             >
               {buscando ? (
                 <>
-                  <svg
-                    className="animate-spin w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v8z"
-                    />
+                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                   </svg>
                   Buscando...
                 </>
               ) : (
                 <>
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-                    />
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round"
+                      d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
                   </svg>
                   Buscar
                 </>
@@ -1312,31 +1078,20 @@ export default function SiniestroNuevo() {
 
           {noEncontrado && (
             <p className="mt-3 text-sm text-red-500 flex items-center gap-1.5">
-              <svg
-                className="w-4 h-4 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374l7.048-12.14c.866-1.5 3.032-1.5 3.898 0l7.048 12.14zM12 15.75h.007v.008H12v-.008z"
-                />
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374l7.048-12.14c.866-1.5 3.032-1.5 3.898 0l7.048 12.14zM12 15.75h.007v.008H12v-.008z"/>
               </svg>
-              No se encontró ninguna póliza. Verifica el dato e intenta de
-              nuevo.
+              No se encontró ninguna póliza. Verifica el dato e intenta de nuevo.
             </p>
           )}
 
-          {/* Atajos de ejemplo */}
           <div className="mt-4 flex flex-wrap gap-2">
             {[
-              { label: "🔑 Póliza", ejemplo: "01250100001024-01" },
-              { label: "🚗 Placas", ejemplo: "A757LTS" },
-              { label: "🔢 No. Serie", ejemplo: "3N1EB31S09K323748" },
-              { label: "📋 Reporte", ejemplo: "250423" },
+              { label: "🔑 Póliza",   ejemplo: "01250100001024-01" },
+              { label: "🚗 Placas",   ejemplo: "A757LTS"            },
+              { label: "🔢 No. Serie",ejemplo: "3N1EB31S09K323748"  },
+              { label: "📋 Reporte",  ejemplo: "250423"             },
             ].map((h) => (
               <button
                 key={h.label}
@@ -1354,7 +1109,6 @@ export default function SiniestroNuevo() {
         </div>
       )}
 
-      {/* ── Paso 1 (confirmar): Tarjeta de póliza ── */}
       {paso === "confirmar" && poliza && (
         <PolizaCard
           poliza={poliza}
@@ -1363,7 +1117,6 @@ export default function SiniestroNuevo() {
         />
       )}
 
-      {/* ── Paso 2: Formulario ── */}
       {paso === "formulario" && poliza && (
         <FormSiniestro
           poliza={poliza}
