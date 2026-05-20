@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(Get-ChildItem -Recurse -Directory)",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\angel\\\\Pictures\\\\Cofisem\\\\cofisem-app\" -Directory)",
+      "Bash(Select-Object Name)"
     ]
   }
 }

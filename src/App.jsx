@@ -11,6 +11,9 @@ import Login from "./pages/Login";
 import AppLayout from "./layouts/AppLayout";
 import PaginaEnConstruccion from "./pages/PaginaEnConstruccion";
 
+// ── DEV — eliminar antes de producción ────────────────────────
+import PDFPreview from "./pages/PDFPreview";
+
 // ── OPERADOR ──────────────────────────────────────────────────
 import OperadorDashboard from "./pages/operador/OperadorDashboard";
 import OperadorClientes from "./pages/operador/Clientes";
@@ -280,6 +283,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* DEV — ruta pública de vista previa, sin autenticación */}
+        <Route path="/pdf-preview" element={<PDFPreview />} />
+
         <Route
           path="/login"
           element={

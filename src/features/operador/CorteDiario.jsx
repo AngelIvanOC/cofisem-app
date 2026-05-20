@@ -1,55 +1,33 @@
-// ============================================================
-// src/pages/operador/CorteDiario.jsx
-// Corte diario de la oficina — digitalización del Excel actual
-// Incluye:
-//   - Tabla de pólizas del día (Hoja 1)
-//   - Resumen de cobro (efectivo, vales, tarjeta, etc.)
-//   - Corte de billetes (conteo físico de efectivo)
-//   - Comprobación y diferencia
-//   - Pólizas pendientes de pago
-// ============================================================
-import { useState, useRef } from "react";
+import { useState } from "react";
+import { POLIZAS_DIA, DENOMINACIONES } from "./data/corteMock";
 
 const OFICINA = "OFICINA CIVAC";
-
-const POLIZAS_DIA = [
-  { no: 1, aseguradora: "QUALITAS",   poliza: "3413241", fechaEmision: "13/03/2026", folio: "T0455", vendedor: "LAURA ROSHER",  asegurado: "Angel Ivan",    vale: 400,    primaAnual: 8385.69, primaNeta: 6318.92, primaPrimerPago: 2679.33, cobertura: "AMPLIA",  placas: "TRAMITE", uso: "DIDI", tipo: "COCHE", no_pago: 1, formaPago: "TRIMESTRAL", efectivo: 2679.33, cheque: 0, tdc: 0, autorizacion: "", polPendPago: 0, observaciones: "COMISION PAGADA POLIZA 960972454", fotos:"", factura:"", tCirc:"", identif:"", polAnt:"", otro:"" },
-  { no: 2, aseguradora: "QUALITAS",   poliza: "3413198", fechaEmision: "14/03/2026", folio: "T0312", vendedor: "MARCO A. CRUZ",  asegurado: "María García",  vale: 0,      primaAnual: 5500.00, primaNeta: 4200.00, primaPrimerPago: 2200.00, cobertura: "BÁSICA", placas: "VRM-123", uso: "TAXI", tipo: "COCHE", no_pago: 1, formaPago: "CONTADO",    efectivo: 2200.00, cheque: 0, tdc: 0, autorizacion: "", polPendPago: 0, observaciones: "", fotos:"✓", factura:"", tCirc:"", identif:"✓", polAnt:"✓", otro:"" },
-  { no: 3, aseguradora: "GNP",        poliza: "3413167", fechaEmision: "14/03/2026", folio: "T0455", vendedor: "LAURA ROSHER",  asegurado: "Roberto Díaz",  vale: 220,    primaAnual: 6200.00, primaNeta: 4900.00, primaPrimerPago: 2548.00, cobertura: "PÚB 50", placas: "CHM-456", uso: "TAXI", tipo: "COCHE", no_pago: 1, formaPago: "4 PARCIALES", efectivo: 2328.00, cheque: 0, tdc: 0, autorizacion: "", polPendPago: 0, observaciones: "", fotos:"✓", factura:"", tCirc:"✓", identif:"✓", polAnt:"", otro:"" },
-];
-
-const DENOMINACIONES = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.50];
-
 const hoy = new Date().toLocaleDateString("es-MX", { weekday:"long", day:"2-digit", month:"long", year:"numeric" });
 
 export default function CorteDiario({ usuario }) {
-  const [polizas, setPolizas] = useState(POLIZAS_DIA);
-  const [generadoPor] = useState(usuario?.nombre ?? "Marco Antonio");
+  const [polizas]      = useState(POLIZAS_DIA);
+  const [generadoPor]  = useState(usuario?.nombre ?? "Marco Antonio");
 
-  // Resumen de cobro
   const [cobro, setCobro] = useState({
-    efectivo: 13573.00,
-    vales:    620.00,
-    gastos:   0,
-    tCredDeb: 0,
+    efectivo:       13573.00,
+    vales:          620.00,
+    gastos:         0,
+    tCredDeb:       0,
     fichequesTrans: 0,
   });
   const setC = (k, v) => setCobro(c => ({ ...c, [k]: parseFloat(v) || 0 }));
 
-  // Corte de billetes
   const [billetes, setBilletes] = useState(
     Object.fromEntries(DENOMINACIONES.map(d => [d, ""]))
   );
   const setB = (d, v) => setBilletes(b => ({ ...b, [d]: v }));
 
-  const totalBilletes = DENOMINACIONES.reduce((s, d) => s + (parseFloat(billetes[d]) || 0) * d, 0);
-  const subEfectivo   = cobro.efectivo - cobro.gastos;
-  const totalCobro    = subEfectivo + cobro.tCredDeb + cobro.fichequesTrans;
-  const polPendPago   = polizas.reduce((s, p) => s + (p.polPendPago ?? 0), 0);
-  const diferencia    = +(totalBilletes - totalCobro).toFixed(2);
-
-  const totalVales    = cobro.vales + 0;
-  const sumaPrimerPago = polizas.reduce((s, p) => s + p.primaPrimerPago, 0);
+  const totalBilletes  = DENOMINACIONES.reduce((s, d) => s + (parseFloat(billetes[d]) || 0) * d, 0);
+  const subEfectivo    = cobro.efectivo - cobro.gastos;
+  const totalCobro     = subEfectivo + cobro.tCredDeb + cobro.fichequesTrans;
+  const polPendPago    = polizas.reduce((s, p) => s + (p.polPendPago ?? 0), 0);
+  const diferencia     = +(totalBilletes - totalCobro).toFixed(2);
+  const sumaPrimerPago  = polizas.reduce((s, p) => s + p.primaPrimerPago, 0);
   const sumaEfecPolizas = polizas.reduce((s, p) => s + p.efectivo, 0);
 
   const [cerrado, setCerrado] = useState(false);
@@ -104,7 +82,6 @@ export default function CorteDiario({ usuario }) {
           <p className="text-sm font-bold text-white">Hoja 1 — Pólizas del día</p>
           <span className="text-white/50 text-xs">{polizas.length} registros</span>
         </div>
-
         <div className="overflow-x-auto">
           <table className="text-xs" style={{ minWidth: "1400px", width:"100%" }}>
             <thead>
@@ -173,9 +150,9 @@ export default function CorteDiario({ usuario }) {
           </div>
           <div className="p-5 space-y-3">
             {[
-              { k: "efectivo",       label: "Efectivo"           },
-              { k: "vales",          label: "Vales"              },
-              { k: "gastos",         label: "Gastos"             },
+              { k: "efectivo",       label: "Efectivo"            },
+              { k: "vales",          label: "Vales"               },
+              { k: "gastos",         label: "Gastos"              },
               { k: "tCredDeb",       label: "T. Crédito / Débito" },
               { k: "fichequesTrans", label: "Fichas Cheques/Trans" },
             ].map(f => (
@@ -192,12 +169,11 @@ export default function CorteDiario({ usuario }) {
                 </div>
               </div>
             ))}
-
             <div className="border-t border-gray-100 pt-3 space-y-2">
               {[
-                { label: "Subtotal efectivo",  value: subEfectivo,   bold: false },
-                { label: "Total",              value: totalCobro,    bold: true  },
-                { label: "Pólizas pend. pago", value: polPendPago,   bold: false, warn: true },
+                { label: "Subtotal efectivo",  value: subEfectivo, bold: false },
+                { label: "Total",              value: totalCobro,  bold: true  },
+                { label: "Pólizas pend. pago", value: polPendPago, bold: false, warn: true },
               ].map(r => (
                 <div key={r.label} className="flex items-center justify-between">
                   <p className={`text-xs ${r.warn ? "text-amber-600" : "text-gray-600"} ${r.bold ? "font-bold" : "font-medium"}`}>{r.label}</p>
@@ -242,7 +218,6 @@ export default function CorteDiario({ usuario }) {
                 );
               })}
             </div>
-
             {/* Comprobación */}
             <div className="border-t border-gray-200 pt-4 space-y-2">
               <div className="flex justify-between">
@@ -281,7 +256,6 @@ export default function CorteDiario({ usuario }) {
           className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] resize-none"
         />
       </div>
-
     </div>
   );
 }

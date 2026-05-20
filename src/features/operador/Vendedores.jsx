@@ -1,38 +1,6 @@
-// ============================================================
-// src/pages/operador/Vendedores.jsx
-// Alta y edición de vendedores asignados a la oficina
-// ============================================================
 import { useState } from "react";
-
-const VENDEDORES_MOCK = [
-  { id: 1, folio: "T0455", nombre: "Laura Rosher García",    telefono: "777 111 2233", email: "laura@cofisem.com",   polizasMes: 18, activo: true  },
-  { id: 2, folio: "T0312", nombre: "Marco Antonio Cruz",     telefono: "777 444 5566", email: "marco@cofisem.com",   polizasMes: 12, activo: true  },
-  { id: 3, folio: "T0289", nombre: "Carlos Soto Vargas",     telefono: "777 777 8899", email: "carlos@cofisem.com",  polizasMes: 9,  activo: true  },
-  { id: 4, folio: "T0201", nombre: "Patricia Morales Ruiz",  telefono: "777 200 3344", email: "patricia@cofisem.com",polizasMes: 0,  activo: false },
-];
-
-const EMPTY_FORM = { folio: "", nombre: "", telefono: "", email: "", password: "" };
-
-function Campo({ label, value, onChange, placeholder, type = "text", req, readonly }) {
-  return (
-    <div>
-      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-        {label}{req && <span className="text-red-400 ml-0.5">*</span>}
-      </label>
-      <input
-        type={type}
-        readOnly={readonly}
-        value={value ?? ""}
-        onChange={onChange ? e => onChange(e.target.value) : undefined}
-        placeholder={placeholder}
-        className={readonly
-          ? "w-full px-3 py-2.5 rounded-xl border border-gray-100 bg-gray-50 text-sm font-semibold text-[#13193a] cursor-default"
-          : "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all"
-        }
-      />
-    </div>
-  );
-}
+import { VENDEDORES_MOCK, EMPTY_FORM } from "./data/vendedoresMock";
+import ModalVendedor from "./components/ModalVendedor";
 
 export function Vendedores() {
   const [vendedores, setVendedores] = useState(VENDEDORES_MOCK);
@@ -40,6 +8,7 @@ export function Vendedores() {
   const [modal,      setModal]      = useState(null);
   const [form,       setForm]       = useState(EMPTY_FORM);
   const [editId,     setEditId]     = useState(null);
+
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const filtrados = vendedores.filter(v =>
@@ -54,7 +23,10 @@ export function Vendedores() {
   const guardar = () => {
     if (!form.nombre || !form.folio) return;
     if (editId) {
-      setVendedores(vs => vs.map(v => v.id === editId ? { ...v, folio: form.folio, nombre: form.nombre, telefono: form.telefono, email: form.email } : v));
+      setVendedores(vs => vs.map(v => v.id === editId
+        ? { ...v, folio: form.folio, nombre: form.nombre, telefono: form.telefono, email: form.email }
+        : v
+      ));
     } else {
       setVendedores(vs => [...vs, { id: Date.now(), folio: form.folio, nombre: form.nombre, telefono: form.telefono, email: form.email, polizasMes: 0, activo: true }]);
     }
@@ -133,35 +105,14 @@ export function Vendedores() {
         </div>
       </div>
 
-      {/* Modal */}
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backdropFilter:"blur(8px)", backgroundColor:"rgba(10,15,40,0.5)" }}
-          onClick={() => setModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-bold text-[#13193a]">{modal === "nuevo" ? "Nuevo vendedor" : "Editar vendedor"}</h2>
-              <button onClick={() => setModal(null)} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Campo label="Folio" value={form.folio} onChange={v => setF("folio", v)} placeholder="T0000" req/>
-                <Campo label="Nombre completo" value={form.nombre} onChange={v => setF("nombre", v)} placeholder="Nombre completo" req/>
-              </div>
-              <Campo label="Teléfono" type="tel" value={form.telefono} onChange={v => setF("telefono", v)} placeholder="55 0000 0000"/>
-              <Campo label="Correo electrónico" type="email" value={form.email} onChange={v => setF("email", v)} placeholder="correo@cofisem.com"/>
-              {modal === "nuevo" && <Campo label="Contraseña" type="password" value={form.password} onChange={v => setF("password", v)} placeholder="Contraseña de acceso" req/>}
-            </div>
-            <div className="flex gap-3 px-6 pb-6">
-              <button onClick={() => setModal(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
-              <button onClick={guardar} disabled={!form.nombre || !form.folio} className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all">
-                {modal === "nuevo" ? "Registrar" : "Guardar"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ModalVendedor
+          modal={modal}
+          form={form}
+          onFieldChange={setF}
+          onClose={() => setModal(null)}
+          onGuardar={guardar}
+        />
       )}
     </div>
   );
