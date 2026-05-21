@@ -153,6 +153,21 @@ export async function emitirPoliza({
   return final;
 }
 
+// ── Cargar póliza completa por ID (para generar PDF) ──────────────────────
+export async function fetchPolizaById(id) {
+  const { data, error } = await supabase
+    .from('polizas')
+    .select(`
+      *,
+      clientes(id, nombre, apellido, rfc, telefono, direccion, colonia, ciudad, estado, cp),
+      vendedores(id, nombre, apellido, codigo)
+    `)
+    .eq('id', id)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // ── Cargar pólizas de la lista ─────────────────────────────────────────────
 export async function fetchPolizas() {
   const { data, error } = await supabase

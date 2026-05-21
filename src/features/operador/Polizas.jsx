@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
+import { PDFViewer } from "@react-pdf/renderer";
 import { OFICINA } from "./constants/cobertura";
-import { fetchPolizas } from "../../services/polizas";
+import { fetchPolizas, fetchPolizaById, buildPolizaPDF } from "../../services/polizas";
+import { generateQR } from "../../utils/generateQR";
 import { fmt$ } from "./utils/fmt";
 import Tab from "./components/Tab";
 import StatusBadge from "./components/StatusBadge";
 import TramiteExitoso from "./components/TramiteExitoso";
 import FormCotizacion from "./components/FormCotizacion";
+import PolizaPDF from "../../components/pdf/PolizaPDF";
 
 export default function Polizas({ usuario }) {
   const [tab,          setTab]          = useState("polizas");
@@ -14,9 +17,11 @@ export default function Polizas({ usuario }) {
   const [error,        setError]        = useState(null);
   const [busqueda,     setBusqueda]     = useState("");
   const [filtroEst,    setFiltroEst]    = useState("Todos");
-  const [cotizaciones, setCotizaciones] = useState([]);
-  const [tramiteOk,    setTramiteOk]    = useState(null);
-  const [cotActiva,    setCotActiva]    = useState(null);
+  const [cotizaciones,    setCotizaciones]    = useState([]);
+  const [tramiteOk,       setTramiteOk]       = useState(null);
+  const [cotActiva,       setCotActiva]       = useState(null);
+  const [polizaViewer,    setPolizaViewer]    = useState(null);
+  const [loadingViewerId, setLoadingViewerId] = useState(null);
 
   const cargar = async () => {
     try {
@@ -54,6 +59,20 @@ export default function Polizas({ usuario }) {
   };
 
   const abrirCotizacionGuardada = (cot) => { setCotActiva(cot); setTab("nueva"); };
+
+  const verPDF = async (p) => {
+    setLoadingViewerId(p.id);
+    try {
+      const full      = await fetchPolizaById(p.id);
+      const base      = buildPolizaPDF(full);
+      const qrDataUrl = await generateQR(base.codigoQR);
+      setPolizaViewer({ ...base, qrDataUrl });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingViewerId(null);
+    }
+  };
 
   if (tab === "exito" && tramiteOk) {
     return (
@@ -132,16 +151,16 @@ export default function Polizas({ usuario }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50/80 border-b border-gray-100">
-                      {["Constancia","Asegurado","Cobertura","Vendedor","Prima","Forma pago","Vence","Estatus"].map(h => (
+                      {["Constancia","Asegurado","Cobertura","Vendedor","Prima","Forma pago","Vence","Estatus",""].map(h => (
                         <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {loading ? (
-                      <tr><td colSpan={8} className="text-center py-12 text-sm text-gray-400">Cargando pólizas...</td></tr>
+                      <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">Cargando pólizas...</td></tr>
                     ) : polizasFiltradas.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas.</td></tr>
+                      <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas.</td></tr>
                     ) : polizasFiltradas.map(p => (
                       <tr key={p.id} className="hover:bg-gray-50/60 transition-colors">
                         <td className="px-4 py-3 font-mono text-xs font-bold text-[#13193a]">{p.constancia || p.numero_poliza}</td>
@@ -156,6 +175,26 @@ export default function Polizas({ usuario }) {
                         <td className="px-4 py-3 text-xs text-gray-500">{p.forma_pago}</td>
                         <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{p.fecha_fin}</td>
                         <td className="px-4 py-3"><StatusBadge estatus={p.estatus} /></td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => verPDF(p)}
+                            disabled={loadingViewerId === p.id}
+                            className="flex items-center gap-1 text-xs font-semibold text-[#13193a] border border-[#13193a]/20 px-2.5 py-1.5 rounded-xl hover:bg-[#13193a]/5 transition-all disabled:opacity-40 whitespace-nowrap"
+                          >
+                            {loadingViewerId === p.id ? (
+                              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                              </svg>
+                            ) : (
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                            )}
+                            Ver PDF
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -202,6 +241,29 @@ export default function Polizas({ usuario }) {
               </div>
             )
           )}
+        </div>
+      )}
+
+      {polizaViewer && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-5xl h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+              <span className="text-sm font-bold text-[#13193a]">Vista previa de póliza</span>
+              <button
+                onClick={() => setPolizaViewer(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <PDFViewer width="100%" height="100%" style={{ border: "none" }}>
+                <PolizaPDF poliza={polizaViewer} />
+              </PDFViewer>
+            </div>
+          </div>
         </div>
       )}
     </div>
