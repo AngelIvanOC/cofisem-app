@@ -3,7 +3,7 @@ import { fetchClientes, crearCliente, actualizarCliente } from "../../services/c
 import ModalCliente from "./components/ModalCliente";
 
 const EMPTY_FORM = {
-  nombre:"", apellido:"", rfc:"", curp:"", telefono:"", email:"",
+  nombre:"", apellido1:"", apellido2:"", rfc:"", curp:"", telefono:"", email:"",
   cp:"", estado:"", municipio:"", colonia:"", calle:"", numero:"",
 };
 
@@ -44,9 +44,10 @@ export default function Clientes({ usuario }) {
 
   const abrirNuevo   = () => { setForm(EMPTY_FORM); setEditId(null); setModal("nuevo"); };
   const abrirEditar  = c => {
+    const [ap1 = "", ...apRest] = (c.apellido || "").split(" ");
     setForm({
-      nombre: c.nombre || "", apellido: c.apellido || "", rfc: c.rfc || "",
-      curp: c.curp || "", telefono: c.telefono || "", email: c.email || "",
+      nombre: c.nombre || "", apellido1: ap1, apellido2: apRest.join(" "),
+      rfc: c.rfc || "", curp: c.curp || "", telefono: c.telefono || "", email: c.email || "",
       cp: c.cp || "", estado: c.estado || "", municipio: c.ciudad || "",
       colonia: c.colonia || "", calle: c.direccion || "", numero: "",
     });

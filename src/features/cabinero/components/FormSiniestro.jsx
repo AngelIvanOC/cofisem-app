@@ -204,6 +204,7 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
       </Seccion>
 
       {/* Acciones */}
+      <p className="text-xs text-gray-400"><span className="text-red-400 font-bold">*</span> Campos obligatorios</p>
       <div className="flex items-center justify-between gap-3 pt-2">
         <button
           type="button"

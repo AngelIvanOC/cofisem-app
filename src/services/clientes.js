@@ -14,7 +14,7 @@ export async function crearCliente(form, creadoPor) {
     .from("clientes")
     .insert({
       nombre:     form.nombre.toUpperCase().trim(),
-      apellido:   form.apellido?.toUpperCase().trim() || null,
+      apellido:   [form.apellido1, form.apellido2].filter(Boolean).map(s => s.toUpperCase().trim()).join(" ") || null,
       rfc:        form.rfc.toUpperCase().trim(),
       curp:       form.curp?.toUpperCase().trim() || null,
       telefono:   form.telefono?.trim() || null,
@@ -37,7 +37,7 @@ export async function actualizarCliente(id, form) {
     .from("clientes")
     .update({
       nombre:   form.nombre.toUpperCase().trim(),
-      apellido: form.apellido?.toUpperCase().trim() || null,
+      apellido: [form.apellido1, form.apellido2].filter(Boolean).map(s => s.toUpperCase().trim()).join(" ") || null,
       rfc:      form.rfc.toUpperCase().trim(),
       curp:     form.curp?.toUpperCase().trim() || null,
       telefono: form.telefono?.trim() || null,

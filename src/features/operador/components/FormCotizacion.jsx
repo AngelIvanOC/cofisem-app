@@ -278,7 +278,7 @@ export default function FormCotizacion({
   };
 
   const onGuardarVendedor = (vendedorObj) => {
-    setVendedores(vs => [...vs, vendedorObj]);
+    setVendedores((vs) => [...vs, vendedorObj]);
     setF("vendedorId", vendedorObj.id);
     setModalVend(false);
   };
@@ -559,6 +559,13 @@ export default function FormCotizacion({
                 <label className={lblCls}>Uso del vehículo</label>
                 <input readOnly value="SERVICIO PÚBLICO" className={roCls} />
               </div>
+
+              <div className=""></div>
+
+              <p className="text-xs text-gray-400">
+                <span className="text-red-400 font-bold">*</span> Campos
+                obligatorios
+              </p>
             </div>
 
             {/* Conductor habitual — sección opcional */}
@@ -651,8 +658,18 @@ export default function FormCotizacion({
                   onClick={() => setModalVend(true)}
                   className="shrink-0 w-10 h-10 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white flex items-center justify-center transition-all"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 4.5v15m7.5-7.5h-15"
+                    />
                   </svg>
                 </button>
               </div>
@@ -821,6 +838,11 @@ export default function FormCotizacion({
                   </span>
                 </div>
               </div>
+
+              <p className="text-xs text-gray-400">
+                <span className="text-red-400 font-bold">*</span> Campos
+                obligatorios
+              </p>
             </div>
 
             <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
@@ -1193,7 +1215,7 @@ export default function FormCotizacion({
         {/* Navegación */}
         {paso !== 4 && (
           <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-100">
-            <div>
+            <div className="flex flex-col items-start gap-2">
               {paso > 1 ? (
                 <button
                   onClick={() => setPaso((p) => p - 1)}

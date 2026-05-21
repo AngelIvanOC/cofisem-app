@@ -25,7 +25,7 @@ export async function crearVendedor(form, creadoPor) {
     .from("vendedores")
     .insert({
       nombre:     form.nombre.toUpperCase().trim(),
-      apellido:   form.apellido?.toUpperCase().trim() || null,
+      apellido:   [form.apellido1, form.apellido2].filter(Boolean).map(s => s.toUpperCase().trim()).join(" ") || null,
       telefono:   form.telefono?.trim() || null,
       email:      form.email?.trim() || null,
       codigo,
@@ -43,7 +43,7 @@ export async function actualizarVendedor(id, form) {
     .from("vendedores")
     .update({
       nombre:   form.nombre.toUpperCase().trim(),
-      apellido: form.apellido?.toUpperCase().trim() || null,
+      apellido: [form.apellido1, form.apellido2].filter(Boolean).map(s => s.toUpperCase().trim()).join(" ") || null,
       telefono: form.telefono?.trim() || null,
       email:    form.email?.trim() || null,
     })

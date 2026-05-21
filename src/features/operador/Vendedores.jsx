@@ -3,7 +3,7 @@ import { fetchVendedores, crearVendedor, actualizarVendedor, toggleActivo as tog
 import ModalVendedor from "./components/ModalVendedor";
 import { OFICINA } from "./constants/cobertura";
 
-const EMPTY_FORM = { nombre: "", apellido: "", telefono: "", email: "" };
+const EMPTY_FORM = { nombre: "", apellido1: "", apellido2: "", telefono: "", email: "" };
 
 export function Vendedores({ usuario }) {
   const [vendedores, setVendedores] = useState([]);
@@ -42,7 +42,8 @@ export function Vendedores({ usuario }) {
 
   const abrirNuevo  = () => { setForm(EMPTY_FORM); setEditId(null); setModal("nuevo"); };
   const abrirEditar = v => {
-    setForm({ nombre: v.nombre || "", apellido: v.apellido || "", telefono: v.telefono || "", email: v.email || "" });
+    const [ap1 = "", ...apRest] = (v.apellido || "").split(" ");
+    setForm({ nombre: v.nombre || "", apellido1: ap1, apellido2: apRest.join(" "), telefono: v.telefono || "", email: v.email || "" });
     setEditId(v.id);
     setModal("editar");
   };
