@@ -2,9 +2,24 @@ import { View, Text } from "@react-pdf/renderer";
 import { COLORS } from "../styles";
 import { CARD, bB, bR, TITLE_BG, tit, Title } from "./shared.jsx";
 
-const td = { fontSize: 8, fontFamily: "Helvetica", color: COLORS.ink, paddingLeft: 2 };
-const tdDesc = { fontSize: 9, fontFamily: "Helvetica", color: COLORS.ink, paddingLeft: 2 };
-const tdSub = { fontSize: 8, fontFamily: "Helvetica", color: COLORS.ink, paddingLeft: 2 };
+const td = {
+  fontSize: 8,
+  fontFamily: "Helvetica",
+  color: COLORS.ink,
+  paddingLeft: 2,
+};
+const tdDesc = {
+  fontSize: 9,
+  fontFamily: "Helvetica",
+  color: COLORS.ink,
+  paddingLeft: 2,
+};
+const tdSub = {
+  fontSize: 8,
+  fontFamily: "Helvetica",
+  color: COLORS.ink,
+  paddingLeft: 2,
+};
 
 const COND_DEFAULT =
   "LA EMPRESA PODRÁ INSPECCIONAR O VERIFICAR LA EXISTENCIA Y ESTADO FÍSICO DEL VEHÍCULO EN CUALQUIER MOMENTO EN DÍAS Y HORAS HÁBILES.\n" +
@@ -25,17 +40,43 @@ export default function Coberturas({ coberturas, prima, condiciones }) {
     <View style={CARD}>
       {/* ══ HEADER ═══════════════════════════════════════════════════ */}
       <View style={[{ flexDirection: "row" }, bB]}>
-        <View style={[bR, { flex: 4.3, backgroundColor: TITLE_BG, justifyContent: "center", paddingVertical: 4 }]}>
+        <View
+          style={[
+            bR,
+            {
+              flex: 4.3,
+              backgroundColor: TITLE_BG,
+              justifyContent: "center",
+              paddingVertical: 4,
+            },
+          ]}
+        >
           <Text style={[tit, { textAlign: "center" }]}>DESCRIPCIÓN</Text>
         </View>
-        <View style={[bR, { flex: 1.9, backgroundColor: TITLE_BG, justifyContent: "center", paddingVertical: 4 }]}>
+        <View
+          style={[
+            bR,
+            {
+              flex: 1.9,
+              backgroundColor: TITLE_BG,
+              justifyContent: "center",
+              paddingVertical: 4,
+            },
+          ]}
+        >
           <Text style={[tit, { textAlign: "center" }]}>SUMA ASEGURADA</Text>
         </View>
         <View style={[bR, { flex: 1.9 }]}>
           <View style={[{ backgroundColor: TITLE_BG, paddingVertical: 1 }, bB]}>
             <Text style={[tit, { textAlign: "center" }]}>DEDUCIBLE</Text>
           </View>
-          <View style={{ flexDirection: "row", backgroundColor: TITLE_BG, paddingVertical: 1 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              backgroundColor: TITLE_BG,
+              paddingVertical: 1,
+            }}
+          >
             <View style={[bR, { flex: 1 }]}>
               <Text style={[tit, { textAlign: "center" }]}>%</Text>
             </View>
@@ -44,7 +85,14 @@ export default function Coberturas({ coberturas, prima, condiciones }) {
             </View>
           </View>
         </View>
-        <View style={{ flex: 1.9, backgroundColor: TITLE_BG, justifyContent: "center", paddingVertical: 4 }}>
+        <View
+          style={{
+            flex: 1.9,
+            backgroundColor: TITLE_BG,
+            justifyContent: "center",
+            paddingVertical: 4,
+          }}
+        >
           <Text style={[tit, { textAlign: "center" }]}>PRIMA NETA</Text>
         </View>
       </View>
@@ -57,16 +105,37 @@ export default function Coberturas({ coberturas, prima, condiciones }) {
               <View style={[bR, { flex: 4.3, paddingVertical: 2 }]}>
                 <Text style={tdDesc}>{cob.nombre}</Text>
               </View>
-              <View style={[bR, { flex: 1.9, paddingHorizontal: 0, paddingVertical: 2 }]}>
+              <View
+                style={[
+                  bR,
+                  { flex: 1.9, paddingHorizontal: 0, paddingVertical: 2 },
+                ]}
+              >
                 <Text style={td}>{cob.sumaAsegurada}</Text>
               </View>
-              <View style={[bR, { flex: 0.38, paddingHorizontal: 0, paddingVertical: 2 }]}>
-                <Text style={[td, { textAlign: "center" }]}>{cob.deduciblePct || ""}</Text>
+              <View
+                style={[
+                  bR,
+                  { flex: 0.38, paddingHorizontal: 0, paddingVertical: 2 },
+                ]}
+              >
+                <Text style={[td, { textAlign: "center" }]}>
+                  {cob.deduciblePct || ""}
+                </Text>
               </View>
-              <View style={[bR, { flex: 1.52, paddingHorizontal: 0, paddingVertical: 2 }]}>
-                <Text style={[td, { textAlign: "center" }]}>{cob.deducibleMax || ""}</Text>
+              <View
+                style={[
+                  bR,
+                  { flex: 1.52, paddingHorizontal: 0, paddingVertical: 2 },
+                ]}
+              >
+                <Text style={[td, { textAlign: "center" }]}>
+                  {cob.deducibleMax || ""}
+                </Text>
               </View>
-              <View style={{ flex: 1.9, paddingHorizontal: 0, paddingVertical: 2 }}>
+              <View
+                style={{ flex: 1.9, paddingHorizontal: 0, paddingVertical: 2 }}
+              >
                 <Text style={[td, { textAlign: "right", paddingRight: 2 }]}>
                   {cob.prima > 0 ? fmt(cob.prima) : ""}
                 </Text>
@@ -77,10 +146,17 @@ export default function Coberturas({ coberturas, prima, condiciones }) {
               <View key={si} style={{ flexDirection: "row" }}>
                 <View style={[bR, { flex: 4.3, paddingVertical: 2 }]}>
                   <View style={{ paddingLeft: 10 }}>
-                    <Text style={tdSub}>{sub.numero}. {sub.concepto}</Text>
+                    <Text style={tdSub}>
+                      {sub.numero}. {sub.concepto}
+                    </Text>
                   </View>
                 </View>
-                <View style={[bR, { flex: 1.9, paddingHorizontal: 0, paddingVertical: 2 }]}>
+                <View
+                  style={[
+                    bR,
+                    { flex: 1.9, paddingHorizontal: 0, paddingVertical: 2 },
+                  ]}
+                >
                   <Text style={tdSub}>{sub.monto}</Text>
                 </View>
                 <View style={[bR, { flex: 0.38, paddingVertical: 2 }]} />
@@ -101,43 +177,96 @@ export default function Coberturas({ coberturas, prima, condiciones }) {
       </View>
 
       {/* ══ FILA DE TOTALES ══════════════════════════════════════════ */}
-      <View style={[{ flexDirection: "row" }, bB, { borderTopWidth: 0.75, borderTopColor: "#000000", borderTopStyle: "solid" }]}>
+      <View
+        style={[
+          { flexDirection: "row" },
+          bB,
+          {
+            borderTopWidth: 0.75,
+            borderTopColor: "#000000",
+            borderTopStyle: "solid",
+          },
+        ]}
+      >
         {[
-          { label: "PRIMA NETA",  value: prima.neta,      flex: 3   },
-          { label: "DESCUENTOS",  value: prima.descuento,  flex: 1   },
-          { label: "PRONTO PAGO", value: prima.premioNeto, flex: 1   },
-          { label: "RECARGOS",    value: prima.recargo,    flex: 1   },
-          { label: "DERECHOS",    value: prima.derechos,   flex: 1   },
-          { label: "IVA",         value: prima.iva,        flex: 1.5 },
+          { label: "PRIMA NETA", value: prima.neta, flex: 3 },
+          { label: "DESCUENTOS", value: prima.descuento, flex: 1 },
+          { label: "PRONTO PAGO", value: prima.premioNeto, flex: 1 },
+          { label: "RECARGOS", value: prima.recargo, flex: 1 },
+          { label: "DERECHOS", value: prima.derechos, flex: 1 },
+          { label: "IVA", value: prima.iva, flex: 1.5 },
         ].map((item, i) => (
           <View key={i} style={[bR, { flex: item.flex }]}>
             <Title style={bB}>{item.label}</Title>
-            <Text style={[td, { textAlign: "right", paddingVertical: 2, paddingHorizontal: 2 }]}>
+            <Text
+              style={[
+                td,
+                {
+                  textAlign: "center",
+                  paddingVertical: 2,
+                  paddingHorizontal: 0,
+                },
+              ]}
+            >
               {fmt(item.value)}
             </Text>
           </View>
         ))}
         <View style={{ flex: 1.5 }}>
           <Title style={bB}>TOTAL</Title>
-          <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: COLORS.ink, textAlign: "right", paddingVertical: 2, paddingHorizontal: 2 }}>
+          <Text
+            style={{
+              fontSize: 7,
+              fontFamily: "Helvetica-Bold",
+              color: COLORS.ink,
+              textAlign: "right",
+              paddingVertical: 2,
+              paddingHorizontal: 2,
+            }}
+          >
             {fmt(prima.total)}
           </Text>
         </View>
       </View>
 
       {/* ══ SON ══════════════════════════════════════════════════════ */}
-      <View style={[{ backgroundColor: TITLE_BG, paddingHorizontal: 5, paddingVertical: 3 }, bB]}>
-        <Text style={{ fontSize: 9, fontFamily: "Helvetica", color: "#000000" }}>
+      <View
+        style={[
+          {
+            backgroundColor: TITLE_BG,
+            paddingHorizontal: 5,
+            paddingVertical: 3,
+          },
+          bB,
+        ]}
+      >
+        <Text
+          style={{ fontSize: 9, fontFamily: "Helvetica", color: "#000000" }}
+        >
           SON: {prima.enLetras}
         </Text>
       </View>
 
       {/* ══ CONDICIONES NOMBRADAS ════════════════════════════════════ */}
       <View style={{ paddingHorizontal: 10, paddingTop: 5, paddingBottom: 20 }}>
-        <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold", color: "#000000", marginBottom: 8 }}>
+        <Text
+          style={{
+            fontSize: 8,
+            fontFamily: "Helvetica-Bold",
+            color: "#000000",
+            marginBottom: 8,
+          }}
+        >
           CONDICIONES NOMBRADAS:
         </Text>
-        <Text style={{ fontSize: 6, fontFamily: "Helvetica", color: COLORS.ink, lineHeight: 1.5 }}>
+        <Text
+          style={{
+            fontSize: 6,
+            fontFamily: "Helvetica",
+            color: COLORS.ink,
+            lineHeight: 1.5,
+          }}
+        >
           {condiciones?.texto ?? COND_DEFAULT}
         </Text>
       </View>

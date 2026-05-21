@@ -58,7 +58,7 @@ export async function emitirPoliza({
   clienteId, vendedorId, marca, modelo, anio, serie, numMotor, placas,
   codAmis, capacidad, version, uso, tipoServicio, primaNeta, primaTotal,
   formaPago, fechaInicio, derechos, iva, enLetras, cpAsegurado, creadoPor,
-  conductorHabitual, conductorSexo, conductorEdad,
+  conductorHabitual, conductorSexo, conductorEdad, concesionarioId,
 }) {
   const ahora   = new Date();
   const horaStr = ahora.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }) + ' hrs.';
@@ -111,6 +111,7 @@ export async function emitirPoliza({
       conductor_habitual:    conductorHabitual || null,
       conductor_sexo:        conductorSexo || null,
       conductor_edad:        conductorEdad || null,
+      ...(concesionarioId != null ? { concesionario_id: concesionarioId } : {}),
       estatus:               'VIGENTE',
       creado_por:            creadoPor || null,
     })
@@ -144,8 +145,9 @@ export async function emitirPoliza({
     .eq('id', newId)
     .select(`
       *,
-      clientes(id, nombre, apellido, rfc, telefono, email, direccion, colonia, ciudad, estado, cp),
-      vendedores(id, nombre, apellido, codigo)
+      clientes(id, nombre, apellido, rfc, curp, telefono, email, direccion, colonia, ciudad, estado, cp),
+      vendedores(id, nombre, apellido, codigo),
+      concesionarios(id, nombre, apellido1, apellido2)
     `)
     .single();
   if (e2) throw e2;
@@ -159,8 +161,9 @@ export async function fetchPolizaById(id) {
     .from('polizas')
     .select(`
       *,
-      clientes(id, nombre, apellido, rfc, telefono, direccion, colonia, ciudad, estado, cp),
-      vendedores(id, nombre, apellido, codigo)
+      clientes(id, nombre, apellido, rfc, curp, telefono, direccion, colonia, ciudad, estado, cp),
+      vendedores(id, nombre, apellido, codigo),
+      concesionarios(id, nombre, apellido1, apellido2)
     `)
     .eq('id', id)
     .single();
@@ -186,9 +189,15 @@ export async function fetchPolizas() {
 
 // ── Mapear póliza DB → objeto PolizaPDF ───────────────────────────────────
 export function buildPolizaPDF(poliza) {
-  const cliente  = poliza.clientes  ?? {};
-  const vendedor = poliza.vendedores ?? {};
-  const nombre   = [cliente.nombre, cliente.apellido].filter(Boolean).join(' ').toUpperCase();
+  const cliente      = poliza.clientes      ?? {};
+  const vendedor     = poliza.vendedores    ?? {};
+  const concesionario = poliza.concesionarios ?? null;
+  const nombreBase   = [cliente.nombre, cliente.apellido].filter(Boolean).join(' ').toUpperCase();
+  const nombreConc   = concesionario
+    ? [concesionario.nombre, concesionario.apellido1, concesionario.apellido2]
+        .filter(Boolean).join(' ').toUpperCase()
+    : null;
+  const nombre = nombreConc ? `${nombreBase} Y/O ${nombreConc}` : nombreBase;
 
   return {
     empresa:      EMPRESA,
@@ -204,6 +213,7 @@ export function buildPolizaPDF(poliza) {
     contratante: {
       nombre,
       rfc:              cliente.rfc || '',
+      curp:             cliente.curp || '',
       telefono:         cliente.telefono || '',
       conductorHabitual:poliza.conductor_habitual || '',
       conductorSexo:    poliza.conductor_sexo    || '',

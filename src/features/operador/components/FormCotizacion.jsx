@@ -8,6 +8,7 @@ import {
 import { fetchClientes } from "../../../services/clientes";
 import { fetchVendedores } from "../../../services/vendedores";
 import { emitirPoliza, numeroALetras } from "../../../services/polizas";
+import { fetchConcesionariosByCliente } from "../../../services/concesionarios";
 import {
   getAnios,
   getMarcas,
@@ -60,7 +61,7 @@ export default function FormCotizacion({
     conductorEdad: cotizacionInicial?.conductorEdad ?? "",
     clienteId: cotizacionInicial?.clienteId ?? null,
     vendedorId: cotizacionInicial?.vendedorId ?? null,
-    concesionario: cotizacionInicial?.concesionario ?? "",
+    concesionario: cotizacionInicial?.concesionario ?? null,
     fechaInicio: cotizacionInicial?.fechaInicio ?? "",
     formaPago: cotizacionInicial?.formaPago ?? "CONTADO",
     esGestor: cotizacionInicial?.esGestor ?? false,
@@ -92,6 +93,16 @@ export default function FormCotizacion({
       .catch(console.error)
       .finally(() => setLoadingDB(false));
   }, []);
+
+  useEffect(() => {
+    if (!form.clienteId) return;
+    fetchConcesionariosByCliente(form.clienteId)
+      .then((data) =>
+        setConcesionariosLocal((prev) => ({ ...prev, [form.clienteId]: data })),
+      )
+      .catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.clienteId]);
 
   // ── Auto-relleno AMIS cuando los 4 campos del vehículo están completos ────
   useEffect(() => {
@@ -200,7 +211,7 @@ export default function FormCotizacion({
     : [];
   const concLabel =
     concesionariosDisponibles.find((c) => c.id === form.concesionario)?.label ??
-    (form.concesionario || "—");
+    "—";
 
   const todayStr = new Date().toISOString().split("T")[0];
   const maxDateStr = new Date(Date.now() + 29 * 24 * 60 * 60 * 1000)
@@ -273,7 +284,7 @@ export default function FormCotizacion({
   const onGuardarAsegurado = (clienteObj) => {
     setClientes((cs) => [...cs, clienteObj]);
     setF("clienteId", clienteObj.id);
-    setF("concesionario", "");
+    setF("concesionario", null);
     setModalAseg(false);
   };
 
@@ -283,16 +294,12 @@ export default function FormCotizacion({
     setModalVend(false);
   };
 
-  const onGuardarConcesionario = (labelVal) => {
-    const id = `C${Date.now()}`;
+  const onGuardarConcesionario = (concObj) => {
     setConcesionariosLocal((prev) => ({
       ...prev,
-      [form.clienteId]: [
-        ...(prev[form.clienteId] ?? []),
-        { id, label: labelVal },
-      ],
+      [form.clienteId]: [...(prev[form.clienteId] ?? []), concObj],
     }));
-    setF("concesionario", id);
+    setF("concesionario", concObj.id);
     setModalConc(false);
   };
 
@@ -327,6 +334,7 @@ export default function FormCotizacion({
         conductorHabitual: form.conductorHabitual || null,
         conductorSexo: form.conductorSexo || null,
         conductorEdad: form.conductorEdad || null,
+        concesionarioId: form.concesionario || null,
         creadoPor: usuario?.id,
       });
       onTramitar(poliza);
@@ -567,51 +575,6 @@ export default function FormCotizacion({
                 obligatorios
               </p>
             </div>
-
-            {/* Conductor habitual — sección opcional */}
-            <div className="border-t border-gray-100 pt-5">
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">
-                Conductor habitual{" "}
-                <span className="normal-case font-normal text-gray-300">
-                  (opcional)
-                </span>
-              </p>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className={lblCls}>Nombre del conductor</label>
-                  <input
-                    value={form.conductorHabitual}
-                    onChange={(e) => setF("conductorHabitual", e.target.value)}
-                    placeholder="Nombre completo"
-                    className={inpCls}
-                  />
-                </div>
-                <div>
-                  <label className={lblCls}>Sexo</label>
-                  <select
-                    value={form.conductorSexo}
-                    onChange={(e) => setF("conductorSexo", e.target.value)}
-                    className={inpCls}
-                  >
-                    <option value="">Sin especificar</option>
-                    <option value="MASCULINO">Masculino</option>
-                    <option value="FEMENINO">Femenino</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={lblCls}>Edad</label>
-                  <input
-                    type="number"
-                    min="18"
-                    max="99"
-                    value={form.conductorEdad}
-                    onChange={(e) => setF("conductorEdad", e.target.value)}
-                    placeholder="Años"
-                    className={inpCls}
-                  />
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -686,7 +649,7 @@ export default function FormCotizacion({
                         "clienteId",
                         e.target.value ? Number(e.target.value) : null,
                       );
-                      setF("concesionario", "");
+                      setF("concesionario", null);
                     }}
                     disabled={loadingDB}
                     className={inpCls + " flex-1"}
@@ -726,8 +689,13 @@ export default function FormCotizacion({
                 <label className={lblCls}>Concesionario</label>
                 <div className="flex gap-2">
                   <select
-                    value={form.concesionario}
-                    onChange={(e) => setF("concesionario", e.target.value)}
+                    value={form.concesionario ?? ""}
+                    onChange={(e) =>
+                      setF(
+                        "concesionario",
+                        e.target.value ? Number(e.target.value) : null,
+                      )
+                    }
                     disabled={
                       !form.clienteId || concesionariosDisponibles.length === 0
                     }
@@ -1280,6 +1248,8 @@ export default function FormCotizacion({
         <ModalNuevoConcesionario
           onClose={() => setModalConc(false)}
           onGuardar={onGuardarConcesionario}
+          clienteId={form.clienteId}
+          usuarioId={usuario?.id}
         />
       )}
       {modalVend && (

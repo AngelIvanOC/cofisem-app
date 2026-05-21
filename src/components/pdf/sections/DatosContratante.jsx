@@ -10,6 +10,7 @@ export default function DatosContratante({
   nombre,
   rfc,
   telefono,
+  curp,
   conductorHabitual,
   conductorSexo,
   conductorEdad,
@@ -40,6 +41,7 @@ export default function DatosContratante({
           <Text style={[t9, { marginTop: 20 }]}>{blank ? "" : dir1}</Text>
           <Text style={t9}>{blank ? "" : dir2}</Text>
           <Text style={t9}>{blank ? "" : dir3}</Text>
+          <Text style={t9}>{blank ? "" : (curp ? `CURP: ${curp}` : "")}</Text>
           <View
             style={{
               flexDirection: "row",

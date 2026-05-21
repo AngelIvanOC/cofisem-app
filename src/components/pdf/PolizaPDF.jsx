@@ -29,6 +29,7 @@ function PolizaPage({ poliza, copyLabel, blankContratante = false }) {
         nombre={poliza.contratante.nombre}
         rfc={poliza.contratante.rfc}
         telefono={poliza.contratante.telefono}
+        curp={poliza.contratante.curp}
         conductorHabitual={poliza.contratante.conductorHabitual}
         conductorSexo={poliza.contratante.conductorSexo}
         conductorEdad={poliza.contratante.conductorEdad}
