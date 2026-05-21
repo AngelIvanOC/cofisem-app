@@ -84,7 +84,7 @@ export default function DatosContratante({
             <View style={[pad, { flex: 1, justifyContent: "center" }]}>
               <Text
                 style={{
-                  fontSize: 7,
+                  fontSize: 6,
                   fontFamily: "Helvetica",
                   color: COLORS.ink,
                   textAlign: "center",
@@ -100,7 +100,7 @@ export default function DatosContratante({
             <View style={[pad, { flex: 1, justifyContent: "center" }]}>
               <Text
                 style={{
-                  fontSize: 7,
+                  fontSize: 6,
                   fontFamily: "Helvetica",
                   color: COLORS.ink,
                   textAlign: "center",
@@ -116,7 +116,7 @@ export default function DatosContratante({
             <View style={[pad, { flex: 1, justifyContent: "center" }]}>
               <Text
                 style={{
-                  fontSize: 7,
+                  fontSize: 6,
                   fontFamily: "Helvetica",
                   color: COLORS.ink,
                   textAlign: "center",
@@ -131,7 +131,7 @@ export default function DatosContratante({
           <View style={{ flex: 3.5 }}>
             <Title style={bB}>CONSTANCIA</Title>
             <View style={[{ paddingHorizontal: 5, paddingVertical: 3 }, bB]}>
-              <Text style={[t9, { textAlign: "center", fontSize: 12 }]}>
+              <Text style={[t9, { textAlign: "center", fontSize: 10 }]}>
                 {constancia || "—"}
               </Text>
             </View>

@@ -1,6 +1,6 @@
 import Campo from "./Campo";
 
-export default function ModalVendedor({ modal, form, onFieldChange, onClose, onGuardar }) {
+export default function ModalVendedor({ modal, form, onFieldChange, onClose, onGuardar, saving }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backdropFilter:"blur(8px)", backgroundColor:"rgba(10,15,40,0.5)" }}
@@ -16,20 +16,19 @@ export default function ModalVendedor({ modal, form, onFieldChange, onClose, onG
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <Campo label="Folio" value={form.folio} onChange={v => onFieldChange("folio", v)} placeholder="T0000" req/>
-            <Campo label="Nombre completo" value={form.nombre} onChange={v => onFieldChange("nombre", v)} placeholder="Nombre completo" req/>
+            <Campo label="Nombre" value={form.nombre} onChange={v => onFieldChange("nombre", v)} placeholder="Nombre" req/>
+            <Campo label="Apellido" value={form.apellido} onChange={v => onFieldChange("apellido", v)} placeholder="Apellido"/>
           </div>
           <Campo label="Teléfono" type="tel" value={form.telefono} onChange={v => onFieldChange("telefono", v)} placeholder="55 0000 0000"/>
           <Campo label="Correo electrónico" type="email" value={form.email} onChange={v => onFieldChange("email", v)} placeholder="correo@cofisem.com"/>
-          {modal === "nuevo" && (
-            <Campo label="Contraseña" type="password" value={form.password} onChange={v => onFieldChange("password", v)} placeholder="Contraseña de acceso" req/>
-          )}
         </div>
         <div className="flex gap-3 px-6 pb-6">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
-          <button onClick={onGuardar} disabled={!form.nombre || !form.folio}
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button onClick={onGuardar} disabled={!form.nombre || saving}
             className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all">
-            {modal === "nuevo" ? "Registrar" : "Guardar"}
+            {saving ? "Guardando..." : modal === "nuevo" ? "Registrar" : "Guardar"}
           </button>
         </div>
       </div>

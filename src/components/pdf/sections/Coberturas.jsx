@@ -14,7 +14,11 @@ const COND_DEFAULT =
   "ATENCIÓN DE CUALQUIER COBERTURA DESCRITA EN LA CARATULA DE LA PÓLIZA FUERA DEL ESTADO DE MORELOS, SE APLICARÁ UN DEDUCIBLE DE 250 UMAS.\n" +
   "ESTE CONTRATO QUEDA SUJETO A LAS CONDICIONES GENERALES, INCLUYENDO LAS EXCLUSIONES.\n";
 
-const fmt = (n) => (n != null && n !== "" ? `$${Number(n).toFixed(2)}` : "");
+const fmt = (n) => {
+  if (n == null || n === "") return "";
+  const [int, dec] = Number(n).toFixed(2).split(".");
+  return `$${int.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${dec ? "." + dec : ""}`;
+};
 
 export default function Coberturas({ coberturas, prima, condiciones }) {
   return (

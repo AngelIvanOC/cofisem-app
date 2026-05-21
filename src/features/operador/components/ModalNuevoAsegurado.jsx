@@ -1,35 +1,59 @@
-import { useState } from "react";
-import { ESTADOS_MX } from "../constants/catalogos";
+import { useState, useCallback } from "react";
+import { crearCliente } from "../../../services/clientes";
+import DireccionFields from "./DireccionFields";
 
 const EMPTY = {
-  nombre:"", rfc:"", curp:"", telefono:"", email:"",
-  calle:"", colonia:"", municipio:"", cp:"", estado:"Morelos",
+  nombre: "", apellido: "", rfc: "", curp: "", telefono: "", email: "",
+  cp: "", estado: "", municipio: "", colonia: "", calle: "", numero: "",
 };
 
-function CampoModal({ label, value, onChange, placeholder, type = "text", req }) {
+function Campo({ label, value, onChange, placeholder, type = "text", req }) {
   return (
     <div>
       <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
         {label}{req && <span className="text-red-400 ml-0.5">*</span>}
       </label>
-      <input type={type} value={value ?? ""} onChange={e => onChange(e.target.value)}
+      <input
+        type={type}
+        value={value ?? ""}
+        onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all" />
+        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all"
+      />
     </div>
   );
 }
 
-export default function ModalNuevoAsegurado({ onClose, onGuardar }) {
+export default function ModalNuevoAsegurado({ onClose, onGuardar, usuarioId }) {
   const [form, setForm] = useState(EMPTY);
+  const [saving, setSaving] = useState(false);
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const guardar = () => { if (!form.nombre || !form.rfc) return; onGuardar(form.nombre); };
+
+  const handleDireccion = useCallback((key, val) => setF(key, val), []);
+
+  const guardar = async () => {
+    if (!form.nombre || !form.rfc) return;
+    setSaving(true);
+    try {
+      const cliente = await crearCliente(form, usuarioId);
+      onGuardar({ ...cliente, polizasCount: 0 });
+    } catch (e) {
+      alert("Error al registrar asegurado: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backdropFilter:"blur(8px)", backgroundColor:"rgba(10,15,40,0.5)" }}
-      onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.5)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
           <div>
             <h2 className="text-base font-bold text-[#13193a]">Nuevo asegurado</h2>
@@ -41,43 +65,40 @@ export default function ModalNuevoAsegurado({ onClose, onGuardar }) {
             </svg>
           </button>
         </div>
+
         <div className="p-6 space-y-6">
           <div>
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Datos personales</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <CampoModal label="Nombre completo" value={form.nombre} onChange={v => setF("nombre",v)} placeholder="Nombre completo del asegurado" req />
-              </div>
-              <CampoModal label="RFC"  value={form.rfc}      onChange={v => setF("rfc",v)}      placeholder="RFC con homoclave" req />
-              <CampoModal label="CURP" value={form.curp}     onChange={v => setF("curp",v)}     placeholder="CURP" />
-              <CampoModal label="Teléfono" type="tel" value={form.telefono} onChange={v => setF("telefono",v)} placeholder="55 0000 0000" req />
-              <CampoModal label="Correo electrónico" type="email" value={form.email} onChange={v => setF("email",v)} placeholder="correo@ejemplo.com" />
+              <Campo label="Nombre(s)" value={form.nombre}   onChange={v => setF("nombre", v)}   placeholder="Nombre(s)" req />
+              <Campo label="Apellidos" value={form.apellido} onChange={v => setF("apellido", v)} placeholder="Apellidos" />
+              <Campo label="RFC"       value={form.rfc}      onChange={v => setF("rfc", v)}      placeholder="RFC con homoclave" req />
+              <Campo label="CURP"      value={form.curp}     onChange={v => setF("curp", v)}     placeholder="CURP" />
+              <Campo label="Teléfono"  type="tel" value={form.telefono} onChange={v => setF("telefono", v)} placeholder="55 0000 0000" req />
+              <Campo label="Correo electrónico" type="email" value={form.email} onChange={v => setF("email", v)} placeholder="correo@ejemplo.com" />
             </div>
           </div>
+
           <div>
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Domicilio</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <CampoModal label="Calle y número" value={form.calle} onChange={v => setF("calle",v)} placeholder="Av. Emiliano Zapata 145" />
-              </div>
-              <CampoModal label="Colonia"   value={form.colonia}   onChange={v => setF("colonia",v)}   placeholder="Colonia" />
-              <CampoModal label="Municipio" value={form.municipio} onChange={v => setF("municipio",v)} placeholder="Municipio" />
-              <CampoModal label="C.P."      value={form.cp}        onChange={v => setF("cp",v)}        placeholder="62000" />
-              <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Estado</label>
-                <select value={form.estado} onChange={e => setF("estado", e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]">
-                  {ESTADOS_MX.map(e => <option key={e}>{e}</option>)}
-                </select>
-              </div>
-            </div>
+            <DireccionFields
+              values={{ cp: form.cp, estado: form.estado, municipio: form.municipio, colonia: form.colonia, calle: form.calle, numero: form.numero }}
+              onChange={handleDireccion}
+            />
           </div>
         </div>
+
         <div className="flex gap-3 px-6 pb-6">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
-          <button onClick={guardar} disabled={!form.nombre || !form.rfc}
-            className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all">
-            Registrar asegurado
+          <button onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            onClick={guardar}
+            disabled={!form.nombre || !form.rfc || saving}
+            className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all"
+          >
+            {saving ? "Registrando…" : "Registrar asegurado"}
           </button>
         </div>
       </div>

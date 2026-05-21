@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+/* ── Selects: flecha personalizada con separación del borde derecho ─────────
+   Elimina la flecha nativa del browser (appearance: none) y la reemplaza con
+   una SVG chevron posicionada a 0.625rem del borde, no pegada al extremo.
+   padding-right !important sobreescribe px-3 de Tailwind para que el texto
+   nunca quede debajo de la flecha. ─────────────────────────────────────── */
+@layer base {
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+    background-size: 1.2em 1.2em;
+    padding-right: 2.25rem !important;
+  }
+
+  select:disabled {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23d1d5db' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  }
+}
+
 /* ============================================================
    FIX: ALTURA DE PÁGINAS EN MOBILE
    

@@ -14,6 +14,9 @@ import PaginaEnConstruccion from "./pages/PaginaEnConstruccion";
 // ── DEV — eliminar antes de producción ────────────────────────
 import PDFPreview from "./pages/PDFPreview";
 
+// ── Verificación pública de pólizas ──────────────────────────
+import VerificarPoliza from "./pages/VerificarPoliza";
+
 // ── OPERADOR ──────────────────────────────────────────────────
 import OperadorDashboard from "./pages/operador/OperadorDashboard";
 import OperadorClientes from "./pages/operador/Clientes";
@@ -285,6 +288,9 @@ export default function App() {
       <Routes>
         {/* DEV — ruta pública de vista previa, sin autenticación */}
         <Route path="/pdf-preview" element={<PDFPreview />} />
+
+        {/* Verificación pública de pólizas — accesible sin login */}
+        <Route path="/verificar/:constancia" element={<VerificarPoliza />} />
 
         <Route
           path="/login"
