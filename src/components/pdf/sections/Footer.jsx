@@ -1,7 +1,8 @@
 import { View, Text, Image } from "@react-pdf/renderer";
 import { COLORS } from "../styles";
+import FIRMA from "../../../assets/firma.png";
 
-const CELL = 13;
+const CELL = 15;
 const QR_SIZE = CELL * 10; // 120
 
 const QR_PATTERN = [
@@ -51,14 +52,14 @@ export default function Footer({
         flexDirection: "row",
         paddingVertical: 0,
         alignItems: "center",
-        marginTop: 10,
+        marginTop: 0,
       }}
     >
       {/* ── ATENCIÓN DE SINIESTROS (izquierda) ── */}
       <View
         style={{
           flex: 1,
-          paddingRight: 24,
+          paddingRight: 0,
         }}
       >
         <Text
@@ -92,12 +93,36 @@ export default function Footer({
       </View>
 
       {/* ── FIRMA (derecha) ── */}
-      <View style={{ flex: 1, alignItems: "center", marginTop: 20 }}>
+      <View
+        style={{
+          position: "relative",
+          width: 160,
+          height: 50,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Image
+          src={FIRMA}
+          style={{
+            position: "absolute",
+            width: 150,
+            height: 150,
+            left: "50%",
+            top: "50%",
+            marginLeft: -64, // mitad del ancho
+            marginTop: -75, // mitad del alto
+          }}
+        />
+
         <Text
           style={{
             fontSize: 8,
             fontFamily: "Helvetica-Bold",
             color: COLORS.ink,
+            textAlign: "center",
+            zIndex: 1,
+            marginTop: 30,
           }}
         >
           FUNCIONARIO AUTORIZADO
