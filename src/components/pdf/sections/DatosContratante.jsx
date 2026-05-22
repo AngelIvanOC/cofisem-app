@@ -36,9 +36,17 @@ export default function DatosContratante({
       <View style={[CARD, { flex: 60, marginRight: 3 }]}>
         <Title style={bB}>DATOS DEL CONTRATANTE</Title>
 
-        <View style={[pad, bB, { flex: 1 }]}>
+        <View
+          style={[
+            pad,
+            bB,
+            {
+              flex: 1,
+            },
+          ]}
+        >
           <Text style={t9}>{blank ? "" : nombre || "—"}</Text>
-          <View style={[{ flex: 1, marginTop: 10 }]}>
+          <View style={[{ flex: 1, paddingTop: 5 }]}>
             <Text style={t9}>{blank ? "" : dir1}</Text>
             <Text style={t9}>{blank ? "" : dir2}</Text>
             <Text style={t9}>{blank ? "" : dir3}</Text>
