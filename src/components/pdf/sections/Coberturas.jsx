@@ -22,8 +22,8 @@ const tdSub = {
 };
 
 const COND_DEFAULT =
-  "LA EMPRESA PODRÁ INSPECCIONAR O VERIFICAR LA EXISTENCIA Y ESTADO FÍSICO DEL VEHÍCULO EN CUALQUIER MOMENTO EN DÍAS Y HORAS HÁBILES.\n" +
-  "ESTE PROCEDIMIENTO SERÁ REALIZADO POR PERSONAL DEBIDAMENTE AUTORIZADO.\n" +
+  "LA EMPRESA PODRÁ INSPECCIONAR O VERIFICAR LA EXISTENCIA Y ESTADO FÍSICO DEL VEHÍCULO EN CUALQUIER MOMENTO EN DÍAS Y HORAS HÁBILES, " +
+  "ESTE PROCEDIMIENTO SERÁ REALIZADO POR PERSONAL DEBIDAMENTE AUTORIZADO, " +
   "SI EL CONTRATANTE IMPIDE U OBSTACULIZA ESTA INSPECCIÓN, LA EMPRESA SE RESERVA EL DERECHO DE RESCINDIR EL CONTRATO EN TÉRMINOS DE LAS CONDICIONES GENERALES APLICABLES.\n" +
   "LOS DEDUCIBLES, COASEGUROS Y FRANQUICIAS NO REGISTRADAS EN ESTA CARATULA, ESTARÁN INDICADAS EN LAS ESPECIFICACIONES ANEXAS.\n" +
   "ATENCIÓN DE CUALQUIER COBERTURA DESCRITA EN LA CARATULA DE LA PÓLIZA FUERA DEL ESTADO DE MORELOS, SE APLICARÁ UN DEDUCIBLE DE 250 UMAS.\n" +
@@ -248,7 +248,7 @@ export default function Coberturas({ coberturas, prima, condiciones }) {
       </View>
 
       {/* ══ CONDICIONES NOMBRADAS ════════════════════════════════════ */}
-      <View style={{ paddingHorizontal: 10, paddingTop: 5, paddingBottom: 20 }}>
+      <View style={{ paddingHorizontal: 10, paddingVertical: 5 }}>
         <Text
           style={{
             fontSize: 8,
@@ -261,7 +261,7 @@ export default function Coberturas({ coberturas, prima, condiciones }) {
         </Text>
         <Text
           style={{
-            fontSize: 6,
+            fontSize: 7,
             fontFamily: "Helvetica",
             color: COLORS.ink,
             lineHeight: 1.5,

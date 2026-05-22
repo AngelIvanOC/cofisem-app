@@ -4,7 +4,7 @@ import ModalCliente from "./components/ModalCliente";
 
 const EMPTY_FORM = {
   nombre:"", apellido1:"", apellido2:"", rfc:"", curp:"", telefono:"", email:"",
-  cp:"", estado:"", municipio:"", colonia:"", calle:"", numero:"",
+  cp:"", estado:"", municipio:"", colonia:"", calle:"", numeroExt:"", numeroInt:"",
 };
 
 export default function Clientes({ usuario }) {
@@ -49,14 +49,18 @@ export default function Clientes({ usuario }) {
       nombre: c.nombre || "", apellido1: ap1, apellido2: apRest.join(" "),
       rfc: c.rfc || "", curp: c.curp || "", telefono: c.telefono || "", email: c.email || "",
       cp: c.cp || "", estado: c.estado || "", municipio: c.ciudad || "",
-      colonia: c.colonia || "", calle: c.direccion || "", numero: "",
+      colonia: c.colonia || "", calle: c.direccion || "", numeroExt: "", numeroInt: "",
     });
     setEditId(c.id);
     setModal("editar");
   };
 
   const guardar = async () => {
-    if (!form.nombre || !form.rfc) return;
+    if (
+      !form.nombre || !form.apellido1 || !form.apellido2 ||
+      !form.telefono || !form.rfc || !form.curp ||
+      !form.cp || !form.estado || !form.municipio || !form.colonia || !form.calle || !form.numeroExt
+    ) return;
     setSaving(true);
     try {
       if (editId) {

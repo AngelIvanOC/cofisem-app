@@ -18,7 +18,9 @@ const lbl = "block text-[11px] font-bold text-gray-400 uppercase tracking-wide m
  *   values   = { cp, estado, municipio, colonia, calle, numero }
  *   onChange(key, value)
  */
-export default function DireccionFields({ values, onChange }) {
+const req = <span className="text-red-400 ml-0.5">*</span>;
+
+export default function DireccionFields({ values, onChange, req: required }) {
   const [municipios, setMunicipios] = useState([]);
   const [colonias,   setColonias]   = useState([]);
   const [buscando,   setBuscando]   = useState(false);
@@ -102,7 +104,7 @@ export default function DireccionFields({ values, onChange }) {
       {/* C.P. */}
       <div>
         <label className={lbl}>
-          C.P.
+          C.P.{required && req}
           {buscando && (
             <span className="ml-1.5 normal-case font-normal text-gray-300 text-[10px]">
               buscando…
@@ -132,7 +134,7 @@ export default function DireccionFields({ values, onChange }) {
 
       {/* Estado */}
       <div>
-        <label className={lbl}>Estado</label>
+        <label className={lbl}>Estado{required && req}</label>
         <select
           value={values.estado ?? ""}
           onChange={handleEstado}
@@ -145,7 +147,7 @@ export default function DireccionFields({ values, onChange }) {
 
       {/* Municipio */}
       <div>
-        <label className={lbl}>Municipio</label>
+        <label className={lbl}>Municipio{required && req}</label>
         {municipios.length > 0 ? (
           <select
             value={values.municipio ?? ""}
@@ -169,31 +171,21 @@ export default function DireccionFields({ values, onChange }) {
 
       {/* Colonia */}
       <div>
-        <label className={lbl}>Colonia</label>
-        {colonias.length > 0 ? (
-          <select
-            value={values.colonia ?? ""}
-            onChange={e => onChange("colonia", e.target.value)}
-            disabled={!values.municipio}
-            className={inp + (!values.municipio ? dis : "")}
-          >
-            <option value="">Selecciona colonia</option>
-            {colonias.map(c => <option key={c}>{c}</option>)}
-          </select>
-        ) : (
-          <input
-            value={values.colonia ?? ""}
-            onChange={e => onChange("colonia", e.target.value)}
-            disabled={!values.municipio}
-            placeholder={values.municipio ? "Colonia" : "Ingresa C.P. o elige municipio"}
-            className={inp + (!values.municipio ? dis : "")}
-          />
-        )}
+        <label className={lbl}>Colonia{required && req}</label>
+        <select
+          value={values.colonia ?? ""}
+          onChange={e => onChange("colonia", e.target.value)}
+          disabled={!values.municipio}
+          className={inp + (!values.municipio ? dis : "")}
+        >
+          <option value="">Selecciona colonia</option>
+          {colonias.map(c => <option key={c}>{c}</option>)}
+        </select>
       </div>
 
       {/* Calle */}
-      <div>
-        <label className={lbl}>Calle</label>
+      <div className="sm:col-span-2">
+        <label className={lbl}>Calle{required && req}</label>
         <input
           value={values.calle ?? ""}
           onChange={e => onChange("calle", e.target.value)}
@@ -202,13 +194,24 @@ export default function DireccionFields({ values, onChange }) {
         />
       </div>
 
-      {/* Número */}
+      {/* No. Exterior */}
       <div>
-        <label className={lbl}>Número</label>
+        <label className={lbl}>No. Exterior{required && req}</label>
         <input
-          value={values.numero ?? ""}
-          onChange={e => onChange("numero", e.target.value)}
+          value={values.numeroExt ?? ""}
+          onChange={e => onChange("numeroExt", e.target.value)}
           placeholder="145"
+          className={inp}
+        />
+      </div>
+
+      {/* No. Interior */}
+      <div>
+        <label className={lbl}>No. Interior</label>
+        <input
+          value={values.numeroInt ?? ""}
+          onChange={e => onChange("numeroInt", e.target.value)}
+          placeholder="2B (opcional)"
           className={inp}
         />
       </div>

@@ -49,7 +49,7 @@ export function Vendedores({ usuario }) {
   };
 
   const guardar = async () => {
-    if (!form.nombre) return;
+    if (!form.nombre || !form.apellido1 || !form.telefono) return;
     setSaving(true);
     try {
       if (editId) {

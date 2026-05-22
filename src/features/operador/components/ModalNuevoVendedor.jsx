@@ -33,8 +33,10 @@ export default function ModalNuevoVendedor({ onClose, onGuardar, usuarioId }) {
   const [saving, setSaving] = useState(false);
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  const canSave = !!(form.nombre && form.apellido1 && form.telefono);
+
   const guardar = async () => {
-    if (!form.nombre) return;
+    if (!canSave) return;
     setSaving(true);
     try {
       const vendedor = await crearVendedor(
@@ -105,6 +107,7 @@ export default function ModalNuevoVendedor({ onClose, onGuardar, usuarioId }) {
               value={form.apellido1}
               onChange={(v) => setF("apellido1", v)}
               placeholder="Primer apellido"
+              req
             />
             <Campo
               label="Segundo apellido"
@@ -119,6 +122,7 @@ export default function ModalNuevoVendedor({ onClose, onGuardar, usuarioId }) {
             value={form.telefono}
             onChange={(v) => setF("telefono", v)}
             placeholder="55 0000 0000"
+            req
           />
           <Campo
             label="Correo electrónico"
@@ -143,7 +147,7 @@ export default function ModalNuevoVendedor({ onClose, onGuardar, usuarioId }) {
           </button>
           <button
             onClick={guardar}
-            disabled={!form.nombre || saving}
+            disabled={!canSave || saving}
             className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all"
           >
             {saving ? "Registrando…" : "Registrar vendedor"}

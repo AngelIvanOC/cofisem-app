@@ -59,6 +59,7 @@ export default function ModalVendedor({
               value={form.apellido1}
               onChange={(v) => onFieldChange("apellido1", v)}
               placeholder="Primer apellido"
+              req
             />
             <Campo
               label="Segundo apellido"
@@ -73,6 +74,7 @@ export default function ModalVendedor({
             value={form.telefono}
             onChange={(v) => onFieldChange("telefono", v)}
             placeholder="55 0000 0000"
+            req
           />
           <Campo
             label="Correo electrónico"
@@ -95,7 +97,7 @@ export default function ModalVendedor({
           </button>
           <button
             onClick={onGuardar}
-            disabled={!form.nombre || saving}
+            disabled={!form.nombre || !form.apellido1 || !form.telefono || saving}
             className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all"
           >
             {saving

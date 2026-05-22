@@ -15,7 +15,8 @@ const EMPTY = {
   municipio: "",
   colonia: "",
   calle: "",
-  numero: "",
+  numeroExt: "",
+  numeroInt: "",
 };
 
 function Campo({ label, value, onChange, placeholder, type = "text", req }) {
@@ -43,8 +44,14 @@ export default function ModalNuevoAsegurado({ onClose, onGuardar, usuarioId }) {
 
   const handleDireccion = useCallback((key, val) => setF(key, val), []);
 
+  const canSave = !!(
+    form.nombre && form.apellido1 && form.apellido2 &&
+    form.telefono && form.rfc && form.curp &&
+    form.cp && form.estado && form.municipio && form.colonia && form.calle && form.numeroExt
+  );
+
   const guardar = async () => {
-    if (!form.nombre || !form.rfc) return;
+    if (!canSave) return;
     setSaving(true);
     try {
       const cliente = await crearCliente(form, usuarioId);
@@ -112,29 +119,18 @@ export default function ModalNuevoAsegurado({ onClose, onGuardar, usuarioId }) {
                 req
               />
               <Campo
-                label="RFC"
-                value={form.rfc}
-                onChange={(v) => setF("rfc", v)}
-                placeholder="RFC con homoclave"
+                label="Apellido materno"
+                value={form.apellido2}
+                onChange={(v) => setF("apellido2", v)}
+                placeholder="Apellido materno"
                 req
               />
               <Campo
-                label="Primer apellido"
+                label="Apellido paterno"
                 value={form.apellido1}
                 onChange={(v) => setF("apellido1", v)}
-                placeholder="Primer apellido"
-              />
-              <Campo
-                label="Segundo apellido"
-                value={form.apellido2}
-                onChange={(v) => setF("apellido2", v)}
-                placeholder="Segundo apellido"
-              />
-              <Campo
-                label="CURP"
-                value={form.curp}
-                onChange={(v) => setF("curp", v)}
-                placeholder="CURP"
+                placeholder="Apellido paterno"
+                req
               />
               <Campo
                 label="Teléfono"
@@ -142,6 +138,20 @@ export default function ModalNuevoAsegurado({ onClose, onGuardar, usuarioId }) {
                 value={form.telefono}
                 onChange={(v) => setF("telefono", v)}
                 placeholder="55 0000 0000"
+                req
+              />
+              <Campo
+                label="RFC"
+                value={form.rfc}
+                onChange={(v) => setF("rfc", v.toUpperCase())}
+                placeholder="RFC con homoclave"
+                req
+              />
+              <Campo
+                label="CURP"
+                value={form.curp}
+                onChange={(v) => setF("curp", v.toUpperCase())}
+                placeholder="CURP"
                 req
               />
               <Campo
@@ -170,9 +180,11 @@ export default function ModalNuevoAsegurado({ onClose, onGuardar, usuarioId }) {
                 municipio: form.municipio,
                 colonia: form.colonia,
                 calle: form.calle,
-                numero: form.numero,
+                numeroExt: form.numeroExt,
+                numeroInt: form.numeroInt,
               }}
               onChange={handleDireccion}
+              req
             />
           </div>
 
@@ -191,7 +203,7 @@ export default function ModalNuevoAsegurado({ onClose, onGuardar, usuarioId }) {
           </button>
           <button
             onClick={guardar}
-            disabled={!form.nombre || !form.rfc || saving}
+            disabled={!canSave || saving}
             className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all"
           >
             {saving ? "Registrando…" : "Registrar asegurado"}

@@ -73,29 +73,18 @@ export default function ModalCliente({
                 req
               />
               <Campo
-                label="RFC"
-                value={form.rfc}
-                onChange={(v) => onFieldChange("rfc", v)}
-                placeholder="RFC con homoclave"
+                label="Apellido materno"
+                value={form.apellido2}
+                onChange={(v) => onFieldChange("apellido2", v)}
+                placeholder="Apellido materno"
                 req
               />
               <Campo
-                label="Primer apellido"
+                label="Apellido paterno"
                 value={form.apellido1}
                 onChange={(v) => onFieldChange("apellido1", v)}
-                placeholder="Primer apellido"
-              />
-              <Campo
-                label="Segundo apellido"
-                value={form.apellido2}
-                onChange={(v) => onFieldChange("apellido2", v)}
-                placeholder="Segundo apellido"
-              />
-              <Campo
-                label="CURP"
-                value={form.curp}
-                onChange={(v) => onFieldChange("curp", v)}
-                placeholder="CURP"
+                placeholder="Apellido paterno"
+                req
               />
               <Campo
                 label="Teléfono"
@@ -106,14 +95,26 @@ export default function ModalCliente({
                 req
               />
               <Campo
+                label="RFC"
+                value={form.rfc}
+                onChange={(v) => onFieldChange("rfc", v.toUpperCase())}
+                placeholder="RFC con homoclave"
+                req
+              />
+              <Campo
+                label="CURP"
+                value={form.curp}
+                onChange={(v) => onFieldChange("curp", v.toUpperCase())}
+                placeholder="CURP"
+                req
+              />
+              <Campo
                 label="Correo electrónico"
                 type="email"
                 value={form.email}
                 onChange={(v) => onFieldChange("email", v)}
                 placeholder="correo@ejemplo.com"
               />
-
-              <div className=""></div>
             </div>
             <p className="px-0 py-0 my-0 text-xs text-gray-400">
               <span className="text-red-400 font-bold">*</span> Campos
@@ -132,9 +133,11 @@ export default function ModalCliente({
                 municipio: form.municipio,
                 colonia: form.colonia,
                 calle: form.calle,
-                numero: form.numero ?? "",
+                numeroExt: form.numeroExt ?? "",
+                numeroInt: form.numeroInt ?? "",
               }}
               onChange={handleDireccion}
+              req
             />
           </div>
 
@@ -153,7 +156,12 @@ export default function ModalCliente({
           </button>
           <button
             onClick={onGuardar}
-            disabled={!form.nombre || !form.rfc || saving}
+            disabled={
+              !form.nombre || !form.apellido1 || !form.apellido2 ||
+              !form.telefono || !form.rfc || !form.curp ||
+              !form.cp || !form.estado || !form.municipio || !form.colonia || !form.calle || !form.numeroExt ||
+              saving
+            }
             className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all"
           >
             {saving
