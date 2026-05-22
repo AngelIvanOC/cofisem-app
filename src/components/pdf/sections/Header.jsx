@@ -35,14 +35,7 @@ export default function Header({ empresa, copyLabel }) {
             >
               RFC: {empresa.rfc}
             </Text>
-            <Text
-              style={[
-                styles.companyInfo,
-                { fontSize: 10, textAlign: "center" },
-              ]}
-            >
-              {empresa.domicilio}
-            </Text>
+
             <Text
               style={[
                 styles.companyInfo,
