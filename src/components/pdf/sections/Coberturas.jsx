@@ -216,10 +216,10 @@ export default function Coberturas({ coberturas, prima, condiciones }) {
           <Title style={bB}>TOTAL</Title>
           <Text
             style={{
-              fontSize: 7,
+              fontSize: 8,
               fontFamily: "Helvetica-Bold",
               color: COLORS.ink,
-              textAlign: "right",
+              textAlign: "center",
               paddingVertical: 2,
               paddingHorizontal: 2,
             }}

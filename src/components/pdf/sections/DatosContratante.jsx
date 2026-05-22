@@ -38,19 +38,21 @@ export default function DatosContratante({
 
         <View style={[pad, bB, { flex: 1 }]}>
           <Text style={t9}>{blank ? "" : nombre || "—"}</Text>
-          <Text style={[t9, { marginTop: 20 }]}>{blank ? "" : dir1}</Text>
-          <Text style={t9}>{blank ? "" : dir2}</Text>
-          <Text style={t9}>{blank ? "" : dir3}</Text>
-          <Text style={t9}>{blank ? "" : (curp ? `CURP: ${curp}` : "")}</Text>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginTop: 0,
-            }}
-          >
-            <Text style={t9}>{blank ? "" : `RFC: ${rfc || ""}`}</Text>
-            <Text style={t9}>{blank ? "" : `Tel.:${telefono || ""}`}</Text>
+          <View style={[{ flex: 1, marginTop: 10 }]}>
+            <Text style={t9}>{blank ? "" : dir1}</Text>
+            <Text style={t9}>{blank ? "" : dir2}</Text>
+            <Text style={t9}>{blank ? "" : dir3}</Text>
+            <Text style={t9}>{blank ? "" : curp ? `CURP: ${curp}` : ""}</Text>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginTop: 0,
+              }}
+            >
+              <Text style={t9}>{blank ? "" : `RFC: ${rfc || ""}`}</Text>
+              <Text style={t9}>{blank ? "" : `Tel.:${telefono || ""}`}</Text>
+            </View>
           </View>
         </View>
 
