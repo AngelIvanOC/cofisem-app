@@ -21,6 +21,18 @@ CREATE TABLE public.clientes (
   CONSTRAINT clientes_pkey PRIMARY KEY (id),
   CONSTRAINT clientes_creado_por_fkey FOREIGN KEY (creado_por) REFERENCES public.usuarios(id)
 );
+CREATE TABLE public.concesionarios (
+  id integer NOT NULL DEFAULT nextval('concesionarios_id_seq'::regclass),
+  cliente_id integer NOT NULL,
+  nombre text NOT NULL,
+  apellido1 text,
+  apellido2 text,
+  created_at timestamp with time zone DEFAULT now(),
+  creado_por uuid,
+  CONSTRAINT concesionarios_pkey PRIMARY KEY (id),
+  CONSTRAINT concesionarios_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
+  CONSTRAINT concesionarios_creado_por_fkey FOREIGN KEY (creado_por) REFERENCES public.usuarios(id)
+);
 CREATE TABLE public.metas_ventas (
   id integer NOT NULL DEFAULT nextval('metas_ventas_id_seq'::regclass),
   vendedor_id integer,
@@ -32,6 +44,12 @@ CREATE TABLE public.metas_ventas (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT metas_ventas_pkey PRIMARY KEY (id),
   CONSTRAINT metas_ventas_vendedor_id_fkey FOREIGN KEY (vendedor_id) REFERENCES public.vendedores(id)
+);
+CREATE TABLE public.oficinas (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  nombre text,
+  CONSTRAINT oficinas_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.pagos (
   id integer NOT NULL DEFAULT nextval('pagos_id_seq'::regclass),
@@ -96,11 +114,13 @@ CREATE TABLE public.polizas (
   conductor_edad text,
   cp_asegurado text,
   uso_tarifario text DEFAULT '15'::text,
+  concesionario_id integer,
   CONSTRAINT polizas_pkey PRIMARY KEY (id),
   CONSTRAINT polizas_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
   CONSTRAINT polizas_vendedor_id_fkey FOREIGN KEY (vendedor_id) REFERENCES public.vendedores(id),
   CONSTRAINT polizas_creado_por_fkey FOREIGN KEY (creado_por) REFERENCES public.usuarios(id),
-  CONSTRAINT polizas_actualizado_por_fkey FOREIGN KEY (actualizado_por) REFERENCES public.usuarios(id)
+  CONSTRAINT polizas_actualizado_por_fkey FOREIGN KEY (actualizado_por) REFERENCES public.usuarios(id),
+  CONSTRAINT polizas_concesionario_id_fkey FOREIGN KEY (concesionario_id) REFERENCES public.concesionarios(id)
 );
 CREATE TABLE public.polizas_historial (
   id integer NOT NULL DEFAULT nextval('polizas_historial_id_seq'::regclass),

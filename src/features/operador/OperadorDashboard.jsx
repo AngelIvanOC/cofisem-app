@@ -2,8 +2,6 @@ import { useNavigate } from "react-router-dom";
 import { STATUS, ULTIMAS, COTIZACIONES_DASH, POR_VENCER, SPARK_POLIZAS, SPARK_COBRO } from "./data/dashboardData";
 import SparkBar from "./components/SparkBar";
 
-const OFICINA = "COFISEM AV. E.ZAPATA";
-
 const HOY = new Date().toLocaleDateString("es-MX", {
   weekday: "long",
   day: "2-digit",
@@ -29,7 +27,7 @@ export default function OperadorDashboard({ usuario }) {
             </h1>
             <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-              {OFICINA}
+              {usuario?.oficinas?.nombre ?? "—"}
             </p>
           </div>
           <div className="flex gap-2">

@@ -79,10 +79,10 @@ export default function DatosContratante({
 
       {/* ══ CARD DERECHA 40 % ════════════════════════════════════ */}
       <View style={[CARD, { flex: 40 }]}>
-        {/* Fila 1: AGENCIA | USO | F.PAGO | CONSTANCIA */}
+        {/* Fila 1: OFICINA | USO | F.PAGO | CONSTANCIA */}
         <View style={[{ flexDirection: "row" }, bB]}>
           <View style={[bR, { flex: 1 }]}>
-            <Title style={bB}>AGENCIA</Title>
+            <Title style={bB}>OFICINA</Title>
             <View style={[pad, { flex: 1, justifyContent: "center" }]}>
               <Text
                 style={{
@@ -92,7 +92,7 @@ export default function DatosContratante({
                   textAlign: "center",
                 }}
               >
-                {agencia?.codigo || "—"}
+                {agencia?.id ?? "—"}
               </Text>
             </View>
           </View>
@@ -145,9 +145,9 @@ export default function DatosContratante({
           </View>
         </View>
 
-        {/* Fila 2: AGENCIA nombre + Operador / Vendedor */}
+        {/* Fila 2: OFICINA nombre + Operador / Vendedor */}
         <View style={bB}>
-          <Title style={bB}>AGENCIA</Title>
+          <Title style={bB}>OFICINA</Title>
           <View style={{ paddingHorizontal: 5, paddingVertical: 1 }}>
             <Text
               style={{

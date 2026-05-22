@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { PDFViewer } from "@react-pdf/renderer";
-import { OFICINA } from "./constants/cobertura";
 import { fetchPolizas, fetchPolizaById, buildPolizaPDF } from "../../services/polizas";
 import { generateQR } from "../../utils/generateQR";
 import { fmt$ } from "./utils/fmt";
@@ -64,7 +63,7 @@ export default function Polizas({ usuario }) {
     setLoadingViewerId(p.id);
     try {
       const full      = await fetchPolizaById(p.id);
-      const base      = buildPolizaPDF(full);
+      const base      = buildPolizaPDF(full, usuario?.oficinas);
       const qrDataUrl = await generateQR(base.codigoQR);
       setPolizaViewer({ ...base, qrDataUrl });
     } catch (e) {
@@ -80,6 +79,7 @@ export default function Polizas({ usuario }) {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <TramiteExitoso
             poliza={tramiteOk}
+            oficina={usuario?.oficinas}
             onNueva={() => { setTramiteOk(null); setCotActiva(null); setTab("nueva"); }}
             onVolver={() => { setTramiteOk(null); setTab("polizas"); }}
           />
@@ -93,7 +93,7 @@ export default function Polizas({ usuario }) {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-[#13193a]">Pólizas</h1>
-          <p className="text-gray-400 text-sm mt-0.5">{OFICINA.nombre}</p>
+          <p className="text-gray-400 text-sm mt-0.5">{usuario?.oficinas?.nombre ?? "—"}</p>
         </div>
         <button onClick={() => { setCotActiva(null); setTab("nueva"); }}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-semibold hover:bg-[#1e2a50] transition-all shadow-sm shadow-[#13193a]/15">

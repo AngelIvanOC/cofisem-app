@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  OFICINA,
   COBERTURA_BASICA,
   PRECIO_MATRIZ,
   DERECHOS,
@@ -44,7 +43,7 @@ export default function FormCotizacion({
   const esEdicion = !!cotizacionInicial;
   const nroCot =
     cotizacionInicial?.id ??
-    `COT-${OFICINA.codigo}${Date.now().toString().slice(-6)}`;
+    `COT-${usuario?.oficinas?.id ?? "0"}${Date.now().toString().slice(-6)}`;
   const [paso, setPaso] = useState(esEdicion ? 4 : 1);
 
   const [form, setForm] = useState({
@@ -335,7 +334,8 @@ export default function FormCotizacion({
         conductorSexo: form.conductorSexo || null,
         conductorEdad: form.conductorEdad || null,
         concesionarioId: form.concesionario || null,
-        creadoPor: usuario?.id,
+        creadoPor:       usuario?.id,
+        oficinaId:       usuario?.oficinas?.id ?? null,
       });
       onTramitar(poliza);
     } catch (e) {
@@ -377,7 +377,7 @@ export default function FormCotizacion({
           <div>
             <p className="text-white/40 mb-0.5">Punto de venta</p>
             <p className="text-white font-semibold truncate">
-              {OFICINA.nombre}
+              {usuario?.oficinas?.nombre ?? "—"}
             </p>
           </div>
         </div>

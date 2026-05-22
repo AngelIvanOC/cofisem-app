@@ -1,7 +1,6 @@
 import { supabase } from "../supabaseClient";
 import { EMPRESA } from "../components/pdf/mockData";
 import { mockCoberturas, mockCondiciones } from "../components/pdf/mockData";
-import { OFICINA } from "../features/operador/constants/cobertura";
 
 // ── Número en letras (español) ─────────────────────────────────────────────
 const _UNI = ['','UN','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE',
@@ -58,7 +57,7 @@ export async function emitirPoliza({
   clienteId, vendedorId, marca, modelo, anio, serie, numMotor, placas,
   codAmis, capacidad, version, uso, tipoServicio, primaNeta, primaTotal,
   formaPago, fechaInicio, derechos, iva, enLetras, cpAsegurado, creadoPor,
-  conductorHabitual, conductorSexo, conductorEdad, concesionarioId,
+  conductorHabitual, conductorSexo, conductorEdad, concesionarioId, oficinaId,
 }) {
   const ahora   = new Date();
   const horaStr = ahora.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }) + ' hrs.';
@@ -114,6 +113,7 @@ export async function emitirPoliza({
       ...(concesionarioId != null ? { concesionario_id: concesionarioId } : {}),
       estatus:               'VIGENTE',
       creado_por:            creadoPor || null,
+      oficina_id:            oficinaId || null,
     })
     .select('id, cliente_id')
     .single();
@@ -147,7 +147,9 @@ export async function emitirPoliza({
       *,
       clientes(id, nombre, apellido, rfc, curp, telefono, email, direccion, colonia, ciudad, estado, cp),
       vendedores(id, nombre, apellido, codigo),
-      concesionarios(id, nombre, apellido1, apellido2)
+      concesionarios(id, nombre, apellido1, apellido2),
+      oficinas(id, nombre),
+      usuarios!polizas_creado_por_fkey(id_muestra)
     `)
     .single();
   if (e2) throw e2;
@@ -163,7 +165,9 @@ export async function fetchPolizaById(id) {
       *,
       clientes(id, nombre, apellido, rfc, curp, telefono, direccion, colonia, ciudad, estado, cp),
       vendedores(id, nombre, apellido, codigo),
-      concesionarios(id, nombre, apellido1, apellido2)
+      concesionarios(id, nombre, apellido1, apellido2),
+      oficinas(id, nombre),
+      usuarios!polizas_creado_por_fkey(id_muestra)
     `)
     .eq('id', id)
     .single();
@@ -188,10 +192,12 @@ export async function fetchPolizas() {
 }
 
 // ── Mapear póliza DB → objeto PolizaPDF ───────────────────────────────────
-export function buildPolizaPDF(poliza) {
-  const cliente      = poliza.clientes      ?? {};
-  const vendedor     = poliza.vendedores    ?? {};
+export function buildPolizaPDF(poliza, oficina) {
+  const cliente       = poliza.clientes       ?? {};
+  const vendedor      = poliza.vendedores     ?? {};
   const concesionario = poliza.concesionarios ?? null;
+  const oficinaPDF    = poliza.oficinas ?? oficina ?? null;
+  const creadorMuestra = poliza.usuarios?.id_muestra ?? null;
   const nombreBase   = [cliente.nombre, cliente.apellido].filter(Boolean).join(' ').toUpperCase();
   const nombreConc   = concesionario
     ? [concesionario.nombre, concesionario.apellido1, concesionario.apellido2]
@@ -266,9 +272,9 @@ export function buildPolizaPDF(poliza) {
     coberturas: mockCoberturas,
 
     agencia: {
-      codigo:   OFICINA.codigo,
-      nombre:   OFICINA.nombre,
-      operador: poliza.creado_por != null ? String(poliza.creado_por) : '',
+      id:       oficinaPDF?.id     ?? null,
+      nombre:   oficinaPDF?.nombre ?? '',
+      operador: creadorMuestra != null ? `${creadorMuestra}` : '',
       vendedor: vendedor.codigo || '',
     },
 

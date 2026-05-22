@@ -37,7 +37,7 @@ async function loadProfile(uid) {
   try {
     const { data: perfil, error: e1 } = await supabase
       .from("usuarios")
-      .select("id, nombre, apellido, rol_id, oficina, activo")
+      .select("id, id_muestra, nombre, apellido, rol_id, activo, oficina_id, oficinas(id, nombre)")
       .eq("id", uid)
       .maybeSingle();
 

@@ -4,12 +4,12 @@ import PolizaPDF from "../../../components/pdf/PolizaPDF";
 import { buildPolizaPDF } from "../../../services/polizas";
 import { generateQR } from "../../../utils/generateQR";
 
-export default function TramiteExitoso({ poliza, onNueva, onVolver }) {
+export default function TramiteExitoso({ poliza, oficina, onNueva, onVolver }) {
   const [polizaPDF, setPolizaPDF] = useState(null);
 
   useEffect(() => {
     if (!poliza?.constancia) return;
-    const base = buildPolizaPDF(poliza);
+    const base = buildPolizaPDF(poliza, oficina);
     const qrUrl = `${window.location.origin}/verificar/${poliza.constancia}`;
     generateQR(qrUrl)
       .then(qrDataUrl => setPolizaPDF({ ...base, qrDataUrl }))
