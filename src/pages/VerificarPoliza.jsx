@@ -77,18 +77,7 @@ export default function VerificarPoliza() {
   useEffect(() => {
     if (!constancia) return;
     supabase
-      .from("polizas")
-      .select(`
-        id, constancia, numero_poliza, estatus, forma_pago,
-        fecha_inicio, fecha_fin, created_at, emision_hora,
-        marca, modelo, version, anio, placas, num_serie, num_motor, capacidad,
-        prima_neta, prima_total, derechos, iva, descuento, recargo, tipo_poliza,
-        clientes(nombre, apellido),
-        concesionarios(nombre, apellido1, apellido2),
-        oficinas(nombre)
-      `)
-      .eq("constancia", constancia)
-      .single()
+      .rpc("verificar_poliza_publica", { p_constancia: constancia })
       .then(({ data, error }) => {
         if (error || !data) { setNoFound(true); }
         else { setPoliza(data); }
@@ -97,14 +86,10 @@ export default function VerificarPoliza() {
   }, [constancia]);
 
   const cfg           = poliza ? (ESTATUS_CONFIG[poliza.estatus] ?? ESTATUS_CONFIG.CANCELADA) : null;
-  const cliente       = poliza?.clientes ?? {};
-  const conc          = poliza?.concesionarios ?? null;
-  const nombreBase    = [cliente.nombre, cliente.apellido].filter(Boolean).join(" ").toUpperCase();
-  const nombreConc    = conc
-    ? [conc.nombre, conc.apellido1, conc.apellido2].filter(Boolean).join(" ").toUpperCase()
-    : null;
+  const nombreBase    = (poliza?.cliente_nombre || "").toUpperCase();
+  const nombreConc    = poliza?.concesionario_nombre ? poliza.concesionario_nombre.toUpperCase() : null;
   const nombre        = nombreConc ? `${nombreBase} Y/O ${nombreConc}` : nombreBase;
-  const oficinaNombre = poliza?.oficinas?.nombre || "—";
+  const oficinaNombre = poliza?.oficina_nombre || "—";
   const formaPago     = poliza?.forma_pago || "CONTADO";
   const fechaEmision  = poliza?.created_at ? fmtFecha(poliza.created_at.split("T")[0]) : "—";
   const descripVehiculo = [poliza?.marca, poliza?.version || poliza?.modelo].filter(Boolean).join(" ");
