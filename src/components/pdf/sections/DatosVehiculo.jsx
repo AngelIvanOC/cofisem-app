@@ -44,7 +44,7 @@ export default function DatosVehiculo({ vehiculo }) {
             <Text style={t9}>{vehiculo.serie || "—"}</Text>
           </View>
         </View>
-        <View style={[bR, { flex: 16 }]}>
+        <View style={[bR, { flex: 22 }]}>
           <Title style={bB}>MOTOR</Title>
           <View style={pad}>
             <Text style={t9}>{vehiculo.motor || "—"}</Text>
@@ -62,13 +62,13 @@ export default function DatosVehiculo({ vehiculo }) {
             <Text style={t9}>{vehiculo.uso || "—"}</Text>
           </View>
         </View>
-        <View style={[bR, { flex: 14 }]}>
+        <View style={[bR, { flex: 10 }]}>
           <Title style={bB}>TIPO</Title>
           <View style={pad}>
             <Text style={t9}>{vehiculo.tipo || "—"}</Text>
           </View>
         </View>
-        <View style={{ flex: 12 }}>
+        <View style={{ flex: 10 }}>
           <Title style={bB}>COD. AMIS</Title>
           <View style={pad}>
             <Text style={t9}>{vehiculo.codAMIS || "—"}</Text>
