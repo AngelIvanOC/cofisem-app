@@ -175,6 +175,22 @@ export async function fetchPolizaById(id) {
   return data;
 }
 
+// ── Cancelar póliza ───────────────────────────────────────────────────────
+export async function cancelarPoliza(id, motivo, canceladoPor) {
+  const { error: e1 } = await supabase
+    .from('polizas')
+    .update({ estatus: 'CANCELADA', notas: motivo || null })
+    .eq('id', id);
+  if (e1) throw e1;
+
+  await supabase.from('polizas_historial').insert({
+    poliza_id:    id,
+    estatus_nuevo: 'CANCELADA',
+    notas:         motivo || null,
+    cambiado_por:  canceladoPor || null,
+  });
+}
+
 // ── Cargar pólizas de la lista ─────────────────────────────────────────────
 export async function fetchPolizas() {
   const { data, error } = await supabase

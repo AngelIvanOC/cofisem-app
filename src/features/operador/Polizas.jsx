@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { PDFViewer } from "@react-pdf/renderer";
-import { fetchPolizas, fetchPolizaById, buildPolizaPDF } from "../../services/polizas";
+import { fetchPolizas, fetchPolizaById, buildPolizaPDF, cancelarPoliza } from "../../services/polizas";
+import Swal from "sweetalert2";
+import { pdf } from "@react-pdf/renderer";
+import EndosoCancelacionPDF from "../../components/pdf/EndosoCancelacionPDF";
 import { generateQR } from "../../utils/generateQR";
 import { fmt$ } from "./utils/fmt";
 import Tab from "./components/Tab";
@@ -26,6 +29,7 @@ export default function Polizas({ usuario }) {
   const [menuAbierto,     setMenuAbierto]     = useState(null);
   const [modalCancelar,   setModalCancelar]   = useState(null);
   const [motivoCancel,    setMotivoCancel]    = useState("");
+  const [cancelando,      setCancelando]      = useState(false);
 
   const cargar = async () => {
     try {
@@ -376,9 +380,64 @@ export default function Polizas({ usuario }) {
                 Cerrar
               </button>
               <button
-                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-all shadow-sm shadow-red-600/20"
+                disabled={cancelando}
+                onClick={async () => {
+                  setCancelando(true);
+                  const constanciaLabel = modalCancelar.constancia || modalCancelar.numero_poliza;
+                  try {
+                    // 1. Obtener póliza completa para el PDF
+                    const polizaCompleta = await fetchPolizaById(modalCancelar.id);
+                    const polizaPDF = buildPolizaPDF(polizaCompleta, usuario?.oficinas);
+
+                    // 2. Fecha del endoso = hoy en DD/MM/YYYY
+                    const fechaEndoso = new Date().toLocaleDateString("es-MX", {
+                      day: "2-digit", month: "2-digit", year: "numeric",
+                    });
+
+                    // 3. Generar y descargar PDF del endoso
+                    const blob = await pdf(
+                      <EndosoCancelacionPDF
+                        poliza={polizaPDF}
+                        motivo={motivoCancel}
+                        fechaEndoso={fechaEndoso}
+                      />
+                    ).toBlob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `ENDOSO_CANCELACION-${constanciaLabel}.pdf`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+
+                    // 4. Cancelar en BD
+                    await cancelarPoliza(modalCancelar.id, motivoCancel, usuario?.id);
+                    setModalCancelar(null);
+                    setMotivoCancel("");
+                    await cargar();
+
+                    Swal.fire({
+                      icon: "success",
+                      title: "Póliza cancelada",
+                      text: `La póliza ${constanciaLabel} fue cancelada y se descargó el endoso.`,
+                      confirmButtonColor: "#13193a",
+                      confirmButtonText: "Aceptar",
+                      timer: 5000,
+                      timerProgressBar: true,
+                    });
+                  } catch (e) {
+                    Swal.fire({
+                      icon: "error",
+                      title: "Error",
+                      text: "No se pudo cancelar la póliza: " + e.message,
+                      confirmButtonColor: "#13193a",
+                    });
+                  } finally {
+                    setCancelando(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-all shadow-sm shadow-red-600/20 disabled:opacity-50"
               >
-                Cancelar póliza
+                {cancelando ? "Cancelando..." : "Cancelar póliza"}
               </button>
             </div>
           </div>
