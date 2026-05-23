@@ -8,6 +8,8 @@ import { fetchClientes } from "../../../services/clientes";
 import { fetchVendedores } from "../../../services/vendedores";
 import { emitirPoliza, numeroALetras } from "../../../services/polizas";
 import { fetchConcesionariosByCliente } from "../../../services/concesionarios";
+import { supabase } from "../../../supabaseClient";
+import Swal from "sweetalert2";
 import {
   getAnios,
   getMarcas,
@@ -78,6 +80,8 @@ export default function FormCotizacion({
   const [modalConc, setModalConc] = useState(false);
   const [modalVend, setModalVend] = useState(false);
   const [amisError, setAmisError] = useState(false);
+  const [serieError, setSerieError] = useState(null);
+  const [serieChecking, setSerieChecking] = useState(false);
 
   // "auto"    → el código lo genera el sistema al completar los campos
   // "busqueda" → el usuario escribió el código primero
@@ -274,7 +278,8 @@ export default function FormCotizacion({
       form.modelo &&
       form.serie.trim() &&
       form.motor.trim() &&
-      form.placas.trim()
+      form.placas.trim() &&
+      !serieChecking
     ),
     2: !!(form.clienteId && form.vendedorId && fechaInicioValida),
     3: true,
@@ -300,6 +305,25 @@ export default function FormCotizacion({
     }));
     setF("concesionario", concObj.id);
     setModalConc(false);
+  };
+
+  const checkSerie = async (serie) => {
+    const val = serie?.trim().toUpperCase();
+    if (!val || val.length < 5) return;
+    setSerieChecking(true);
+    setSerieError(null);
+    const { data } = await supabase
+      .from("polizas")
+      .select("constancia, estatus")
+      .eq("num_serie", val)
+      .in("estatus", ["VIGENTE", "POR VENCER"])
+      .maybeSingle();
+    if (data) {
+      setSerieError(
+        `Este No. Serie ya tiene una póliza vigente: ${data.constancia}`
+      );
+    }
+    setSerieChecking(false);
   };
 
   const handleEmitir = async () => {
@@ -521,7 +545,11 @@ export default function FormCotizacion({
                 <label className={lblCls}>No. de Serie (VIN) {req}</label>
                 <input
                   value={form.serie}
-                  onChange={(e) => setF("serie", e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    setF("serie", e.target.value.toUpperCase());
+                    setSerieError(null);
+                  }}
+                  onBlur={(e) => checkSerie(e.target.value)}
                   placeholder="17 caracteres"
                   maxLength={17}
                   className={inpCls}
@@ -1214,7 +1242,19 @@ export default function FormCotizacion({
               )}
             </div>
             <button
-              onClick={() => setPaso((p) => p + 1)}
+              onClick={async () => {
+                if (paso === 1 && serieError) {
+                  await Swal.fire({
+                    icon: "error",
+                    title: "No. Serie duplicado",
+                    text: serieError,
+                    confirmButtonColor: "#13193a",
+                    confirmButtonText: "Entendido",
+                  });
+                  return;
+                }
+                setPaso((p) => p + 1);
+              }}
               disabled={!canNext[paso]}
               className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm shadow-[#13193a]/15"
             >
