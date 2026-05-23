@@ -411,7 +411,7 @@ function EndosoPage({ poliza, motivo, fechaEndoso }) {
         <Text style={[t8b, { marginBottom: 8, fontSize: 10 }]}>
           TÉRMINOS Y CONDICIONES
         </Text>
-        <Text style={[t7, { marginBottom: 10, lineHeight: 1.5, fontSize: 8 }]}>
+        <Text style={[t7, { marginBottom: 14, lineHeight: 1.5, fontSize: 8 }]}>
           {TERMINOS_TEXT}
         </Text>
 
