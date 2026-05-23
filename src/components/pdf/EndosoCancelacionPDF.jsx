@@ -329,37 +329,96 @@ function EndosoPage({ poliza, motivo, fechaEndoso }) {
 
       {/* 5. Caja de contenido — 50% del alto de la página */}
       <View style={[CARD, { padding: 10, height: "50%" }]}>
-
         {/* Fechas: distribuidas a todo el ancho con space-between */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 10 }}>
-          <Text style={t8b}>Fecha de Emisión: <Text style={t8}>{fechaEndoso}</Text></Text>
-          <Text style={t8b}>Vigencia desde: <Text style={t8}>{fechaEndoso}</Text></Text>
-          <Text style={t8b}>Vigencia Hasta: <Text style={t8}>{vigencia?.fin || "—"}</Text></Text>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginBottom: 10,
+          }}
+        >
+          <Text style={t8b}>
+            Fecha de Emisión: <Text style={t8b}>{fechaEndoso}</Text>
+          </Text>
+          <Text style={t8b}>
+            Vigencia desde: <Text style={t8b}>{fechaEndoso}</Text>
+          </Text>
+          <Text style={t8b}>
+            Vigencia Hasta: <Text style={t8b}>{vigencia?.fin || "—"}</Text>
+          </Text>
         </View>
 
         {/* Bloque descriptivo — fontSize 14 */}
-        <Text style={{ fontSize: 14, fontFamily: "Helvetica", color: COLORS.ink, lineHeight: 1.5, marginBottom: 16 }}>
-          {"LAS ESPECIFICACIONES QUE SE DETALLAN SEGUIDAMENTE SE AGREGAN Y FORMAN PARTE DEL CERTIFICADO "}
-          <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", color: COLORS.ink }}>{numeroPoliza}</Text>
+        <Text
+          style={{
+            fontSize: 12,
+            fontFamily: "Helvetica",
+            color: COLORS.ink,
+            lineHeight: 1.5,
+            marginBottom: 16,
+          }}
+        >
+          {
+            "LAS ESPECIFICACIONES QUE SE DETALLAN SEGUIDAMENTE SE AGREGAN Y FORMAN PARTE DEL CERTIFICADO "
+          }
+          <Text
+            style={{
+              fontSize: 12,
+              fontFamily: "Helvetica-Bold",
+              color: COLORS.ink,
+            }}
+          >
+            {numeroPoliza}
+          </Text>
           {" EXPEDIDO A FAVOR DE "}
-          <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", color: COLORS.ink }}>{contratante.nombre}</Text>
-          {", LA PRESENTE ESPECIFICACIÓN SE COMPLEMENTA CON LA CARÁTULA PRINCIPAL Y LA RELACIÓN DE UBICACIONES"}
+          <Text
+            style={{
+              fontSize: 12,
+              fontFamily: "Helvetica-Bold",
+              color: COLORS.ink,
+            }}
+          >
+            {contratante.nombre}
+          </Text>
+          {
+            ", LA PRESENTE ESPECIFICACIÓN SE COMPLEMENTA CON LA CARÁTULA PRINCIPAL Y LA RELACIÓN DE UBICACIONES"
+          }
         </Text>
 
         {/* Endoso tipo y motivo — fontSize 14 */}
-        <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", color: COLORS.ink, marginBottom: 6 }}>
+        <Text
+          style={{
+            fontSize: 14,
+            fontFamily: "Helvetica",
+            color: COLORS.ink,
+            marginBottom: 12,
+          }}
+        >
           ENDOSO TIPO "C"
         </Text>
-        <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", color: COLORS.ink, marginBottom: 12 }}>
+        <Text
+          style={{
+            fontSize: 14,
+            fontFamily: "Helvetica",
+            color: COLORS.ink,
+            marginBottom: 12,
+          }}
+        >
           {(motivo || "").toUpperCase()}
         </Text>
 
         {/* Términos */}
-        <Text style={[t8b, { marginBottom: 8 }]}>TÉRMINOS Y CONDICIONES</Text>
-        <Text style={[t7, { marginBottom: 10, lineHeight: 1.5 }]}>{TERMINOS_TEXT}</Text>
+        <Text style={[t8b, { marginBottom: 8, fontSize: 10 }]}>
+          TÉRMINOS Y CONDICIONES
+        </Text>
+        <Text style={[t7, { marginBottom: 10, lineHeight: 1.5, fontSize: 8 }]}>
+          {TERMINOS_TEXT}
+        </Text>
 
-        <Text style={[t8b, { marginBottom: 3 }]}>TERRITORIALIDAD</Text>
-        <Text style={t7}>República Mexicana</Text>
+        <Text style={[t8b, { marginBottom: 3, fontSize: 10 }]}>
+          TERRITORIALIDAD
+        </Text>
+        <Text style={[t7, { fontSize: 8 }]}>República Mexicana</Text>
       </View>
 
       {/* 6. Firma */}
