@@ -260,7 +260,7 @@ export default function VerificarPoliza() {
               {/* Info principal */}
               <div className="bg-gray-50 rounded-2xl px-4 py-1 mb-1">
                 <Row label="No. Constancia" value={poliza.constancia} mono />
-                <Row label="Agente / Venta" value={oficinaNombre} />
+                <Row label="Oficina Emisora" value={oficinaNombre} />
                 <Row label="Cliente" value={nombre} />
               </div>
 
