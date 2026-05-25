@@ -124,7 +124,7 @@ function Row({ label, value, mono }) {
 
 function TotalRow({ label, value }) {
   return (
-    <div className="flex justify-between items-center py-2 bg-[#13193a] -mx-4 px-4 mt-1 first:rounded-t-none last:rounded-b-xl">
+    <div className="flex justify-between items-center py-2 bg-[#13193a] -mx-4 px-4 mt-1 rounded-xl">
       <span className="text-xs text-white/70 font-semibold">{label}</span>
       <span className="text-sm font-black text-white font-mono">{value}</span>
     </div>
@@ -398,7 +398,7 @@ export default function VerificarPoliza() {
                     mono
                   />
                 </div>
-                <div className="overflow-hidden rounded-xl mt-2">
+                <div className="overflow-hidden rounded-xl mt-2 px-5">
                   <TotalRow
                     label="Total"
                     value={fmtMonto(poliza.prima_total)}
