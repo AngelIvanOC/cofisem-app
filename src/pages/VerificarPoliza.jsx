@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { mockCoberturas } from "../components/pdf/mockData";
 import gamanLogo from "../assets/GamanLogoOpt.jpg";
+import { PRECIO_MATRIZ } from "../features/operador/constants/cobertura";
 
 const ESTATUS_CONFIG = {
   VIGENTE: {
@@ -161,6 +162,23 @@ export default function VerificarPoliza() {
   const nombre = nombreConc ? `${nombreBase} Y/O ${nombreConc}` : nombreBase;
   const oficinaNombre = poliza?.oficina_nombre || "—";
   const formaPago = poliza?.forma_pago || "CONTADO";
+  const primaTotal = poliza?.prima_total ?? 0;
+
+  let primerPago = primaTotal;
+  let pagoSubs = 0;
+  let nSubs = 0;
+  if (formaPago !== "CONTADO") {
+    for (const tierData of Object.values(PRECIO_MATRIZ)) {
+      const entry = tierData[formaPago];
+      if (entry && Math.abs(entry.total - primaTotal) < 0.01) {
+        primerPago = entry.primerPago;
+        pagoSubs = entry.pagoSubs;
+        nSubs = entry.nSubs;
+        break;
+      }
+    }
+  }
+
   const fechaEmision = poliza?.created_at
     ? fmtFecha(poliza.created_at.split("T")[0])
     : "—";
@@ -401,13 +419,16 @@ export default function VerificarPoliza() {
                 <div className="overflow-hidden rounded-xl mt-2 px-5">
                   <TotalRow
                     label="Total"
-                    value={fmtMonto(poliza.prima_total)}
+                    value={fmtMonto(primaTotal)}
                   />
                   <TotalRow
                     label="Pago Inicial"
-                    value={fmtMonto(poliza.prima_total)}
+                    value={fmtMonto(primerPago)}
                   />
-                  <TotalRow label="Pagos Subsecuentes" value={fmtMonto(0)} />
+                  <TotalRow
+                    label={nSubs > 0 ? `Pagos Subsecuentes (×${nSubs})` : "Pagos Subsecuentes"}
+                    value={fmtMonto(pagoSubs)}
+                  />
                 </div>
               </div>
 
