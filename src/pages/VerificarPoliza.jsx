@@ -417,16 +417,14 @@ export default function VerificarPoliza() {
                   />
                 </div>
                 <div className="overflow-hidden rounded-xl mt-2 px-5">
+                  <TotalRow label="Total" value={fmtMonto(primaTotal)} />
+                  <TotalRow label="Pago Inicial" value={fmtMonto(primerPago)} />
                   <TotalRow
-                    label="Total"
-                    value={fmtMonto(primaTotal)}
-                  />
-                  <TotalRow
-                    label="Pago Inicial"
-                    value={fmtMonto(primerPago)}
-                  />
-                  <TotalRow
-                    label={nSubs > 0 ? `Pagos Subsecuentes (×${nSubs})` : "Pagos Subsecuentes"}
+                    label={
+                      nSubs > 0
+                        ? `Pagos Subsecuentes (×${nSubs})`
+                        : "Pagos Subsecuentes"
+                    }
                     value={fmtMonto(pagoSubs)}
                   />
                 </div>
