@@ -121,31 +121,26 @@ export default function FormCotizacion({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.modelo, form.marca, form.tipoVehiculo, form.version]);
 
-  // ── Catálogo vehículos — sincrónico, sin API ──────────────────────────────
-  const marcasDisp = getMarcas(form.modelo); // filtradas por año
-  const modelosDisp = getModelos(form.marca, form.modelo); // filtrados por año+marca
-  const versionesDisp = getVersiones(form.marca, form.tipoVehiculo); // por marca+modelo
+  // ── Catálogo vehículos ────────────────────────────────────────────────────
+  const marcasDisp    = getMarcas();
+  const versionesDisp = getVersiones(form.marca, form.tipoVehiculo);
+
+  const [modelosDisp,    setModelosDisp]    = useState([]);
+  const [loadingModelos, setLoadingModelos] = useState(false);
+
+  useEffect(() => {
+    if (!form.marca || !form.modelo) { setModelosDisp([]); return; }
+    let cancelled = false;
+    setLoadingModelos(true);
+    getModelos(form.marca, form.modelo).then((lista) => {
+      if (!cancelled) { setModelosDisp(lista); setLoadingModelos(false); }
+    });
+    return () => { cancelled = true; };
+  }, [form.marca, form.modelo]);
 
   const handleAnio = (e) => {
     amisFuente.current = "auto";
-    const anio = e.target.value;
-    const marcasValidas = getMarcas(anio);
-    if (!marcasValidas.includes(form.marca)) {
-      setForm((f) => ({
-        ...f,
-        modelo: anio,
-        marca: "",
-        tipoVehiculo: "",
-        version: "",
-      }));
-    } else {
-      const modelosValidos = getModelos(form.marca, anio);
-      if (!modelosValidos.includes(form.tipoVehiculo)) {
-        setForm((f) => ({ ...f, modelo: anio, tipoVehiculo: "", version: "" }));
-      } else {
-        setF("modelo", anio);
-      }
-    }
+    setForm((f) => ({ ...f, modelo: e.target.value, tipoVehiculo: "", version: "" }));
   };
 
   const handleMarca = (e) => {
@@ -487,15 +482,22 @@ export default function FormCotizacion({
 
               {/* Modelo */}
               <div>
-                <label className={lblCls}>Modelo {req}</label>
+                <label className={lblCls}>
+                  Modelo {req}
+                  {loadingModelos && (
+                    <span className="ml-1.5 normal-case font-normal text-gray-300 text-[10px]">
+                      cargando…
+                    </span>
+                  )}
+                </label>
                 <select
                   value={form.tipoVehiculo}
                   onChange={handleModeloVeh}
-                  disabled={!form.marca}
-                  className={inpCls + (!form.marca ? disCls : "")}
+                  disabled={!form.marca || loadingModelos}
+                  className={inpCls + (!form.marca || loadingModelos ? disCls : "")}
                 >
                   <option value="">
-                    {!form.marca ? "Elige marca primero" : "Selecciona modelo"}
+                    {loadingModelos ? "Cargando modelos…" : !form.marca ? "Elige marca primero" : "Selecciona modelo"}
                   </option>
                   {modelosDisp.map((m) => (
                     <option key={m}>{m}</option>
