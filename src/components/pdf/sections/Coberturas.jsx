@@ -191,7 +191,7 @@ export default function Coberturas({ coberturas, prima, condiciones }) {
         {[
           { label: "PRIMA NETA", value: prima.neta, flex: 3 },
           { label: "DESCUENTOS", value: prima.descuento, flex: 1 },
-          { label: "PRONTO PAGO", value: prima.premioNeto, flex: 1 },
+          { label: "PRONTO PAGO", value: prima.descuento, flex: 1 },
           { label: "RECARGOS", value: prima.recargo, flex: 1 },
           { label: "DERECHOS", value: prima.derechos, flex: 1 },
           { label: "IVA", value: prima.iva, flex: 1.5 },
