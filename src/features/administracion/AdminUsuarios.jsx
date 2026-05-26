@@ -46,6 +46,106 @@ const formatRol = (r) =>
     .map((w) => w[0] + w.slice(1).toLowerCase())
     .join(" ") ?? "";
 
+// ── Modal de visualización de usuario ──────────────────────
+function ModalVerUsuario({ usuario, onClose }) {
+  const [verPass, setVerPass] = useState(false);
+  const u = usuario;
+  const rolNombre = u.roles?.nombre ?? "";
+  const cls = ROL_CLS[rolNombre] ?? "bg-gray-100 text-gray-500 border-gray-200";
+  const fecha = u.created_at
+    ? new Date(u.created_at).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })
+    : "—";
+
+  const Row = ({ label, value, mono = false }) => (
+    <div className="flex items-start justify-between py-2.5 border-b border-gray-50 last:border-0 gap-4">
+      <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide shrink-0">{label}</span>
+      <span className={`text-xs text-right text-[#13193a] font-semibold ${mono ? "font-mono" : ""}`}>{value || "—"}</span>
+    </div>
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.55)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+          <div className="w-10 h-10 rounded-full bg-[#13193a] text-white flex items-center justify-center text-sm font-bold shrink-0">
+            {u.nombre?.[0]}{u.apellido?.[0]}
+          </div>
+          <div className="flex-1">
+            <h2 className="text-sm font-bold text-[#13193a]">{u.nombre} {u.apellido}</h2>
+            <span className={`inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls} mt-0.5`}>
+              {formatRol(rolNombre)}
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Datos */}
+        <div className="px-6 py-4">
+          <Row label="ID sistema" value={u.id_muestra} mono />
+          <Row label="Correo" value={u.email} mono />
+          <Row label="Oficina" value={u.oficinas?.nombre} />
+          <Row label="Estado" value={u.activo ? "Activo" : "Inactivo"} />
+          <Row label="Creado" value={fecha} />
+
+          {/* Contraseña */}
+          <div className="flex items-center justify-between py-2.5 gap-4">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide shrink-0">Contraseña</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-semibold text-[#13193a]">
+                {u.contrasena
+                  ? (verPass ? u.contrasena : "••••••••")
+                  : "—"}
+              </span>
+              {u.contrasena && (
+                <button
+                  type="button"
+                  onClick={() => setVerPass((v) => !v)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {verPass ? (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 pb-5">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Modal de creación de usuario ───────────────────────────
 function ModalUsuario({ onClose, onGuardar, roles, oficinas }) {
   const [form, setForm] = useState({
@@ -58,6 +158,7 @@ function ModalUsuario({ onClose, onGuardar, roles, oficinas }) {
   });
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState(null);
+  const [verPassword, setVerPassword] = useState(false);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -190,18 +291,34 @@ function ModalUsuario({ onClose, onGuardar, roles, oficinas }) {
           {/* Password */}
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-              Contraseña temporal <span className="text-red-400">*</span>
+              Contraseña <span className="text-red-400">*</span>
             </label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={(e) => set("password", e.target.value)}
-              placeholder="Mínimo 6 caracteres"
-              className={inpCls}
-            />
-            <p className="text-[11px] text-gray-400 mt-1.5">
-              El usuario deberá cambiarla en su primer inicio de sesión.
-            </p>
+            <div className="relative">
+              <input
+                type={verPassword ? "text" : "password"}
+                value={form.password}
+                onChange={(e) => set("password", e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                className={inpCls + " pr-10"}
+              />
+              <button
+                type="button"
+                onClick={() => setVerPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                tabIndex={-1}
+              >
+                {verPassword ? (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Rol */}
@@ -332,6 +449,7 @@ export default function AdminUsuarios() {
   const [filtroOficina, setFiltroOficina] = useState("Todas");
   const [filtroActivo, setFiltroActivo] = useState("Todos");
   const [modalNuevo, setModalNuevo] = useState(false);
+  const [usuarioVer, setUsuarioVer] = useState(null);
 
   const cargarDatos = useCallback(async () => {
     setCargando(true);
@@ -342,7 +460,7 @@ export default function AdminUsuarios() {
     ] = await Promise.all([
       supabase
         .from("usuarios")
-        .select("*, roles(nombre), oficinas(id, nombre)")
+        .select("*, roles(nombre), oficinas(id, nombre), contrasena")
         .order("created_at", { ascending: false }),
       supabase.from("roles").select("*").order("nombre"),
       supabase.from("oficinas").select("id, nombre").order("nombre"),
@@ -386,6 +504,7 @@ export default function AdminUsuarios() {
       email: form.email.trim(),
       rol_id: Number(form.rol_id),
       oficina_id: oficina_id,
+      contrasena: form.password,
       activo: true,
     });
 
@@ -666,9 +785,16 @@ export default function AdminUsuarios() {
                         </td>
                         {/* Acciones */}
                         <td className="px-5 py-3.5">
-                          <span className="text-[11px] text-gray-300 italic">
-                            —
-                          </span>
+                          <button
+                            onClick={() => setUsuarioVer(u)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-[#13193a] hover:bg-[#13193a]/6 transition-colors"
+                            title="Ver datos del usuario"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -695,6 +821,14 @@ export default function AdminUsuarios() {
           oficinas={oficinas}
           onClose={() => setModalNuevo(false)}
           onGuardar={handleCrearUsuario}
+        />
+      )}
+
+      {/* Modal ver usuario */}
+      {usuarioVer && (
+        <ModalVerUsuario
+          usuario={usuarioVer}
+          onClose={() => setUsuarioVer(null)}
         />
       )}
     </div>
