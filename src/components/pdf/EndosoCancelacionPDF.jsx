@@ -29,7 +29,8 @@ const TERMINOS_TEXT =
   "según las cláusulas y especificaciones pactadas en este contrato de seguro";
 
 // ── Header con título "ENDOSO" ─────────────────────────────────
-function HeaderEndoso({ empresa }) {
+function HeaderEndoso({ empresa, numeroControl }) {
+  const ctrlStr = String(numeroControl ?? 1).padStart(7, "0");
   return (
     <View style={{ marginBottom: 0 }}>
       <View style={[styles.row, { alignItems: "flex-start" }]}>
@@ -58,8 +59,56 @@ function HeaderEndoso({ empresa }) {
           </View>
         </View>
       </View>
-      <View style={{ width: "100%", paddingBottom: 8 }}>
-        <Text style={[styles.docTitle, { fontSize: 14 }]}>ENDOSO</Text>
+      <View
+        style={{ flexDirection: "row", alignItems: "center", paddingBottom: 8 }}
+      >
+        <Text
+          style={[styles.docTitle, { fontSize: 14, flex: 1, paddingLeft: 70 }]}
+        >
+          ENDOSO
+        </Text>
+        {/* Caja de control */}
+        <View
+          style={{
+            width: 80,
+            borderWidth: 1,
+            borderColor: "#333",
+            borderRadius: 4,
+            overflow: "hidden",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: TITLE_BG,
+              borderBottomWidth: 1,
+              borderBottomColor: "#333",
+              paddingVertical: 2,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 7,
+                fontFamily: "Helvetica-Bold",
+                textAlign: "center",
+                color: COLORS.ink,
+              }}
+            >
+              CONTROL
+            </Text>
+          </View>
+          <View style={{ paddingVertical: 4 }}>
+            <Text
+              style={{
+                fontSize: 11,
+                fontFamily: "Helvetica-Bold",
+                textAlign: "center",
+                color: "#f62929",
+              }}
+            >
+              {ctrlStr}
+            </Text>
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -308,13 +357,19 @@ function FirmaEndoso() {
 }
 
 // ── Página del endoso ──────────────────────────────────────────
-function EndosoPage({ poliza, motivo, fechaEndoso, tipoEndoso = "C" }) {
+function EndosoPage({
+  poliza,
+  motivo,
+  fechaEndoso,
+  tipoEndoso = "C",
+  numeroControl,
+}) {
   const { empresa, numeroPoliza, contratante, vigencia } = poliza;
 
   return (
     <Page size="A4" style={styles.page}>
       {/* 1. Header */}
-      <HeaderEndoso empresa={empresa} />
+      <HeaderEndoso empresa={empresa} numeroControl={numeroControl} />
 
       {/* 2. Contratante (sin conductor) */}
       <DatosContratanteEndoso poliza={poliza} />
@@ -328,7 +383,7 @@ function EndosoPage({ poliza, motivo, fechaEndoso, tipoEndoso = "C" }) {
       </Text>
 
       {/* 5. Caja de contenido — 50% del alto de la página */}
-      <View style={[CARD, { padding: 10, height: "50%" }]}>
+      <View style={[CARD, { padding: 10, height: "40%" }]}>
         {/* Fechas: distribuidas a todo el ancho con space-between */}
         <View
           style={{
@@ -433,6 +488,7 @@ export default function EndosoCancelacionPDF({
   motivo = "",
   fechaEndoso = "",
   tipoEndoso = "C",
+  numeroControl = 1,
 }) {
   return (
     <Document
@@ -441,7 +497,13 @@ export default function EndosoCancelacionPDF({
       subject="Endoso de Cancelación"
       creator="Cofisem"
     >
-      <EndosoPage poliza={poliza} motivo={motivo} fechaEndoso={fechaEndoso} tipoEndoso={tipoEndoso} />
+      <EndosoPage
+        poliza={poliza}
+        motivo={motivo}
+        fechaEndoso={fechaEndoso}
+        tipoEndoso={tipoEndoso}
+        numeroControl={numeroControl}
+      />
     </Document>
   );
 }

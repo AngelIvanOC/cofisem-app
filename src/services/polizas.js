@@ -45,11 +45,12 @@ function fmtFecha(str) {
 }
 
 // ── Generar constancia ─────────────────────────────────────────────────────
-function generarConstancia(fecha, seqGlobal, seqCliente) {
-  const dd = String(fecha.getDate()).padStart(2,'0');
-  const mm = String(fecha.getMonth() + 1).padStart(2,'0');
-  const yy = String(fecha.getFullYear()).slice(-2);
-  return `${dd}${mm}${yy}${String(seqGlobal).padStart(8,'0')}-${String(seqCliente).padStart(2,'0')}`;
+// Formato: 01 + año(2) + oficina(2) + seq_global(8) - versión_vehiculo(2)
+// Ejemplo: 01 26 01 00000001 - 01  →  0126010000000101-01
+function generarConstancia(fecha, seqGlobal, seqVehiculo, oficinaId) {
+  const yy   = String(fecha.getFullYear()).slice(-2);
+  const ofic = String(oficinaId || 1).padStart(2, '0');
+  return `01${yy}${ofic}${String(seqGlobal).padStart(8,'0')}-${String(seqVehiculo).padStart(2,'0')}`;
 }
 
 // ── Emitir póliza ──────────────────────────────────────────────────────────
@@ -128,15 +129,19 @@ export async function emitirPoliza({
     .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA'])
     .lte('id', newId);
 
-  // 3. Contar pólizas emitidas de este cliente (para sufijo)
-  const { count: clienteSeq } = await supabase
-    .from('polizas')
-    .select('id', { count: 'exact', head: true })
-    .eq('cliente_id', clienteId)
-    .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA'])
-    .lte('id', newId);
+  // 3. Contar veces que este num_serie ha sido asegurado (versión del vehículo)
+  let vehiculoSeq = 1;
+  if (serie) {
+    const { count } = await supabase
+      .from('polizas')
+      .select('id', { count: 'exact', head: true })
+      .eq('num_serie', serie.toUpperCase())
+      .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA'])
+      .lte('id', newId);
+    vehiculoSeq = count ?? 1;
+  }
 
-  const constancia = generarConstancia(ahora, globalSeq ?? 1, clienteSeq ?? 1);
+  const constancia = generarConstancia(ahora, globalSeq ?? 1, vehiculoSeq, oficinaId);
 
   // 4. Actualizar con constancia y numero_poliza definitivo
   const { data: final, error: e2 } = await supabase

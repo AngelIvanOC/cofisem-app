@@ -22,7 +22,10 @@ export default function Polizas({ usuario }) {
   const [error,        setError]        = useState(null);
   const [busqueda,     setBusqueda]     = useState("");
   const [filtroEst,    setFiltroEst]    = useState("Todos");
-  const [cotizaciones,    setCotizaciones]    = useState([]);
+  const [cotizaciones,    setCotizaciones]    = useState(() => {
+    try { return JSON.parse(localStorage.getItem("cofisem_cotizaciones") || "[]"); }
+    catch { return []; }
+  });
   const [tramiteOk,       setTramiteOk]       = useState(null);
   const [cotActiva,       setCotActiva]       = useState(null);
   const [polizaViewer,    setPolizaViewer]    = useState(null);
@@ -111,6 +114,7 @@ export default function Polizas({ usuario }) {
           motivo={motivoEdicion}
           fechaEndoso={fechaEndoso}
           tipoEndoso="A"
+          numeroControl={editFull.id}
         />
       ).toBlob();
       const url = URL.createObjectURL(blob);
@@ -160,6 +164,11 @@ export default function Polizas({ usuario }) {
   useEffect(() => { cargar(); }, []);
 
   useEffect(() => {
+    try { localStorage.setItem("cofisem_cotizaciones", JSON.stringify(cotizaciones)); }
+    catch { /* cuota llena — ignorar */ }
+  }, [cotizaciones]);
+
+  useEffect(() => {
     if (!menuAbierto) return;
     const cerrar = () => setMenuAbierto(null);
     document.addEventListener("click", cerrar);
@@ -182,6 +191,7 @@ export default function Polizas({ usuario }) {
   };
 
   const tramitarPoliza = async (poliza) => {
+    setCotizaciones(cs => cs.filter(c => c.id !== cotActiva?.id));
     setTramiteOk(poliza);
     setTab("exito");
     await cargar();
@@ -733,6 +743,7 @@ export default function Polizas({ usuario }) {
                         motivo={motivoCancel}
                         fechaEndoso={fechaEndoso}
                         tipoEndoso={tipoEndoso}
+                        numeroControl={modalCancelar.id}
                       />
                     ).toBlob();
                     const url = URL.createObjectURL(blob);

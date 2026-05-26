@@ -14,11 +14,10 @@ export const NAV_POR_ROL = {
   // Cotizaciones = tab dentro de /polizas (OperadorPolizas)
   // El dashboard tiene acceso rápido a Cotizar / Nueva cotización
   OPERADOR: [
-    { label: "Inicio",       path: "/dashboard",    icon: "home"       },
-    { label: "Clientes",     path: "/clientes",     icon: "users"      },
-    { label: "Pólizas",      path: "/polizas",      icon: "file-text"  },
-    { label: "Vendedores",   path: "/vendedores",   icon: "hard-hat"   },
-    { label: "Corte diario", path: "/corte-diario", icon: "calendar"   },
+    { label: "Inicio",     path: "/dashboard",  icon: "home"      },
+    { label: "Clientes",   path: "/clientes",   icon: "users"     },
+    { label: "Pólizas",   path: "/polizas",    icon: "file-text" },
+    { label: "Vendedores", path: "/vendedores", icon: "hard-hat"  },
   ],
 
   // ── ANALISTA ──────────────────────────────────────────────
