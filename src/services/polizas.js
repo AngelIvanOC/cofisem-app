@@ -279,7 +279,7 @@ export function buildPolizaPDF(poliza, oficina) {
     emisionHora:  poliza.emision_hora || '',
     estatus:      poliza.estatus || 'VIGENTE',
     codigoQR:     poliza.constancia
-      ? `${window.location.origin}/verificar/${poliza.constancia}`
+      ? `${window.location.origin}/gaman/verificar/${poliza.constancia}`
       : '',
 
     contratante: {

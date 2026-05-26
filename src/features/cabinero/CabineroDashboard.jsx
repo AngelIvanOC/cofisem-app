@@ -32,7 +32,7 @@ export function CabineroDashboard({ usuario }) {
             <p className="text-xs text-gray-400 mt-0.5">Cabina de siniestros</p>
           </div>
           <button
-            onClick={() => navigate("/siniestros/nuevo")}
+            onClick={() => navigate("/gaman/siniestros/nuevo")}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-semibold hover:bg-[#1e2a50] transition-all shadow-sm shadow-[#13193a]/20"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -66,7 +66,7 @@ export function CabineroDashboard({ usuario }) {
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
             <p className="text-sm font-bold text-[#13193a]">Siniestros del día</p>
             <button
-              onClick={() => navigate("/siniestros")}
+              onClick={() => navigate("/gaman/siniestros")}
               className="text-xs text-blue-500 font-semibold hover:underline"
             >
               Ver todos →

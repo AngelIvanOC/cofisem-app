@@ -208,7 +208,7 @@ export function SupervisorDashboard({ usuario }) {
             </div>
             <div className="p-4 border-t border-gray-50">
               <button
-                onClick={() => navigate("/siniestros")}
+                onClick={() => navigate("/gaman/siniestros")}
                 className="w-full py-2 rounded-xl bg-[#13193a] text-white text-xs font-bold hover:bg-[#1e2a50] transition-all"
               >
                 Ver todos los siniestros
@@ -223,7 +223,7 @@ export function SupervisorDashboard({ usuario }) {
                 Carga de ajustadores
               </p>
               <button
-                onClick={() => navigate("/ajustadores")}
+                onClick={() => navigate("/gaman/ajustadores")}
                 className="text-xs text-blue-500 font-semibold hover:underline"
               >
                 Ver detalle
@@ -349,7 +349,7 @@ export function SupervisorDashboard({ usuario }) {
               ))}
             </div>
             <button
-              onClick={() => navigate("/reportes-siniestros")}
+              onClick={() => navigate("/gaman/reportes-siniestros")}
               className="w-full py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-all"
             >
               Ver reporte completo →

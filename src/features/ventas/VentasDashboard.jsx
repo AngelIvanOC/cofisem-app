@@ -124,7 +124,7 @@ export function VentasDashboard({ usuario }) {
             </p>
           </div>
           <button
-            onClick={() => navigate("/ventas-reportes")}
+            onClick={() => navigate("/gaman/ventas-reportes")}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
           >
             <svg
@@ -266,7 +266,7 @@ export function VentasDashboard({ usuario }) {
                 Ranking de vendedores
               </p>
               <button
-                onClick={() => navigate("/ventas-vendedores")}
+                onClick={() => navigate("/gaman/ventas-vendedores")}
                 className="text-xs text-blue-500 font-semibold hover:underline"
               >
                 Ver detalle
@@ -371,7 +371,7 @@ export function VentasDashboard({ usuario }) {
             </div>
             <div className="p-4 border-t border-gray-50">
               <button
-                onClick={() => navigate("/ventas-cotizaciones")}
+                onClick={() => navigate("/gaman/ventas-cotizaciones")}
                 className="w-full py-2 rounded-xl bg-[#13193a] text-white text-xs font-bold hover:bg-[#1e2a50] transition-all"
               >
                 Ver todas las cotizaciones

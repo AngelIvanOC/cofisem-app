@@ -43,7 +43,7 @@ export default function SiniestroNuevo() {
     // TODO: supabase.from("siniestros").insert({ poliza_id: poliza.id, ...form })
     await new Promise((r) => setTimeout(r, 1000));
     setLoading(false);
-    navigate("/siniestros");
+    navigate("/gaman/siniestros");
   };
 
   const resetBusqueda = () => {

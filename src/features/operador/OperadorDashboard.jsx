@@ -118,7 +118,7 @@ export default function OperadorDashboard({ usuario }) {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => navigate("/cotizaciones/nueva")}
+              onClick={() => navigate("/gaman/cotizaciones/nueva")}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-semibold hover:bg-[#1e2a50] transition-all shadow-sm shadow-[#13193a]/20"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -144,7 +144,7 @@ export default function OperadorDashboard({ usuario }) {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Pólizas emitidas hoy — REAL */}
           <button
-            onClick={() => navigate("/polizas")}
+            onClick={() => navigate("/gaman/polizas")}
             className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
           >
             <div className="flex items-start justify-between mb-3">
@@ -162,7 +162,7 @@ export default function OperadorDashboard({ usuario }) {
 
           {/* Cotizaciones guardadas — localStorage */}
           <button
-            onClick={() => navigate("/polizas")}
+            onClick={() => navigate("/gaman/polizas")}
             className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
           >
             <div className="flex items-start justify-between mb-3">
@@ -180,7 +180,7 @@ export default function OperadorDashboard({ usuario }) {
 
           {/* Pólizas por vencer — REAL */}
           <button
-            onClick={() => navigate("/polizas")}
+            onClick={() => navigate("/gaman/polizas")}
             className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
           >
             <div className="flex items-start justify-between mb-3">
@@ -198,7 +198,7 @@ export default function OperadorDashboard({ usuario }) {
 
           {/* Prima acumulada del mes — REAL */}
           <button
-            onClick={() => navigate("/polizas")}
+            onClick={() => navigate("/gaman/polizas")}
             className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
           >
             <div className="flex items-start justify-between mb-3">
@@ -221,7 +221,7 @@ export default function OperadorDashboard({ usuario }) {
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
               <p className="text-sm font-bold text-[#13193a]">Pólizas emitidas hoy</p>
-              <button onClick={() => navigate("/polizas")} className="text-xs text-blue-500 font-semibold hover:underline">
+              <button onClick={() => navigate("/gaman/polizas")} className="text-xs text-blue-500 font-semibold hover:underline">
                 Ver todas
               </button>
             </div>
@@ -269,7 +269,7 @@ export default function OperadorDashboard({ usuario }) {
                   </span>
                 )}
               </p>
-              <button onClick={() => navigate("/polizas")} className="text-xs text-blue-500 font-semibold hover:underline">
+              <button onClick={() => navigate("/gaman/polizas")} className="text-xs text-blue-500 font-semibold hover:underline">
                 Ver todas
               </button>
             </div>
@@ -285,7 +285,7 @@ export default function OperadorDashboard({ usuario }) {
                 {cotizaciones.slice(0, 4).map((c, i) => (
                   <button
                     key={i}
-                    onClick={() => navigate("/polizas")}
+                    onClick={() => navigate("/gaman/polizas")}
                     className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50/60 transition-colors text-left"
                   >
                     <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
@@ -301,7 +301,7 @@ export default function OperadorDashboard({ usuario }) {
                   </button>
                 ))}
                 {cotizaciones.length > 4 && (
-                  <button onClick={() => navigate("/polizas")} className="w-full text-center py-2.5 text-[11px] text-blue-500 font-semibold hover:bg-gray-50 transition-colors">
+                  <button onClick={() => navigate("/gaman/polizas")} className="w-full text-center py-2.5 text-[11px] text-blue-500 font-semibold hover:bg-gray-50 transition-colors">
                     +{cotizaciones.length - 4} más → Ver todas
                   </button>
                 )}

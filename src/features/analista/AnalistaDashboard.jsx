@@ -121,7 +121,7 @@ export default function AnalistaDashboard({ usuario }) {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => navigate("/polizas")}
+              onClick={() => navigate("/gaman/polizas")}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-semibold hover:bg-[#1e2a50] transition-all"
             >
               <svg
@@ -140,7 +140,7 @@ export default function AnalistaDashboard({ usuario }) {
               Pólizas pendientes
             </button>
             <button
-              onClick={() => navigate("/reportes")}
+              onClick={() => navigate("/gaman/reportes")}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
             >
               Reportes
@@ -280,7 +280,7 @@ export default function AnalistaDashboard({ usuario }) {
             </div>
             <div className="p-4 border-t border-gray-50">
               <button
-                onClick={() => navigate("/polizas")}
+                onClick={() => navigate("/gaman/polizas")}
                 className="w-full py-2 rounded-xl bg-[#13193a] text-white text-xs font-bold hover:bg-[#1e2a50] transition-all"
               >
                 Ver todas las pólizas
@@ -362,7 +362,7 @@ export default function AnalistaDashboard({ usuario }) {
               ))}
             </div>
             <button
-              onClick={() => navigate("/corte-diario")}
+              onClick={() => navigate("/gaman/corte-diario")}
               className="w-full mt-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-all"
             >
               Ver corte completo
