@@ -45,15 +45,14 @@ export default function ModalVendedor({
           </button>
         </div>
         <div className="p-6 space-y-4">
-          <Campo
-            label="Nombre(s)"
-            value={form.nombre}
-            onChange={(v) => onFieldChange("nombre", v)}
-            placeholder="Nombre"
-            req
-          />
-
           <div className="grid grid-cols-2 gap-4">
+            <Campo
+              label="Nombre(s)"
+              value={form.nombre}
+              onChange={(v) => onFieldChange("nombre", v)}
+              placeholder="Nombre"
+              req
+            />
             <Campo
               label="Primer apellido"
               value={form.apellido1}
@@ -61,13 +60,13 @@ export default function ModalVendedor({
               placeholder="Primer apellido"
               req
             />
-            <Campo
-              label="Segundo apellido"
-              value={form.apellido2}
-              onChange={(v) => onFieldChange("apellido2", v)}
-              placeholder="Segundo apellido"
-            />
           </div>
+          <Campo
+            label="Segundo apellido"
+            value={form.apellido2}
+            onChange={(v) => onFieldChange("apellido2", v)}
+            placeholder="Segundo apellido"
+          />
           <Campo
             label="Teléfono"
             type="tel"

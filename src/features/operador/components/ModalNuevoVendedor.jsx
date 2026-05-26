@@ -94,14 +94,14 @@ export default function ModalNuevoVendedor({ onClose, onGuardar, usuarioId }) {
         </div>
 
         <div className="p-6 space-y-4">
-          <Campo
-            label="Nombre(s)"
-            value={form.nombre}
-            onChange={(v) => setF("nombre", v)}
-            placeholder="Nombre"
-            req
-          />
           <div className="grid grid-cols-2 gap-4">
+            <Campo
+              label="Nombre(s)"
+              value={form.nombre}
+              onChange={(v) => setF("nombre", v)}
+              placeholder="Nombre"
+              req
+            />
             <Campo
               label="Primer apellido"
               value={form.apellido1}
@@ -109,13 +109,13 @@ export default function ModalNuevoVendedor({ onClose, onGuardar, usuarioId }) {
               placeholder="Primer apellido"
               req
             />
-            <Campo
-              label="Segundo apellido"
-              value={form.apellido2}
-              onChange={(v) => setF("apellido2", v)}
-              placeholder="Segundo apellido"
-            />
           </div>
+          <Campo
+            label="Segundo apellido"
+            value={form.apellido2}
+            onChange={(v) => setF("apellido2", v)}
+            placeholder="Segundo apellido"
+          />
           <Campo
             label="Teléfono"
             type="tel"

@@ -73,19 +73,23 @@ export default function ModalCliente({
                 req
               />
               <Campo
-                label="Apellido materno"
-                value={form.apellido2}
-                onChange={(v) => onFieldChange("apellido2", v)}
-                placeholder="Apellido materno"
-                req
-              />
-              <Campo
                 label="Apellido paterno"
                 value={form.apellido1}
                 onChange={(v) => onFieldChange("apellido1", v)}
                 placeholder="Apellido paterno"
                 req
               />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-1">
+              <Campo
+                label="Apellido materno"
+                value={form.apellido2}
+                onChange={(v) => onFieldChange("apellido2", v)}
+                placeholder="Apellido materno"
+                req
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-1">
               <Campo
                 label="Teléfono"
                 type="tel"

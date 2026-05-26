@@ -73,20 +73,22 @@ export default function ModalNuevoConcesionario({ onClose, onGuardar, clienteId,
         </div>
 
         <div className="p-6 space-y-4">
-          <Campo
-            label="Nombre(s)"
-            value={form.nombre}
-            onChange={(v) => setF("nombre", v)}
-            placeholder="Nombre(s)"
-            req
-            autoFocus
-          />
-          <Campo
-            label="Primer apellido"
-            value={form.apellido1}
-            onChange={(v) => setF("apellido1", v)}
-            placeholder="Primer apellido"
-          />
+          <div className="grid grid-cols-2 gap-4">
+            <Campo
+              label="Nombre(s)"
+              value={form.nombre}
+              onChange={(v) => setF("nombre", v)}
+              placeholder="Nombre(s)"
+              req
+              autoFocus
+            />
+            <Campo
+              label="Primer apellido"
+              value={form.apellido1}
+              onChange={(v) => setF("apellido1", v)}
+              placeholder="Primer apellido"
+            />
+          </div>
           <Campo
             label="Segundo apellido"
             value={form.apellido2}

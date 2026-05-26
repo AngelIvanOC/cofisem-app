@@ -36,6 +36,7 @@ export default function DireccionFields({ values, onChange, req: required }) {
 
   const lastCp = useRef("");
   const mounted = useRef(true);
+  const isInitialLoad = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
@@ -46,7 +47,7 @@ export default function DireccionFields({ values, onChange, req: required }) {
 
   // ── Búsqueda en API ──────────────────────────────────────────────────────
   const ejecutarBusqueda = useCallback(
-    async (cp) => {
+    async (cp, preserveColonia = false) => {
       if (!mounted.current) return;
       lastCp.current = cp;
       setBuscando(true);
@@ -63,12 +64,11 @@ export default function DireccionFields({ values, onChange, req: required }) {
         return;
       }
 
-      // Aplica TODOS los campos resueltos por la API en un solo "batch"
       onChange("estado", res.estado);
       onChange("municipio", res.municipio);
-      // Si hay una sola colonia, se autoselecciona. Si hay varias, queda
-      // vacío para que el usuario elija.
-      onChange("colonia", res.colonias.length === 1 ? res.colonias[0] : "");
+      if (!preserveColonia) {
+        onChange("colonia", res.colonias.length === 1 ? res.colonias[0] : "");
+      }
       setColoniasAPI(res.colonias);
     },
     [onChange],
@@ -78,13 +78,15 @@ export default function DireccionFields({ values, onChange, req: required }) {
   useEffect(() => {
     const cp = (values.cp ?? "").trim();
     if (cp.length !== 5) {
-      // CP incompleto → limpia el indicador de error pero no toca el resto
       if (cpError) setCpError(false);
       return;
     }
     if (!/^\d{5}$/.test(cp)) return;
     if (cp === lastCp.current) return;
-    ejecutarBusqueda(cp);
+    // Si es la primera búsqueda y ya hay una colonia guardada, no la borramos
+    const preserve = isInitialLoad.current && !!(values.colonia ?? "").trim();
+    isInitialLoad.current = false;
+    ejecutarBusqueda(cp, preserve);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values.cp]);
 
@@ -235,6 +237,9 @@ export default function DireccionFields({ values, onChange, req: required }) {
             className={inp}
           >
             <option value="">Selecciona colonia</option>
+            {values.colonia && !coloniasAPI.includes(values.colonia) && (
+              <option key="__saved" value={values.colonia}>{values.colonia}</option>
+            )}
             {coloniasAPI.map((c) => (
               <option key={c}>{c}</option>
             ))}

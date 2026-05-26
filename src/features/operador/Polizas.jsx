@@ -577,11 +577,10 @@ export default function Polizas({ usuario }) {
                       </span>
                     )}
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
                     {[
                       { key: "clienteNombre",    label: "Nombre" },
                       { key: "clienteApellido1", label: "Apellido paterno" },
-                      { key: "clienteApellido2", label: "Apellido materno" },
                     ].map(({ key, label }) => (
                       <div key={key}>
                         <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">{label}</label>
@@ -593,6 +592,15 @@ export default function Polizas({ usuario }) {
                         />
                       </div>
                     ))}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Apellido materno</label>
+                    <input
+                      value={editForm.clienteApellido2}
+                      onChange={e => setEditForm(f => ({ ...f, clienteApellido2: e.target.value.toUpperCase() }))}
+                      disabled={!editPerms.cliente}
+                      className={`w-full px-3 py-2.5 rounded-xl border text-sm text-[#13193a] focus:outline-none transition-all ${editPerms.cliente ? "border-gray-200 bg-white focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]" : "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed"}`}
+                    />
                   </div>
                 </div>
 
@@ -607,11 +615,10 @@ export default function Polizas({ usuario }) {
                         </span>
                       )}
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 gap-3 mb-3">
                       {[
                         { key: "concNombre",    label: "Nombre" },
                         { key: "concApellido1", label: "Apellido paterno" },
-                        { key: "concApellido2", label: "Apellido materno" },
                       ].map(({ key, label }) => (
                         <div key={key}>
                           <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">{label}</label>
@@ -623,6 +630,15 @@ export default function Polizas({ usuario }) {
                           />
                         </div>
                       ))}
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Apellido materno</label>
+                      <input
+                        value={editForm.concApellido2}
+                        onChange={e => setEditForm(f => ({ ...f, concApellido2: e.target.value.toUpperCase() }))}
+                        disabled={!editPerms.conc}
+                        className={`w-full px-3 py-2.5 rounded-xl border text-sm text-[#13193a] focus:outline-none transition-all ${editPerms.conc ? "border-gray-200 bg-white focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]" : "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed"}`}
+                      />
                     </div>
                   </div>
                 )}

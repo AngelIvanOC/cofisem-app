@@ -49,7 +49,10 @@ export default function Clientes({ usuario }) {
       nombre: c.nombre || "", apellido1: ap1, apellido2: apRest.join(" "),
       rfc: c.rfc || "", curp: c.curp || "", telefono: c.telefono || "", email: c.email || "",
       cp: c.cp || "", estado: c.estado || "", municipio: c.ciudad || "",
-      colonia: c.colonia || "", calle: c.direccion || "", numeroExt: "", numeroInt: "",
+      colonia: c.colonia || "",
+      calle:     c.calle      || c.direccion || "",
+      numeroExt: c.numero_ext || "",
+      numeroInt: c.numero_int || "",
     });
     setEditId(c.id);
     setModal("editar");
