@@ -191,6 +191,51 @@ export async function cancelarPoliza(id, motivo, canceladoPor) {
   });
 }
 
+// ── Editar póliza (datos vehículo) ────────────────────────────────────────
+export async function editarPoliza(id, { numSerie, numMotor, placas }, editadoPor, motivo) {
+  const updates = {
+    actualizado_por: editadoPor || null,
+    actualizado_at:  new Date().toISOString(),
+  };
+  if (numSerie !== undefined) updates.num_serie = numSerie?.toUpperCase() || null;
+  if (numMotor !== undefined) updates.num_motor = numMotor?.toUpperCase() || null;
+  if (placas   !== undefined) updates.placas   = placas?.toUpperCase()   || null;
+
+  const { error } = await supabase.from('polizas').update(updates).eq('id', id);
+  if (error) throw error;
+
+  await supabase.from('polizas_historial').insert({
+    poliza_id:    id,
+    estatus_nuevo: 'EDITADA',
+    notas:         motivo || null,
+    cambiado_por:  editadoPor || null,
+  });
+}
+
+// ── Contar pólizas activas de un cliente ──────────────────────────────────
+export async function contarPolizasCliente(clienteId) {
+  if (!clienteId) return 0;
+  const { count, error } = await supabase
+    .from('polizas')
+    .select('id', { count: 'exact', head: true })
+    .eq('cliente_id', clienteId)
+    .neq('estatus', 'COTIZACION');
+  if (error) throw error;
+  return count ?? 0;
+}
+
+// ── Contar pólizas activas de un concesionario ────────────────────────────
+export async function contarPolizasConcesionario(concesionarioId) {
+  if (!concesionarioId) return 0;
+  const { count, error } = await supabase
+    .from('polizas')
+    .select('id', { count: 'exact', head: true })
+    .eq('concesionario_id', concesionarioId)
+    .neq('estatus', 'COTIZACION');
+  if (error) throw error;
+  return count ?? 0;
+}
+
 // ── Cargar pólizas de la lista ─────────────────────────────────────────────
 export async function fetchPolizas() {
   const { data, error } = await supabase

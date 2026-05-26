@@ -308,7 +308,7 @@ function FirmaEndoso() {
 }
 
 // ── Página del endoso ──────────────────────────────────────────
-function EndosoPage({ poliza, motivo, fechaEndoso }) {
+function EndosoPage({ poliza, motivo, fechaEndoso, tipoEndoso = "C" }) {
   const { empresa, numeroPoliza, contratante, vigencia } = poliza;
 
   return (
@@ -394,7 +394,7 @@ function EndosoPage({ poliza, motivo, fechaEndoso }) {
             marginBottom: 12,
           }}
         >
-          ENDOSO TIPO "C"
+          {`ENDOSO TIPO "${tipoEndoso}"`}
         </Text>
         <Text
           style={{
@@ -432,6 +432,7 @@ export default function EndosoCancelacionPDF({
   poliza = mockPoliza,
   motivo = "",
   fechaEndoso = "",
+  tipoEndoso = "C",
 }) {
   return (
     <Document
@@ -440,7 +441,7 @@ export default function EndosoCancelacionPDF({
       subject="Endoso de Cancelación"
       creator="Cofisem"
     >
-      <EndosoPage poliza={poliza} motivo={motivo} fechaEndoso={fechaEndoso} />
+      <EndosoPage poliza={poliza} motivo={motivo} fechaEndoso={fechaEndoso} tipoEndoso={tipoEndoso} />
     </Document>
   );
 }

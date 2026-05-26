@@ -32,6 +32,17 @@ export async function crearCliente(form, creadoPor) {
   return data;
 }
 
+export async function actualizarNombreCliente(id, nombre, apellido) {
+  const { error } = await supabase
+    .from("clientes")
+    .update({
+      nombre:   nombre.toUpperCase().trim(),
+      apellido: apellido?.toUpperCase().trim() || null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function actualizarCliente(id, form) {
   const { data, error } = await supabase
     .from("clientes")

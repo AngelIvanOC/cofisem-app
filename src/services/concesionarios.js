@@ -14,6 +14,18 @@ export async function fetchConcesionariosByCliente(clienteId) {
   return data.map((c) => ({ id: c.id, label: buildLabel(c) }));
 }
 
+export async function actualizarNombreConcesionario(id, nombre, apellido1, apellido2) {
+  const { error } = await supabase
+    .from("concesionarios")
+    .update({
+      nombre:    nombre.toUpperCase().trim(),
+      apellido1: apellido1?.toUpperCase().trim() || null,
+      apellido2: apellido2?.toUpperCase().trim() || null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function crearConcesionario({ clienteId, nombre, apellido1, apellido2, creadoPor }) {
   const { data, error } = await supabase
     .from("concesionarios")
