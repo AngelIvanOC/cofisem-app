@@ -55,8 +55,8 @@ function generarConstancia(fecha, seqGlobal, seqVehiculo, oficinaId) {
 
 // ── Emitir póliza ──────────────────────────────────────────────────────────
 export async function emitirPoliza({
-  clienteId, vendedorId, marca, modelo, anio, serie, numMotor, placas,
-  codAmis, capacidad, version, uso, tipoServicio, primaNeta, primaTotal,
+  clienteId, vendedorId, vehiculoAmisId, anio, serie, numMotor, placas,
+  capacidad, uso, tipoServicio, primaNeta, primaTotal,
   formaPago, fechaInicio, derechos, iva, enLetras, cpAsegurado, creadoPor,
   conductorHabitual, conductorSexo, conductorEdad, concesionarioId, oficinaId,
 }) {
@@ -79,15 +79,12 @@ export async function emitirPoliza({
       numero_poliza:     numPolizaProv,
       cliente_id:        clienteId,
       vendedor_id:       vendedorId || null,
-      marca,
-      modelo,
+      vehiculo_amis_id:  vehiculoAmisId || null,
       anio:              parseInt(anio) || null,
       placas:            placas?.toUpperCase() || null,
       num_serie:         serie?.toUpperCase() || null,
       num_motor:         numMotor?.toUpperCase() || null,
-      cod_amis:          codAmis || null,
       capacidad:         capacidad || '4 OCUPANTES',
-      version:           version || null,
       uso:               uso || 'SERVICIO PUBLICO',
       tipo_servicio:     tipoServicio || 'TAXI',
       aseguradora:       'GAMAN S.A. DE C.V.',
@@ -154,7 +151,8 @@ export async function emitirPoliza({
       vendedores(id, nombre, apellido, codigo),
       concesionarios(id, nombre, apellido1, apellido2),
       oficinas(id, nombre),
-      usuarios!polizas_creado_por_fkey(id_muestra)
+      usuarios!polizas_creado_por_fkey(id_muestra),
+      vehiculos_amis(id, cve, mr, marca, tipo, dc, dl, anio)
     `)
     .single();
   if (e2) throw e2;
@@ -172,7 +170,8 @@ export async function fetchPolizaById(id) {
       vendedores(id, nombre, apellido, codigo),
       concesionarios(id, nombre, apellido1, apellido2),
       oficinas(id, nombre),
-      usuarios!polizas_creado_por_fkey(id_muestra)
+      usuarios!polizas_creado_por_fkey(id_muestra),
+      vehiculos_amis(id, cve, mr, marca, tipo, dc, dl, anio)
     `)
     .eq('id', id)
     .single();
@@ -302,17 +301,18 @@ export function buildPolizaPDF(poliza, oficina) {
     },
 
     vehiculo: {
-      marca:     poliza.marca          || '',
-      modelo:    poliza.modelo         || '',
-      version:   poliza.version        || poliza.modelo || '',
-      anio:      poliza.anio?.toString()|| '',
-      placas:    poliza.placas         || '',
-      serie:     poliza.num_serie      || '',
-      motor:     poliza.num_motor      || '',
-      capacidad: poliza.capacidad      || '4 OCUPANTES',
-      uso:       poliza.uso            || 'SERVICIO PUBLICO',
-      tipo:      poliza.tipo_servicio  || 'TAXI',
-      codAMIS:   poliza.cod_amis       || '',
+      marca:       (poliza.vehiculos_amis?.marca) || '',
+      modelo:      (poliza.vehiculos_amis?.tipo)  || '',
+      version:     (poliza.vehiculos_amis?.dc)    || '',
+      descripcion: (poliza.vehiculos_amis?.dl)    || '',
+      anio:        poliza.anio?.toString()         || '',
+      placas:    poliza.placas                           || '',
+      serie:     poliza.num_serie                        || '',
+      motor:     poliza.num_motor                        || '',
+      capacidad: poliza.capacidad                        || '4 OCUPANTES',
+      uso:       poliza.uso                              || 'SERVICIO PUBLICO',
+      tipo:      poliza.tipo_servicio                    || 'TAXI',
+      codAMIS:   String(poliza.vehiculos_amis?.cve ?? '') || '',
       clase:     'Sedán',
     },
 

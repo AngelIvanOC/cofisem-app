@@ -10,7 +10,7 @@ const t9 = {
 };
 
 export default function DatosVehiculo({ vehiculo }) {
-  const descripcion = `${vehiculo.marca} ${vehiculo.modelo} ${vehiculo.version}`;
+  const descripcion = vehiculo.descripcion || `${vehiculo.marca} ${vehiculo.modelo} ${vehiculo.version}`.trim();
 
   return (
     <View style={[CARD, { marginBottom: 5 }]}>

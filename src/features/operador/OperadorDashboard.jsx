@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
-import { STATUS, SPARK_POLIZAS, SPARK_COBRO } from "./data/dashboardData";
+import { SPARK_POLIZAS, SPARK_COBRO } from "./data/dashboardData";
 import SparkBar from "./components/SparkBar";
 
 const HOY = new Date().toLocaleDateString("es-MX", {

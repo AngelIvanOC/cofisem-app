@@ -15,7 +15,7 @@ import {
   getMarcas,
   getModelos,
   getVersiones,
-  getCodigoAmis,
+  getVehiculoAmisRecord,
   getVehiculoPorAmis,
 } from "../../../services/vehiculos";
 import { fmt$ } from "../utils/fmt";
@@ -49,10 +49,12 @@ export default function FormCotizacion({
   const [paso, setPaso] = useState(esEdicion ? 4 : 1);
 
   const [form, setForm] = useState({
+    vehiculoAmisId: cotizacionInicial?.vehiculoAmisId ?? null,
     codAMIS: cotizacionInicial?.codAMIS ?? "",
     marca: cotizacionInicial?.marca ?? "",
     tipoVehiculo: cotizacionInicial?.tipoVehiculo ?? "",
     version: cotizacionInicial?.version ?? "",
+    descripcion: cotizacionInicial?.descripcion ?? "",
     modelo: cotizacionInicial?.modelo ?? String(new Date().getFullYear()),
     serie: cotizacionInicial?.serie ?? "",
     motor: cotizacionInicial?.motor ?? "",
@@ -107,55 +109,61 @@ export default function FormCotizacion({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.clienteId]);
 
-  // ── Auto-relleno AMIS cuando los 4 campos del vehículo están completos ────
+  // ── Catálogo vehículos — async desde BD, con caché ───────────────────────
+  const [marcasDisp,    setMarcasDisp]    = useState([]);
+  const [modelosDisp,   setModelosDisp]   = useState([]);
+  const [versionesDisp, setVersionesDisp] = useState([]);
+
   useEffect(() => {
-    if (amisFuente.current === "busqueda") return;
-    const codigo = getCodigoAmis(
-      form.modelo,
-      form.marca,
-      form.tipoVehiculo,
-      form.version,
-    );
-    setF("codAMIS", codigo);
-    setAmisError(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.modelo, form.marca, form.tipoVehiculo, form.version]);
-
-  // ── Catálogo vehículos ────────────────────────────────────────────────────
-  const marcasDisp    = getMarcas();
-  const versionesDisp = getVersiones(form.marca, form.tipoVehiculo);
-
-  const [modelosDisp,    setModelosDisp]    = useState([]);
-  const [loadingModelos, setLoadingModelos] = useState(false);
+    if (!form.modelo) { setMarcasDisp([]); return; }
+    getMarcas(form.modelo).then(setMarcasDisp).catch(console.error);
+  }, [form.modelo]);
 
   useEffect(() => {
     if (!form.marca || !form.modelo) { setModelosDisp([]); return; }
-    let cancelled = false;
-    setLoadingModelos(true);
-    getModelos(form.marca, form.modelo).then((lista) => {
-      if (!cancelled) { setModelosDisp(lista); setLoadingModelos(false); }
-    });
-    return () => { cancelled = true; };
+    getModelos(form.marca, form.modelo).then(setModelosDisp).catch(console.error);
   }, [form.marca, form.modelo]);
+
+  useEffect(() => {
+    if (!form.marca || !form.tipoVehiculo || !form.modelo) { setVersionesDisp([]); return; }
+    getVersiones(form.marca, form.tipoVehiculo, form.modelo).then(setVersionesDisp).catch(console.error);
+  }, [form.marca, form.tipoVehiculo, form.modelo]);
+
+  // Auto-rellena codAMIS, descripcion y vehiculoAmisId cuando se selecciona versión
+  useEffect(() => {
+    if (amisFuente.current === "busqueda") return;
+    if (!form.modelo || !form.marca || !form.tipoVehiculo || !form.version) return;
+    getVehiculoAmisRecord(form.modelo, form.marca, form.tipoVehiculo, form.version)
+      .then((rec) => {
+        if (rec) {
+          setForm((f) => ({
+            ...f,
+            vehiculoAmisId: rec.id,
+            codAMIS: String(rec.cve),
+            descripcion: rec.dl || "",
+          }));
+          setAmisError(false);
+        } else {
+          setAmisError(true);
+        }
+      })
+      .catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.modelo, form.marca, form.tipoVehiculo, form.version]);
 
   const handleAnio = (e) => {
     amisFuente.current = "auto";
-    setForm((f) => ({ ...f, modelo: e.target.value, tipoVehiculo: "", version: "" }));
+    setForm((f) => ({ ...f, modelo: e.target.value, marca: "", tipoVehiculo: "", version: "", descripcion: "" }));
   };
 
   const handleMarca = (e) => {
     amisFuente.current = "auto";
-    setForm((f) => ({
-      ...f,
-      marca: e.target.value,
-      tipoVehiculo: "",
-      version: "",
-    }));
+    setForm((f) => ({ ...f, marca: e.target.value, tipoVehiculo: "", version: "", descripcion: "" }));
   };
 
   const handleModeloVeh = (e) => {
     amisFuente.current = "auto";
-    setForm((f) => ({ ...f, tipoVehiculo: e.target.value, version: "" }));
+    setForm((f) => ({ ...f, tipoVehiculo: e.target.value, version: "", descripcion: "" }));
   };
 
   const handleVersion = (e) => {
@@ -175,23 +183,24 @@ export default function FormCotizacion({
       return;
     }
 
-    // 4 dígitos completos → intentar lookup
-    const v = getVehiculoPorAmis(val);
-    if (v) {
-      amisFuente.current = "busqueda";
-      setForm((f) => ({
-        ...f,
-        codAMIS: val,
-        modelo: v.anio,
-        marca: v.marca,
-        tipoVehiculo: v.modelo,
-        version: v.version,
-      }));
-    } else {
-      amisFuente.current = "busqueda";
-      setAmisError(true);
-      setF("codAMIS", val);
-    }
+    // 4 dígitos completos → intentar lookup async
+    amisFuente.current = "busqueda";
+    setF("codAMIS", val);
+    getVehiculoPorAmis(val).then((v) => {
+      if (v) {
+        setForm((f) => ({
+          ...f,
+          vehiculoAmisId: v.id,
+          codAMIS: val,
+          modelo: v.anio,
+          marca: v.marca,
+          tipoVehiculo: v.modelo,
+          version: v.version,
+        }));
+      } else {
+        setAmisError(true);
+      }
+    }).catch(console.error);
   };
 
   // ── Helpers ──
@@ -266,7 +275,7 @@ export default function FormCotizacion({
 
   const canNext = {
     1: !!(
-      form.codAMIS.trim() &&
+      form.vehiculoAmisId &&
       form.marca &&
       form.tipoVehiculo &&
       form.version.trim() &&
@@ -322,7 +331,7 @@ export default function FormCotizacion({
   };
 
   const handleEmitir = async () => {
-    if (!form.clienteId || !form.marca || !fechaInicioValida || isEmitting)
+    if (!form.clienteId || !form.vehiculoAmisId || !fechaInicioValida || isEmitting)
       return;
     setIsEmitting(true);
     try {
@@ -330,15 +339,12 @@ export default function FormCotizacion({
       const poliza = await emitirPoliza({
         clienteId: form.clienteId,
         vendedorId: form.vendedorId || null,
-        marca: form.marca,
-        modelo: form.tipoVehiculo,
+        vehiculoAmisId: form.vehiculoAmisId,
         anio: form.modelo,
         serie: form.serie,
         numMotor: form.motor,
         placas: form.placas,
-        codAmis: form.codAMIS,
         capacidad: "4 OCUPANTES",
-        version: form.version,
         uso: "SERVICIO PUBLICO",
         tipoServicio: "TAXI",
         primaNeta,
@@ -482,22 +488,15 @@ export default function FormCotizacion({
 
               {/* Modelo */}
               <div>
-                <label className={lblCls}>
-                  Modelo {req}
-                  {loadingModelos && (
-                    <span className="ml-1.5 normal-case font-normal text-gray-300 text-[10px]">
-                      cargando…
-                    </span>
-                  )}
-                </label>
+                <label className={lblCls}>Modelo {req}</label>
                 <select
                   value={form.tipoVehiculo}
                   onChange={handleModeloVeh}
-                  disabled={!form.marca || loadingModelos}
-                  className={inpCls + (!form.marca || loadingModelos ? disCls : "")}
+                  disabled={!form.marca}
+                  className={inpCls + (!form.marca ? disCls : "")}
                 >
                   <option value="">
-                    {loadingModelos ? "Cargando modelos…" : !form.marca ? "Elige marca primero" : "Selecciona modelo"}
+                    {!form.marca ? "Elige marca primero" : "Selecciona modelo"}
                   </option>
                   {modelosDisp.map((m) => (
                     <option key={m}>{m}</option>
@@ -1185,7 +1184,7 @@ export default function FormCotizacion({
                 onClick={handleEmitir}
                 disabled={
                   !form.clienteId ||
-                  !form.marca ||
+                  !form.vehiculoAmisId ||
                   !fechaInicioValida ||
                   isEmitting
                 }

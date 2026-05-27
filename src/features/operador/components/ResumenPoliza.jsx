@@ -54,16 +54,17 @@ export default function ResumenPoliza({ poliza, onVolver }) {
     { l: "Fin de vigencia", v: fmtFecha(poliza.fecha_fin) },
   ];
 
+  const vAmis = poliza.vehiculos_amis ?? {};
   const vehiculo = [
-    { l: "Marca", v: poliza.marca || "—" },
-    { l: "Modelo", v: poliza.modelo || "—" },
-    { l: "Versión", v: poliza.version || "—" },
-    { l: "Año", v: poliza.anio?.toString() || "—" },
-    { l: "No. Serie", v: poliza.num_serie || "—" },
-    { l: "No. Motor", v: poliza.num_motor || "—" },
-    { l: "Placas", v: poliza.placas || "—" },
-    { l: "Capacidad", v: poliza.capacidad || "4 OCUPANTES" },
-    { l: "Cód. AMIS", v: poliza.cod_amis || "—" },
+    { l: "Marca",     v: vAmis.marca             || "—" },
+    { l: "Modelo",    v: vAmis.tipo              || "—" },
+    { l: "Versión",   v: vAmis.dc                || "—" },
+    { l: "Año",       v: poliza.anio?.toString() || "—" },
+    { l: "No. Serie", v: poliza.num_serie        || "—" },
+    { l: "No. Motor", v: poliza.num_motor        || "—" },
+    { l: "Placas",    v: poliza.placas           || "—" },
+    { l: "Capacidad", v: poliza.capacidad        || "4 OCUPANTES" },
+    { l: "Cód. AMIS", v: String(vAmis.cve ?? "") || "—" },
   ];
 
   return (
