@@ -10,7 +10,7 @@ export default function TramiteExitoso({ poliza, oficina, onNueva, onVolver }) {
   useEffect(() => {
     if (!poliza?.constancia) return;
     const base = buildPolizaPDF(poliza, oficina);
-    const qrUrl = `${window.location.origin}/verificar/${poliza.constancia}`;
+    const qrUrl = `${window.location.origin}/gaman/verificar/${poliza.constancia}`;
     generateQR(qrUrl)
       .then(qrDataUrl => setPolizaPDF({ ...base, qrDataUrl }))
       .catch(console.error);
