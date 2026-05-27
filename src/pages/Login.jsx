@@ -5,6 +5,7 @@
 // ============================================================
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
+import Swal from "sweetalert2";
 
 const CAROUSEL_IMAGES = [
   {
@@ -45,14 +46,13 @@ export default function Login() {
     setError("");
     setLoading(true);
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: usuario,
       password: contrasena,
     });
 
-    setLoading(false);
-
     if (authError) {
+      setLoading(false);
       if (authError.message.includes("Invalid login credentials")) {
         setError("Usuario o contraseña incorrectos.");
       } else if (authError.message.includes("Email not confirmed")) {
@@ -60,7 +60,30 @@ export default function Login() {
       } else {
         setError("Ocurrió un error. Intenta de nuevo.");
       }
+      return;
     }
+
+    // Verificar si el usuario está activo en public.usuarios
+    const { data: perfil } = await supabase
+      .from("usuarios")
+      .select("activo")
+      .eq("id", authData.user.id)
+      .single();
+
+    if (perfil?.activo === false) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      Swal.fire({
+        icon: "error",
+        title: "Acceso denegado",
+        text: "Tu cuenta ha sido desactivada. Contacta al administrador del sistema.",
+        confirmButtonColor: "#13193a",
+        confirmButtonText: "Entendido",
+      });
+      return;
+    }
+
+    setLoading(false);
   };
 
   return (

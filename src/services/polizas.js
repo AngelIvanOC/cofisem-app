@@ -341,7 +341,7 @@ export function buildPolizaPDF(poliza, oficina) {
       id:       oficinaPDF?.id     ?? null,
       nombre:   oficinaPDF?.nombre ?? '',
       operador: creadorMuestra != null ? `${creadorMuestra}` : '',
-      vendedor: vendedor.codigo || '',
+      vendedor: vendedor.codigo || 'GAMAN',
     },
 
     condiciones: mockCondiciones,

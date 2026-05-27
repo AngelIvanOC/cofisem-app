@@ -1,100 +1,221 @@
-// ============================================================
-// src/pages/administracion/AdminPolizas.jsx
-// Administración: Cancelar pólizas + gestionar endosos
-// ============================================================
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "../../supabaseClient";
+import { fetchPolizaById, buildPolizaPDF, cancelarPoliza, contarPolizasCliente, contarPolizasConcesionario } from "../../services/polizas";
+import { actualizarNombreCliente } from "../../services/clientes";
+import { actualizarNombreConcesionario } from "../../services/concesionarios";
+import { pdf } from "@react-pdf/renderer";
+import EndosoCancelacionPDF from "../../components/pdf/EndosoCancelacionPDF";
+import Swal from "sweetalert2";
+import StatusBadge from "../operador/components/StatusBadge";
 
-const OFICINAS   = ["Todas","COFISEM AV. E.ZAPATA","OFICINA CIVAC","COFISEM TEMIXCO","COFISEM CUAUTLA"];
-const VENDEDORES = ["Todos","Laura Rosher","Marco A. Cruz","Carlos Soto","Patricia Morales"];
-const TIPOS_ENDOSO = ["Cambio de placas","Cambio de vehículo","Cambio de titular","Cambio de domicilio","Adición de cobertura","Reducción de cobertura","Corrección de datos","Otro"];
-
-const STATUS_CLS = {
-  "Vigente":       "bg-emerald-50 text-emerald-700 border-emerald-200",
-  "Por vencer":    "bg-amber-50   text-amber-700   border-amber-200",
-  "Vencida":       "bg-red-50     text-red-600     border-red-200",
-  "Cancelada":     "bg-gray-100   text-gray-500    border-gray-200",
-  "Suspendida":    "bg-orange-50  text-orange-700  border-orange-200",
-  "Pend. aplicar": "bg-blue-50    text-blue-700    border-blue-200",
+const MOTIVOS_CANCEL = {
+  "Solicitud del cliente": "SE CANCELA PÓLIZA A SOLICITUD DEL CLIENTE",
+  "Falta de pago":         "SE CANCELA PÓLIZA POR FALTA DE PAGO",
+  "Duplicado":             "SE CANCELA PÓLIZA POR DUPLICADO",
+  "Error en emisión":      "SE CANCELA PÓLIZA POR ERROR EN EMISIÓN",
+  "Otro":                  null,
 };
 
-const POLIZAS_MOCK = [
-  { id:"3413241", aseguradora:"QUALITAS", asegurado:"Angel Ivan Ortega",   oficina:"OFICINA CIVAC",         vendedor:"Laura Rosher",  cobertura:"COBERTURA APP (UBER, DIDI)", placas:"TRAMITE",  prima:3142.80, vigHasta:"13/03/2027", estatus:"Vigente",       endosos:[] },
-  { id:"3413198", aseguradora:"QUALITAS", asegurado:"María García López",  oficina:"COFISEM AV. E.ZAPATA",  vendedor:"Marco A. Cruz", cobertura:"TAXI BÁSICA 2500",           placas:"VRM-123A", prima:2200.00, vigHasta:"12/03/2027", estatus:"Vigente",       endosos:[] },
-  { id:"3413167", aseguradora:"GNP",      asegurado:"Roberto Díaz Ramos",  oficina:"COFISEM AV. E.ZAPATA",  vendedor:"Laura Rosher",  cobertura:"SERV. PÚB. 50/50 GAMAN 2",  placas:"CHM-456B", prima:2548.00, vigHasta:"11/03/2027", estatus:"Vigente",       endosos:[] },
-  { id:"3411002", aseguradora:"QUALITAS", asegurado:"Carmen López Vargas", oficina:"COFISEM TEMIXCO",        vendedor:"Carlos Soto",   cobertura:"TAXI BÁSICA 2500",           placas:"PQR-789C", prima:2200.00, vigHasta:"20/03/2026", estatus:"Por vencer",    endosos:[{ id:"END-012", tipo:"Cambio de placas", detalle:"Nueva placa asignada", valorNuevo:"ABC-123X", fecha:"16/03/2026", estatus:"Pendiente" }] },
-  { id:"3410888", aseguradora:"AXA",      asegurado:"José Martínez Ruiz",  oficina:"OFICINA CIVAC",         vendedor:"Marco A. Cruz", cobertura:"TAXI BÁSICA PAGOS 2700",     placas:"STU-321D", prima:2320.00, vigHasta:"22/03/2026", estatus:"Por vencer",    endosos:[] },
-  { id:"3407111", aseguradora:"MAPFRE",   asegurado:"Luis Torres Moreno",  oficina:"COFISEM AV. E.ZAPATA",  vendedor:"Carlos Soto",   cobertura:"TAXI BÁSICA 2500",           placas:"YZA-987F", prima:2200.00, vigHasta:"05/02/2026", estatus:"Cancelada",     endosos:[] },
-];
-
-// ── Modal cancelar ────────────────────────────────────────────
-function ModalCancelar({ poliza, onClose, onConfirmar }) {
-  const [motivo, setMotivo] = useState("");
-  const MOTIVOS = ["Solicitud del cliente","Falta de pago","Duplicado","Error en emisión","Otro"];
-  const [procesando, setProcesando] = useState(false);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backdropFilter:"blur(8px)", backgroundColor:"rgba(10,15,40,0.55)" }}
-      onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
-          <div className="w-9 h-9 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center shrink-0">
-            <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h2 className="text-sm font-bold text-[#13193a]">Cancelar póliza</h2>
-            <p className="text-xs text-gray-400 mt-0.5 font-mono">{poliza.id} · {poliza.asegurado}</p>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div className="p-6 space-y-4">
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 font-medium">
-            Esta acción cancelará la póliza. El asegurado perderá cobertura de inmediato.
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Motivo <span className="text-red-400">*</span></label>
-            <div className="flex flex-wrap gap-2">
-              {MOTIVOS.map(m => (
-                <button key={m} onClick={() => setMotivo(m)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border-2 transition-all ${
-                    motivo === m ? "bg-[#13193a] text-white border-[#13193a]" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                  }`}>{m}</button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-3 px-6 pb-6">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
-          <button onClick={() => { setProcesando(true); setTimeout(() => onConfirmar(poliza.id, motivo), 700); }}
-            disabled={!motivo || procesando}
-            className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-40 transition-all">
-            {procesando ? "Procesando..." : "Confirmar cancelación"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+// ── Helpers ───────────────────────────────────────────────────
+function buildDescripcionEndoso(tipo, oldValue, newValue) {
+  const nv = (newValue || "").toUpperCase().trim();
+  const ov = (oldValue || "—").toUpperCase().trim();
+  switch (tipo) {
+    case "Cambio de placas":        return `SE HACE CAMBIO DE PLACAS DE ${ov} A QUEDAR COMO ${nv}`;
+    case "Cambio de No. Serie":     return `SE HACE CAMBIO DE NÚMERO DE SERIE DE ${ov} A QUEDAR COMO ${nv}`;
+    case "Cambio de No. Motor":     return `SE HACE CAMBIO DE NÚMERO DE MOTOR DE ${ov} A QUEDAR COMO ${nv}`;
+    case "Cambio de asegurado":     return `SE HACE CAMBIO DE ASEGURADO DE ${ov} A QUEDAR COMO ${nv}`;
+    case "Cambio de concesionario": return `SE HACE CAMBIO DE CONCESIONARIO DE ${ov} A QUEDAR COMO ${nv}`;
+    default: return nv;
+  }
 }
 
-// ── Modal endoso ──────────────────────────────────────────────
-function ModalEndoso({ poliza, onClose, onConfirmar }) {
-  const [tipo, setTipo]         = useState("");
-  const [detalle, setDetalle]   = useState("");
-  const [valorNuevo, setValorNuevo] = useState("");
+function descargarBlob(blob, nombre) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function fmtFecha(str) {
+  if (!str) return "—";
+  return new Date(str + "T12:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+// ── Modal Endoso ──────────────────────────────────────────────
+const FORM_VACIO = {
+  placas: "", numSerie: "", numMotor: "",
+  asegNombre: "", asegApellido1: "", asegApellido2: "",
+  concNombre: "", concApellido1: "", concApellido2: "",
+};
+
+function ModalEndoso({ poliza, onClose, onDone }) {
+  const [cargando,   setCargando]   = useState(true);
+  const [full,       setFull]       = useState(null);
+  const [perms,      setPerms]      = useState({ asegurado: false, concesionario: false });
+  const [tipo,       setTipo]       = useState("");
+  const [form,       setForm]       = useState(FORM_VACIO);
   const [procesando, setProcesando] = useState(false);
 
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Carga datos al abrir
+  useEffect(() => {
+    (async () => {
+      try {
+        const fullData = await fetchPolizaById(poliza.id);
+        const [cntCliente, cntConc] = await Promise.all([
+          contarPolizasCliente(fullData.cliente_id),
+          fullData.concesionario_id
+            ? contarPolizasConcesionario(fullData.concesionario_id)
+            : Promise.resolve(999),
+        ]);
+        const cliente = fullData.clientes ?? {};
+        const conc    = fullData.concesionarios ?? null;
+        setFull(fullData);
+        setPerms({ asegurado: cntCliente <= 1, concesionario: conc != null && cntConc <= 1 });
+        setForm({
+          placas:       fullData.placas    || "",
+          numSerie:     fullData.num_serie || "",
+          numMotor:     fullData.num_motor || "",
+          asegNombre:    cliente.nombre    || "",
+          asegApellido1: (cliente.apellido || "").split(" ")[0] || "",
+          asegApellido2: (cliente.apellido || "").split(" ").slice(1).join(" ") || "",
+          concNombre:    conc?.nombre    || "",
+          concApellido1: conc?.apellido1 || "",
+          concApellido2: conc?.apellido2 || "",
+        });
+      } catch (e) {
+        console.error(e);
+        onClose();
+      } finally {
+        setCargando(false);
+      }
+    })();
+  }, [poliza.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const tiposDisponibles = [
+    "Cambio de placas",
+    "Cambio de No. Serie",
+    "Cambio de No. Motor",
+    ...(perms.asegurado     ? ["Cambio de asegurado"]     : []),
+    ...(perms.concesionario ? ["Cambio de concesionario"] : []),
+  ];
+
+  const esPersona = tipo === "Cambio de asegurado" || tipo === "Cambio de concesionario";
+
+  const valido = tipo && (() => {
+    switch (tipo) {
+      case "Cambio de placas":        return form.placas.trim();
+      case "Cambio de No. Serie":     return form.numSerie.trim();
+      case "Cambio de No. Motor":     return form.numMotor.trim();
+      case "Cambio de asegurado":     return form.asegNombre.trim() && form.asegApellido1.trim();
+      case "Cambio de concesionario": return form.concNombre.trim() && form.concApellido1.trim();
+      default: return false;
+    }
+  })();
+
+  // Descripción preview (usa valores del form como nuevo y datos de `full` como viejo)
+  const buildPreview = () => {
+    if (!tipo || !full) return "";
+    const cliente = full.clientes ?? {};
+    const conc    = full.concesionarios ?? null;
+    switch (tipo) {
+      case "Cambio de placas":
+        return buildDescripcionEndoso(tipo, full.placas || "—", form.placas);
+      case "Cambio de No. Serie":
+        return buildDescripcionEndoso(tipo, full.num_serie || "—", form.numSerie);
+      case "Cambio de No. Motor":
+        return buildDescripcionEndoso(tipo, full.num_motor || "—", form.numMotor);
+      case "Cambio de asegurado": {
+        const oldNombre = `${cliente.nombre || ""} ${cliente.apellido || ""}`.trim();
+        const newNombre = [form.asegNombre, form.asegApellido1, form.asegApellido2].filter(Boolean).join(" ");
+        return buildDescripcionEndoso(tipo, oldNombre, newNombre);
+      }
+      case "Cambio de concesionario": {
+        const oldConc = [conc?.nombre, conc?.apellido1, conc?.apellido2].filter(Boolean).join(" ") || "—";
+        const newConc = [form.concNombre, form.concApellido1, form.concApellido2].filter(Boolean).join(" ");
+        return buildDescripcionEndoso(tipo, oldConc, newConc);
+      }
+      default: return "";
+    }
+  };
+
+  const handleConfirmar = async () => {
+    setProcesando(true);
+    const constanciaLabel = poliza.constancia || poliza.numero_poliza;
+    try {
+      const descripcion = buildPreview();
+
+      // Generar PDF
+      const polizaPDF   = buildPolizaPDF(full, full.oficinas);
+      const fechaEndoso = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+      const blob = await pdf(
+        <EndosoCancelacionPDF
+          poliza={polizaPDF}
+          motivo={descripcion}
+          fechaEndoso={fechaEndoso}
+          tipoEndoso="A"
+          numeroControl={full.id}
+        />
+      ).toBlob();
+      descargarBlob(blob, `ENDOSO_A-${constanciaLabel}.pdf`);
+
+      // Actualizar BD
+      switch (tipo) {
+        case "Cambio de placas":
+          await supabase.from("polizas").update({ placas: form.placas.toUpperCase().trim() }).eq("id", poliza.id);
+          break;
+        case "Cambio de No. Serie":
+          await supabase.from("polizas").update({ num_serie: form.numSerie.toUpperCase().trim() }).eq("id", poliza.id);
+          break;
+        case "Cambio de No. Motor":
+          await supabase.from("polizas").update({ num_motor: form.numMotor.toUpperCase().trim() }).eq("id", poliza.id);
+          break;
+        case "Cambio de asegurado": {
+          const apellido = [form.asegApellido1, form.asegApellido2].filter(Boolean).join(" ");
+          await actualizarNombreCliente(full.cliente_id, form.asegNombre.toUpperCase(), apellido.toUpperCase());
+          break;
+        }
+        case "Cambio de concesionario":
+          await actualizarNombreConcesionario(
+            full.concesionario_id,
+            form.concNombre.toUpperCase(),
+            form.concApellido1.toUpperCase(),
+            form.concApellido2.toUpperCase(),
+          );
+          break;
+        default: break;
+      }
+
+      // Historial
+      await supabase.from("polizas_historial").insert({
+        poliza_id: poliza.id, estatus_nuevo: "EDITADA", notas: descripcion, cambiado_por: null,
+      });
+
+      onDone();
+      Swal.fire({
+        icon: "success", title: "Endoso generado",
+        text: `El endoso de la póliza ${constanciaLabel} fue generado y descargado.`,
+        confirmButtonColor: "#13193a", confirmButtonText: "Aceptar", timer: 5000, timerProgressBar: true,
+      });
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Error", text: "No se pudo generar el endoso: " + e.message, confirmButtonColor: "#13193a" });
+    } finally {
+      setProcesando(false);
+    }
+  };
+
   const inpCls = "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
-  const rdoCls = "w-full px-3 py-2.5 rounded-xl border border-gray-100 bg-gray-50 text-sm font-semibold text-[#13193a] cursor-default";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backdropFilter:"blur(8px)", backgroundColor:"rgba(10,15,40,0.55)" }}
+      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.55)" }}
       onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
           <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
             <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -103,48 +224,293 @@ function ModalEndoso({ poliza, onClose, onConfirmar }) {
           </div>
           <div className="flex-1">
             <h2 className="text-sm font-bold text-[#13193a]">Nuevo endoso</h2>
-            <p className="text-xs text-gray-400 mt-0.5 font-mono">{poliza.id} · {poliza.asegurado}</p>
+            <p className="text-xs text-gray-400 mt-0.5 font-mono">
+              {poliza.constancia || poliza.numero_poliza} · {poliza.clientes?.nombre} {poliza.clientes?.apellido}
+            </p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            {[["Póliza", poliza.id], ["Asegurado", poliza.asegurado], ["Placas", poliza.placas], ["Cobertura", poliza.cobertura]].map(([l, v]) => (
-              <div key={l}>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">{l}</label>
-                <input readOnly value={v} className={rdoCls}/>
-              </div>
-            ))}
+
+        {/* Loading */}
+        {cargando && (
+          <div className="flex items-center justify-center py-16">
+            <svg className="w-7 h-7 animate-spin text-[#13193a]/30" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
           </div>
+        )}
+
+        {/* Body */}
+        {!cargando && full && (
+          <div className="p-6 space-y-4">
+            {/* Tipo de endoso */}
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+                Tipo de endoso <span className="text-red-400">*</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {tiposDisponibles.map(t => (
+                  <button key={t} onClick={() => setTipo(t)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border-2 transition-all ${
+                      tipo === t ? "bg-[#13193a] text-white border-[#13193a]" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                    }`}>{t}</button>
+                ))}
+              </div>
+              {!perms.asegurado && (
+                <p className="text-[10px] text-amber-600 mt-2">
+                  Cambio de asegurado no disponible — el cliente tiene más de 1 póliza.
+                </p>
+              )}
+              {full.concesionarios && !perms.concesionario && (
+                <p className="text-[10px] text-amber-600 mt-1">
+                  Cambio de concesionario no disponible — tiene más de 1 póliza.
+                </p>
+              )}
+            </div>
+
+            {/* Inputs según tipo */}
+            {tipo === "Cambio de placas" && (
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Placas <span className="text-red-400">*</span></label>
+                <input value={form.placas} onChange={e => set("placas", e.target.value.toUpperCase())} className={inpCls} placeholder="Ej. ABC-123X"/>
+              </div>
+            )}
+
+            {tipo === "Cambio de No. Serie" && (
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">No. Serie <span className="text-red-400">*</span></label>
+                <input value={form.numSerie} onChange={e => set("numSerie", e.target.value.toUpperCase())} className={inpCls} placeholder="Número de serie"/>
+              </div>
+            )}
+
+            {tipo === "Cambio de No. Motor" && (
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">No. Motor <span className="text-red-400">*</span></label>
+                <input value={form.numMotor} onChange={e => set("numMotor", e.target.value.toUpperCase())} className={inpCls} placeholder="Número de motor"/>
+              </div>
+            )}
+
+            {tipo === "Cambio de asegurado" && (
+              <div className="space-y-3">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Datos del nuevo asegurado</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Nombre <span className="text-red-400">*</span></label>
+                    <input value={form.asegNombre} onChange={e => set("asegNombre", e.target.value.toUpperCase())} className={inpCls}/>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Ap. Paterno <span className="text-red-400">*</span></label>
+                    <input value={form.asegApellido1} onChange={e => set("asegApellido1", e.target.value.toUpperCase())} className={inpCls}/>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Ap. Materno</label>
+                  <input value={form.asegApellido2} onChange={e => set("asegApellido2", e.target.value.toUpperCase())} className={inpCls}/>
+                </div>
+              </div>
+            )}
+
+            {tipo === "Cambio de concesionario" && (
+              <div className="space-y-3">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Datos del nuevo concesionario</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Nombre <span className="text-red-400">*</span></label>
+                    <input value={form.concNombre} onChange={e => set("concNombre", e.target.value.toUpperCase())} className={inpCls}/>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Ap. Paterno <span className="text-red-400">*</span></label>
+                    <input value={form.concApellido1} onChange={e => set("concApellido1", e.target.value.toUpperCase())} className={inpCls}/>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Ap. Materno</label>
+                  <input value={form.concApellido2} onChange={e => set("concApellido2", e.target.value.toUpperCase())} className={inpCls}/>
+                </div>
+              </div>
+            )}
+
+            {/* Preview descripción PDF */}
+            {tipo && buildPreview() && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wide mb-1">Vista previa — texto en el PDF</p>
+                <p className="text-xs text-amber-900 font-mono leading-relaxed">{buildPreview()}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Footer */}
+        {!cargando && (
+          <div className="flex gap-3 px-6 pb-6">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+              Cancelar
+            </button>
+            <button
+              onClick={handleConfirmar}
+              disabled={!valido || procesando}
+              className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-lg shadow-[#13193a]/15 flex items-center justify-center gap-2">
+              {procesando ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                  Generando…
+                </>
+              ) : "Generar endoso"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Modal Cancelar ────────────────────────────────────────────
+function ModalCancelar({ poliza, onClose, onDone }) {
+  const [motivo,       setMotivo]       = useState("");
+  const [motivoCustom, setMotivoCustom] = useState("");
+  const [tipoEndoso,   setTipoEndoso]   = useState("C");
+  const [procesando,   setProcesando]   = useState(false);
+
+  const valido = motivo && (motivo !== "Otro" || motivoCustom.trim());
+
+  const inpCls = "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400 transition-all";
+
+  const handleConfirmar = async () => {
+    setProcesando(true);
+    const constanciaLabel = poliza.constancia || poliza.numero_poliza;
+    try {
+      const descripcion = motivo === "Otro"
+        ? motivoCustom.toUpperCase().trim()
+        : MOTIVOS_CANCEL[motivo];
+
+      const full      = await fetchPolizaById(poliza.id);
+      const polizaPDF = buildPolizaPDF(full, full.oficinas);
+      const fechaEndoso = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+      const blob = await pdf(
+        <EndosoCancelacionPDF
+          poliza={polizaPDF}
+          motivo={descripcion}
+          fechaEndoso={fechaEndoso}
+          tipoEndoso={tipoEndoso}
+          numeroControl={full.id}
+        />
+      ).toBlob();
+      descargarBlob(blob, `ENDOSO_CANCELACION-${constanciaLabel}.pdf`);
+
+      await cancelarPoliza(poliza.id, descripcion, null);
+
+      onDone();
+      Swal.fire({
+        icon: "success",
+        title: "Póliza cancelada",
+        text: `La póliza ${constanciaLabel} fue cancelada y se descargó el endoso.`,
+        confirmButtonColor: "#13193a",
+        confirmButtonText: "Aceptar",
+        timer: 5000,
+        timerProgressBar: true,
+      });
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Error", text: "No se pudo cancelar la póliza: " + e.message, confirmButtonColor: "#13193a" });
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.55)" }}
+      onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+          <div className="w-9 h-9 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h2 className="text-sm font-bold text-[#13193a]">Cancelar póliza</h2>
+            <p className="text-xs text-gray-400 mt-0.5 font-mono">
+              {poliza.constancia || poliza.numero_poliza} · {poliza.clientes?.nombre} {poliza.clientes?.apellido}
+            </p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 font-medium">
+            Esta acción cancelará la póliza. El asegurado perderá cobertura de inmediato.
+          </div>
+
+          {/* Tipo cancelación */}
           <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Tipo de endoso <span className="text-red-400">*</span></label>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Tipo de cancelación</label>
+            <select value={tipoEndoso} onChange={e => setTipoEndoso(e.target.value)} className={inpCls}>
+              <option value="C">TIPO C</option>
+              <option value="B">TIPO B</option>
+            </select>
+          </div>
+
+          {/* Motivo pills */}
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+              Motivo <span className="text-red-400">*</span>
+            </label>
             <div className="flex flex-wrap gap-2">
-              {TIPOS_ENDOSO.map(t => (
-                <button key={t} onClick={() => setTipo(t)}
+              {Object.keys(MOTIVOS_CANCEL).map(m => (
+                <button key={m} onClick={() => { setMotivo(m); setMotivoCustom(""); }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold border-2 transition-all ${
-                    tipo === t ? "bg-[#13193a] text-white border-[#13193a]" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                  }`}>{t}</button>
+                    motivo === m ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                  }`}>{m}</button>
               ))}
             </div>
           </div>
-          <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Nuevo valor</label>
-            <input value={valorNuevo} onChange={e => setValorNuevo(e.target.value)} placeholder="Ej. nueva placa, nuevo nombre..." className={inpCls}/>
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Descripción <span className="text-red-400">*</span></label>
-            <textarea rows={2} value={detalle} onChange={e => setDetalle(e.target.value)} placeholder="Detalle del cambio..."
-              className={`${inpCls} resize-none`}/>
-          </div>
+
+          {/* Textarea solo si "Otro" */}
+          {motivo === "Otro" && (
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Motivo <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                value={motivoCustom}
+                onChange={e => setMotivoCustom(e.target.value)}
+                placeholder="Describe el motivo de la cancelación..."
+                rows={3}
+                className={`${inpCls} resize-none`}
+              />
+            </div>
+          )}
         </div>
+
+        {/* Footer */}
         <div className="flex gap-3 px-6 pb-6">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
-          <button onClick={() => { setProcesando(true); setTimeout(() => onConfirmar(poliza.id, { tipo, detalle, valorNuevo }), 700); }}
-            disabled={!tipo || !detalle || procesando}
-            className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-lg shadow-[#13193a]/15">
-            {procesando ? "Procesando..." : "Generar endoso"}
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirmar}
+            disabled={!valido || procesando}
+            className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-40 transition-all flex items-center justify-center gap-2">
+            {procesando ? (
+              <>
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+                Procesando…
+              </>
+            ) : "Confirmar cancelación"}
           </button>
         </div>
       </div>
@@ -152,38 +518,53 @@ function ModalEndoso({ poliza, onClose, onConfirmar }) {
   );
 }
 
-// ── Página ────────────────────────────────────────────────────
+// ── Página principal ──────────────────────────────────────────
 export default function AdminPolizas() {
-  const [polizas, setPolizas] = useState(POLIZAS_MOCK);
-  const [busqueda, setBusqueda]             = useState("");
-  const [filtroOficina, setFiltroOficina]   = useState("Todas");
+  const [polizas,        setPolizas]        = useState([]);
+  const [cargando,       setCargando]       = useState(true);
+  const [busqueda,       setBusqueda]       = useState("");
+  const [filtroOficina,  setFiltroOficina]  = useState("Todas");
   const [filtroVendedor, setFiltroVendedor] = useState("Todos");
-  const [filtroEstatus, setFiltroEstatus]   = useState("Todos");
-  const [tab, setTab]     = useState("polizas");
-  const [modal, setModal] = useState(null);
-  const [polSel, setPolSel] = useState(null);
+  const [filtroEstatus,  setFiltroEstatus]  = useState("Todos");
+  const [tab,            setTab]            = useState("polizas");
+  const [modal,          setModal]          = useState(null);
+  const [polSel,         setPolSel]         = useState(null);
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    const { data, error } = await supabase
+      .from("polizas")
+      .select(`
+        id, numero_poliza, constancia, estatus, prima_total, forma_pago,
+        fecha_inicio, fecha_fin, cobertura, placas, aseguradora, created_at,
+        clientes(nombre, apellido),
+        vendedores(nombre, apellido),
+        oficinas(id, nombre)
+      `)
+      .neq("estatus", "COTIZACION")
+      .order("created_at", { ascending: false });
+    if (error) console.error("Error cargando pólizas admin:", error.message);
+    setPolizas(data ?? []);
+    setCargando(false);
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  // Listas únicas para los filtros
+  const listaOficinas  = [...new Set(polizas.map(p => p.oficinas?.nombre).filter(Boolean))].sort();
+  const listaVendedores = [...new Set(polizas.map(p => `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim()).filter(Boolean))].sort();
+  const listaEstatus   = ["Todos", "VIGENTE", "POR VENCER", "VENCIDA", "CANCELADA"];
 
   const filtradas = polizas.filter(p => {
-    const mb = p.id.includes(busqueda) || p.asegurado.toLowerCase().includes(busqueda.toLowerCase()) || p.placas.toLowerCase().includes(busqueda.toLowerCase());
-    const mo = filtroOficina  === "Todas" || p.oficina  === filtroOficina;
-    const mv = filtroVendedor === "Todos"  || p.vendedor === filtroVendedor;
-    const me = filtroEstatus  === "Todos"  || p.estatus  === filtroEstatus;
+    const txt = `${p.constancia || p.numero_poliza} ${p.clientes?.nombre || ""} ${p.clientes?.apellido || ""} ${p.placas || ""}`.toLowerCase();
+    const mb = txt.includes(busqueda.toLowerCase());
+    const mo = filtroOficina  === "Todas" || p.oficinas?.nombre  === filtroOficina;
+    const mv = filtroVendedor === "Todos"  || `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim() === filtroVendedor;
+    const me = filtroEstatus  === "Todos"  || p.estatus === filtroEstatus;
     return mb && mo && mv && me;
   });
 
-  const todosEndosos = polizas.flatMap(p => p.endosos.map(e => ({ ...e, polizaId: p.id, asegurado: p.asegurado, oficina: p.oficina })));
-
-  const confirmarCancelacion = (id) => {
-    setPolizas(ps => ps.map(p => p.id === id ? { ...p, estatus: "Cancelada" } : p));
-    setModal(null); setPolSel(null);
-  };
-  const confirmarEndoso = (id, data) => {
-    const nuevoId = `END-${String(todosEndosos.length + 13).padStart(3,"0")}`;
-    setPolizas(ps => ps.map(p => p.id === id
-      ? { ...p, endosos: [...p.endosos, { id: nuevoId, ...data, fecha: new Date().toLocaleDateString("es-MX"), estatus: "Pendiente" }] }
-      : p));
-    setModal(null); setPolSel(null);
-  };
+  const cerrarModal = () => { setModal(null); setPolSel(null); };
 
   const selCls = "px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15";
 
@@ -197,35 +578,49 @@ export default function AdminPolizas() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {/* Tabs */}
         <div className="flex items-center border-b border-gray-100 px-2">
-          {[{ k:"polizas", l:"Pólizas" }, { k:"endosos", l:"Endosos", badge: todosEndosos.length }].map(t => (
-            <button key={t.k} onClick={() => setTab(t.k)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all ${
-                tab === t.k ? "border-[#13193a] text-[#13193a]" : "border-transparent text-gray-400 hover:text-gray-600"
-              }`}>
-              {t.l}
-              {t.badge > 0 && <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{t.badge}</span>}
-            </button>
-          ))}
+          <button onClick={() => setTab("polizas")}
+            className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all ${tab === "polizas" ? "border-[#13193a] text-[#13193a]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
+            Pólizas
+          </button>
         </div>
 
         {/* Filtros */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 px-5 py-4 border-b border-gray-100">
           <div className="lg:col-span-2 relative">
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+            </svg>
             <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Póliza, asegurado, placas..."
               className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] bg-white"/>
           </div>
-          <select value={filtroOficina}  onChange={e => setFiltroOficina(e.target.value)}  className={selCls}>{OFICINAS.map(o => <option key={o}>{o}</option>)}</select>
-          <select value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)} className={selCls}>{VENDEDORES.map(v => <option key={v}>{v}</option>)}</select>
-          <select value={filtroEstatus}  onChange={e => setFiltroEstatus(e.target.value)}  className={selCls}>{["Todos",...Object.keys(STATUS_CLS)].map(o => <option key={o}>{o}</option>)}</select>
+          <select value={filtroOficina}  onChange={e => setFiltroOficina(e.target.value)}  className={selCls}>
+            <option value="Todas">Todas las oficinas</option>
+            {listaOficinas.map(o => <option key={o}>{o}</option>)}
+          </select>
+          <select value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)} className={selCls}>
+            <option value="Todos">Todos los vendedores</option>
+            {listaVendedores.map(v => <option key={v}>{v}</option>)}
+          </select>
+          <select value={filtroEstatus}  onChange={e => setFiltroEstatus(e.target.value)}  className={selCls}>
+            {listaEstatus.map(o => <option key={o}>{o}</option>)}
+          </select>
         </div>
 
-        {tab === "polizas" && (
-          <div className="overflow-x-auto">
+        {/* Tabla */}
+        <div className="overflow-x-auto">
+          {cargando ? (
+            <div className="flex items-center justify-center py-16 gap-3 text-gray-400">
+              <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+              </svg>
+              <span className="text-sm">Cargando pólizas…</span>
+            </div>
+          ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-100">
-                  {["Póliza","Asegurado","Aseguradora","Oficina","Cobertura","Placas","Prima","Vence","Estatus","Acciones"].map(h => (
+                  {["Constancia","Asegurado","Oficina","Vendedor","Cobertura","Placas","Prima","Vence","Estatus","Acciones"].map(h => (
                     <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -233,28 +628,36 @@ export default function AdminPolizas() {
               <tbody className="divide-y divide-gray-50">
                 {filtradas.length === 0 ? (
                   <tr><td colSpan={10} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas.</td></tr>
-                ) : filtradas.map((p, i) => (
-                  <tr key={i} className="hover:bg-gray-50/60 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-[#13193a]">{p.id}</td>
-                    <td className="px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{p.aseguradora}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-28 truncate">{p.oficina}</td>
+                ) : filtradas.map(p => (
+                  <tr key={p.id} className="hover:bg-gray-50/60 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs font-bold text-[#13193a]">{p.constancia || p.numero_poliza}</td>
+                    <td className="px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">
+                      {p.clientes?.nombre} {p.clientes?.apellido}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500 max-w-28 truncate">{p.oficinas?.nombre || "—"}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                      {p.vendedores?.nombre} {p.vendedores?.apellido}
+                    </td>
                     <td className="px-4 py-3 text-xs text-gray-500 max-w-36 truncate">{p.cobertura}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.placas}</td>
-                    <td className="px-4 py-3 text-xs font-bold text-emerald-700">${p.prima.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{p.vigHasta}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.placas || "—"}</td>
+                    <td className="px-4 py-3 text-xs font-bold text-emerald-700">
+                      ${(p.prima_total ?? 0).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtFecha(p.fecha_fin)}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex text-[11px] font-semibold px-2.5 py-1 rounded-full border ${STATUS_CLS[p.estatus] ?? STATUS_CLS["Cancelada"]}`}>{p.estatus}</span>
+                      <StatusBadge estatus={p.estatus} />
                     </td>
                     <td className="px-4 py-3">
-                      {p.estatus !== "Cancelada" && (
+                      {p.estatus !== "CANCELADA" && (
                         <div className="flex gap-1.5">
-                          <button onClick={() => { setPolSel(p); setModal("endoso"); }}
-                            className="px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold hover:bg-amber-100 transition-colors">
+                          <button
+                            onClick={() => { setPolSel(p); setModal("endoso"); }}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold hover:bg-amber-100 transition-colors whitespace-nowrap">
                             Endoso
                           </button>
-                          <button onClick={() => { setPolSel(p); setModal("cancelar"); }}
-                            className="px-2.5 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[11px] font-bold hover:bg-red-100 transition-colors">
+                          <button
+                            onClick={() => { setPolSel(p); setModal("cancelar"); }}
+                            className="px-2.5 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[11px] font-bold hover:bg-red-100 transition-colors whitespace-nowrap">
                             Cancelar
                           </button>
                         </div>
@@ -264,53 +667,16 @@ export default function AdminPolizas() {
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
-
-        {tab === "endosos" && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50/80 border-b border-gray-100">
-                  {["ID Endoso","Póliza","Asegurado","Oficina","Tipo","Nuevo valor","Detalle","Fecha","Estatus"].map(h => (
-                    <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {todosEndosos.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">No hay endosos registrados.</td></tr>
-                ) : todosEndosos.map((e, i) => (
-                  <tr key={i} className="hover:bg-gray-50/60">
-                    <td className="px-5 py-3.5 font-mono text-xs font-bold text-[#13193a]">{e.id}</td>
-                    <td className="px-5 py-3.5 font-mono text-xs text-gray-600">{e.polizaId}</td>
-                    <td className="px-5 py-3.5 text-xs font-semibold text-gray-700 whitespace-nowrap">{e.asegurado}</td>
-                    <td className="px-5 py-3.5 text-xs text-gray-500 max-w-28 truncate">{e.oficina}</td>
-                    <td className="px-5 py-3.5 text-xs text-gray-600">{e.tipo}</td>
-                    <td className="px-5 py-3.5 text-xs font-mono text-gray-600">{e.valorNuevo || "—"}</td>
-                    <td className="px-5 py-3.5 text-xs text-gray-500 max-w-40 truncate">{e.detalle}</td>
-                    <td className="px-5 py-3.5 text-xs text-gray-500 whitespace-nowrap">{e.fecha}</td>
-                    <td className="px-5 py-3.5">
-                      <span className={`inline-flex text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
-                        e.estatus === "Procesado" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
-                      }`}>{e.estatus}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="px-5 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400">
-            {tab === "polizas" ? `${filtradas.length} pólizas` : `${todosEndosos.length} endosos`}
-          </p>
+          <p className="text-xs text-gray-400">{filtradas.length} pólizas</p>
         </div>
       </div>
 
-      {modal === "cancelar" && polSel && <ModalCancelar poliza={polSel} onClose={() => { setModal(null); setPolSel(null); }} onConfirmar={confirmarCancelacion}/>}
-      {modal === "endoso"   && polSel && <ModalEndoso   poliza={polSel} onClose={() => { setModal(null); setPolSel(null); }} onConfirmar={confirmarEndoso}/>}
+      {modal === "endoso"  && polSel && <ModalEndoso  poliza={polSel} onClose={cerrarModal} onDone={() => { cerrarModal(); cargar(); }}/>}
+      {modal === "cancelar" && polSel && <ModalCancelar poliza={polSel} onClose={cerrarModal} onDone={() => { cerrarModal(); cargar(); }}/>}
     </div>
   );
 }

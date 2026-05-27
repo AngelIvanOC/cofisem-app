@@ -146,6 +146,203 @@ function ModalVerUsuario({ usuario, onClose }) {
   );
 }
 
+// ── Modal de edición de usuario ────────────────────────────
+function ModalEditarUsuario({ usuario, onClose, onGuardar, roles, oficinas }) {
+  const [form, setForm] = useState({
+    nombre:     usuario.nombre     ?? "",
+    apellido:   usuario.apellido   ?? "",
+    rol_id:     String(usuario.rol_id ?? ""),
+    oficina_id: String(usuario.oficina_id ?? ""),
+    password:   "",
+  });
+  const [procesando, setProcesando]   = useState(false);
+  const [error, setError]             = useState(null);
+  const [verPassword, setVerPassword] = useState(false);
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const rolSel   = roles.find((r) => r.id === Number(form.rol_id));
+  const esOper   = rolSel?.nombre === "OPERADOR";
+  const valido   =
+    form.nombre.trim() &&
+    form.apellido.trim() &&
+    form.rol_id &&
+    (!esOper || form.oficina_id) &&
+    (form.password === "" || form.password.length >= 6);
+
+  const inpCls =
+    "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 " +
+    "placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
+
+  const handleGuardar = async () => {
+    setProcesando(true);
+    setError(null);
+    try {
+      await onGuardar(usuario.id, form);
+      onClose();
+    } catch (e) {
+      setError(e.message ?? "Error al actualizar el usuario.");
+      setProcesando(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.55)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+          <div className="w-9 h-9 rounded-xl bg-[#13193a]/8 flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-[#13193a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h2 className="text-sm font-bold text-[#13193a]">Editar usuario</h2>
+            <p className="text-xs text-gray-400 mt-0.5 font-mono">{usuario.email}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          {/* Nombre / Apellido */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Nombre <span className="text-red-400">*</span>
+              </label>
+              <input value={form.nombre} onChange={(e) => set("nombre", e.target.value)} className={inpCls} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Apellido <span className="text-red-400">*</span>
+              </label>
+              <input value={form.apellido} onChange={(e) => set("apellido", e.target.value)} className={inpCls} />
+            </div>
+          </div>
+
+          {/* Nueva contraseña (opcional) */}
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+              Nueva contraseña <span className="text-gray-300 normal-case font-normal">(dejar vacío para no cambiar)</span>
+            </label>
+            <div className="relative">
+              <input
+                type={verPassword ? "text" : "password"}
+                value={form.password}
+                onChange={(e) => set("password", e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                className={inpCls + " pr-10"}
+              />
+              <button
+                type="button"
+                onClick={() => setVerPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                tabIndex={-1}
+              >
+                {verPassword ? (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Rol */}
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+              Rol <span className="text-red-400">*</span>
+            </label>
+            <select
+              value={form.rol_id}
+              onChange={(e) => { set("rol_id", e.target.value); set("oficina_id", ""); }}
+              className={inpCls + " cursor-pointer"}
+            >
+              <option value="">Seleccionar rol…</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>{formatRol(r.nombre)}</option>
+              ))}
+            </select>
+            {rolSel && <p className="text-[11px] text-gray-400 mt-1.5">{ROL_DESC[rolSel.nombre] ?? ""}</p>}
+          </div>
+
+          {/* Oficina — solo si OPERADOR */}
+          {esOper && (
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Oficina <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={form.oficina_id}
+                onChange={(e) => set("oficina_id", e.target.value)}
+                className={inpCls + " cursor-pointer"}
+              >
+                <option value="">Seleccionar oficina…</option>
+                {oficinas.map((o) => (
+                  <option key={o.id} value={o.id}>{o.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            onClick={handleGuardar}
+            disabled={!valido || procesando}
+            className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2 transition-all shadow-lg shadow-[#13193a]/15"
+          >
+            {procesando ? (
+              <>
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+                Guardando…
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Guardar cambios
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Modal de creación de usuario ───────────────────────────
 function ModalUsuario({ onClose, onGuardar, roles, oficinas }) {
   const [form, setForm] = useState({
@@ -448,8 +645,9 @@ export default function AdminUsuarios() {
   const [filtroRol, setFiltroRol] = useState("Todos");
   const [filtroOficina, setFiltroOficina] = useState("Todas");
   const [filtroActivo, setFiltroActivo] = useState("Todos");
-  const [modalNuevo, setModalNuevo] = useState(false);
-  const [usuarioVer, setUsuarioVer] = useState(null);
+  const [modalNuevo,     setModalNuevo]     = useState(false);
+  const [usuarioVer,     setUsuarioVer]     = useState(null);
+  const [usuarioEditar,  setUsuarioEditar]  = useState(null);
 
   const cargarDatos = useCallback(async () => {
     setCargando(true);
@@ -515,6 +713,32 @@ export default function AdminUsuarios() {
 
   const handleCrearUsuario = async (form) => {
     await crearUsuario(form, oficinas);
+  };
+
+  const editarUsuario = async (id, form) => {
+    const rolSel = roles.find((r) => r.id === Number(form.rol_id));
+    const esOper = rolSel?.nombre === "OPERADOR";
+
+    // 1. Cambiar contraseña en auth.users vía Edge Function (si se proporcionó)
+    if (form.password) {
+      const { error: fnError } = await supabase.functions.invoke("actualizar-password", {
+        body: { user_id: id, password: form.password },
+      });
+      if (fnError) throw new Error("No se pudo cambiar la contraseña: " + fnError.message);
+    }
+
+    // 2. Actualizar perfil en public.usuarios
+    const payload = {
+      nombre:     form.nombre.trim(),
+      apellido:   form.apellido.trim(),
+      rol_id:     Number(form.rol_id),
+      oficina_id: esOper && form.oficina_id ? Number(form.oficina_id) : null,
+    };
+    if (form.password) payload.contrasena = form.password;
+
+    const { error } = await supabase.from("usuarios").update(payload).eq("id", id);
+    if (error) throw new Error(error.message);
+    await cargarDatos();
   };
 
   const toggleActivo = async (u) => {
@@ -785,16 +1009,28 @@ export default function AdminUsuarios() {
                         </td>
                         {/* Acciones */}
                         <td className="px-5 py-3.5">
-                          <button
-                            onClick={() => setUsuarioVer(u)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-[#13193a] hover:bg-[#13193a]/6 transition-colors"
-                            title="Ver datos del usuario"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setUsuarioVer(u)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-[#13193a] hover:bg-[#13193a]/6 transition-colors"
+                              title="Ver datos del usuario"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => setUsuarioEditar(u)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-[#13193a] hover:bg-[#13193a]/6 transition-colors"
+                              title="Editar usuario"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                              </svg>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -829,6 +1065,17 @@ export default function AdminUsuarios() {
         <ModalVerUsuario
           usuario={usuarioVer}
           onClose={() => setUsuarioVer(null)}
+        />
+      )}
+
+      {/* Modal editar usuario */}
+      {usuarioEditar && (
+        <ModalEditarUsuario
+          usuario={usuarioEditar}
+          roles={roles}
+          oficinas={oficinas}
+          onClose={() => setUsuarioEditar(null)}
+          onGuardar={editarUsuario}
         />
       )}
     </div>

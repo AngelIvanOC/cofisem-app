@@ -31,7 +31,6 @@ export default function Polizas({ usuario }) {
   const [polizaViewer,    setPolizaViewer]    = useState(null);
   const [loadingViewerId, setLoadingViewerId] = useState(null);
   const [resumenData,     setResumenData]     = useState(null);
-  const [menuAbierto,     setMenuAbierto]     = useState(null);
   const [modalCancelar,   setModalCancelar]   = useState(null);
   const [motivoCancel,    setMotivoCancel]    = useState("");
   const [tipoEndoso,      setTipoEndoso]      = useState("C");
@@ -168,12 +167,6 @@ export default function Polizas({ usuario }) {
     catch { /* cuota llena — ignorar */ }
   }, [cotizaciones]);
 
-  useEffect(() => {
-    if (!menuAbierto) return;
-    const cerrar = () => setMenuAbierto(null);
-    document.addEventListener("click", cerrar);
-    return () => document.removeEventListener("click", cerrar);
-  }, [menuAbierto]);
 
   const ESTATUS_OPTS = ["Todos","VIGENTE","POR VENCER","VENCIDA","CANCELADA"];
 
@@ -332,16 +325,16 @@ export default function Polizas({ usuario }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50/80 border-b border-gray-100">
-                      {["Constancia","Asegurado","Cobertura","Vendedor","Prima","Forma pago","Vence","Estatus","",""].map((h, i) => (
+                      {["Constancia","Asegurado","Cobertura","Vendedor","Prima","Forma pago","Vence","Estatus","Acciones"].map((h, i) => (
                         <th key={i} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {loading ? (
-                      <tr><td colSpan={10} className="text-center py-12 text-sm text-gray-400">Cargando pólizas...</td></tr>
+                      <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">Cargando pólizas...</td></tr>
                     ) : polizasFiltradas.length === 0 ? (
-                      <tr><td colSpan={10} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas.</td></tr>
+                      <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas.</td></tr>
                     ) : polizasFiltradas.map(p => (
                       <tr
                         key={p.id}
@@ -361,60 +354,44 @@ export default function Polizas({ usuario }) {
                         <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{p.fecha_fin}</td>
                         <td className="px-4 py-3"><StatusBadge estatus={p.estatus} /></td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => verPDF(p)}
-                            disabled={loadingViewerId === p.id}
-                            className="flex items-center gap-1 text-xs font-semibold text-[#13193a] border border-[#13193a]/20 px-2.5 py-1.5 rounded-xl hover:bg-[#13193a]/5 transition-all disabled:opacity-40 whitespace-nowrap"
-                          >
-                            {loadingViewerId === p.id ? (
-                              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                              </svg>
-                            ) : (
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
-                            )}
-                            Ver PDF
-                          </button>
-                        </td>
-                        <td className="px-2 py-3" onClick={e => e.stopPropagation()}>
-                          <div className="relative flex justify-center">
+                          <div className="flex items-center gap-1.5">
                             <button
-                              onClick={(e) => { e.stopPropagation(); setMenuAbierto(menuAbierto === p.id ? null : p.id); }}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                              onClick={() => verPDF(p)}
+                              disabled={loadingViewerId === p.id}
+                              className="flex items-center gap-1 text-xs font-semibold text-[#13193a] border border-[#13193a]/20 px-2.5 py-1.5 rounded-xl hover:bg-[#13193a]/5 transition-all disabled:opacity-40 whitespace-nowrap"
                             >
-                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <circle cx="12" cy="5" r="1.5" />
-                                <circle cx="12" cy="12" r="1.5" />
-                                <circle cx="12" cy="19" r="1.5" />
-                              </svg>
+                              {loadingViewerId === p.id ? (
+                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                              )}
+                              Ver PDF
                             </button>
-                            {menuAbierto === p.id && (
-                              <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden min-w-[130px]">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setMenuAbierto(null); abrirEdicion(p); }}
-                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5 transition-colors"
-                                >
-                                  <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                                  </svg>
-                                  Editar
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setMenuAbierto(null); setMotivoCancel(""); setModalCancelar(p); }}
-                                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors border-t border-gray-50"
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                                  </svg>
-                                  Cancelar
-                                </button>
-                              </div>
-                            )}
+                            <button
+                              onClick={() => abrirEdicion(p)}
+                              className="flex items-center gap-1 text-xs font-semibold text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap"
+                            >
+                              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                              </svg>
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => { setMotivoCancel(""); setModalCancelar(p); }}
+                              className="flex items-center gap-1 text-xs font-semibold text-red-600 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50 transition-all whitespace-nowrap"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                              </svg>
+                              Cancelar
+                            </button>
                           </div>
                         </td>
                       </tr>

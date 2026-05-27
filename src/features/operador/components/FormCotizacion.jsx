@@ -76,6 +76,7 @@ export default function FormCotizacion({
   const [clientes, setClientes] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [concesionariosLocal, setConcesionariosLocal] = useState({});
+  const [conVendedor, setConVendedor] = useState(!!(cotizacionInicial?.vendedorId));
   const [loadingDB, setLoadingDB] = useState(true);
   const [isEmitting, setIsEmitting] = useState(false);
   const [modalAseg, setModalAseg] = useState(false);
@@ -211,7 +212,7 @@ export default function FormCotizacion({
     : "—";
   const vendedorLabel = vendedorSel
     ? `${vendedorSel.nombre} ${vendedorSel.apellido || ""}`.trim()
-    : "—";
+    : "GAMAN";
 
   const concesionariosDisponibles = form.clienteId
     ? (concesionariosLocal[form.clienteId] ?? [])
@@ -285,7 +286,7 @@ export default function FormCotizacion({
       form.placas.trim() &&
       !serieChecking
     ),
-    2: !!(form.clienteId && form.vendedorId && fechaInicioValida),
+    2: !!(form.clienteId && fechaInicioValida),
     3: true,
   };
 
@@ -620,51 +621,78 @@ export default function FormCotizacion({
             </div>
 
             <div>
-              <label className={lblCls}>Vendedor {req}</label>
-              <div className="flex gap-2">
-                <select
-                  value={form.vendedorId ?? ""}
-                  onChange={(e) =>
-                    setF(
-                      "vendedorId",
-                      e.target.value ? Number(e.target.value) : null,
-                    )
-                  }
-                  disabled={loadingDB}
-                  className={inpCls + " flex-1"}
-                >
-                  <option value="">
-                    {loadingDB ? "Cargando..." : "Selecciona un vendedor"}
-                  </option>
-                  {vendedores
-                    .filter((v) => v.activo)
-                    .map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.nombre} {v.apellido || ""}
-                        {v.codigo ? ` (${v.codigo})` : ""}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setModalVend(true)}
-                  className="shrink-0 w-10 h-10 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white flex items-center justify-center transition-all"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={lblCls} style={{ marginBottom: 0 }}>Vendedor</label>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <span className="text-xs text-gray-500 font-medium">Vendedor</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !conVendedor;
+                      setConVendedor(next);
+                      if (!next) setF("vendedorId", null);
+                    }}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none ${conVendedor ? "bg-[#13193a]" : "bg-gray-300"}`}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M12 4.5v15m7.5-7.5h-15"
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${conVendedor ? "translate-x-[18px]" : "translate-x-[3px]"}`}
                     />
-                  </svg>
-                </button>
+                  </button>
+                </label>
               </div>
+              {!conVendedor ? (
+                <input
+                  type="text"
+                  value="GAMAN"
+                  disabled
+                  className={inpCls + " bg-gray-100 text-gray-400 cursor-not-allowed"}
+                />
+              ) : (
+                <div className="flex gap-2">
+                  <select
+                    value={form.vendedorId ?? ""}
+                    onChange={(e) =>
+                      setF(
+                        "vendedorId",
+                        e.target.value ? Number(e.target.value) : null,
+                      )
+                    }
+                    disabled={loadingDB}
+                    className={inpCls + " flex-1"}
+                  >
+                    <option value="">
+                      {loadingDB ? "Cargando..." : "Selecciona un vendedor"}
+                    </option>
+                    {vendedores
+                      .filter((v) => v.activo)
+                      .map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.nombre} {v.apellido || ""}
+                          {v.codigo ? ` (${v.codigo})` : ""}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setModalVend(true)}
+                    className="shrink-0 w-10 h-10 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white flex items-center justify-center transition-all"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 4.5v15m7.5-7.5h-15"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
