@@ -1,7 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import logoQualitas from "../assets/logo_qualitas.png";
-import logoAna      from "../assets/logo_ana.png";
-import logoGaman    from "../assets/GamanLogo.png";
+import logoAna from "../assets/logo_ana.png";
+import logoGaman from "../assets/GamanLogo.png";
+import logoHDI from "../assets/logo_hdi.png";
+import logoBanorte from "../assets/logo_banorte.png";
 
 const aseguradoras = [
   {
@@ -16,6 +18,20 @@ const aseguradoras = [
     logo: logoAna,
     nombre: "ANA Seguros",
     href: "https://anaseguros.com.mx/anaweb/index.html",
+    externo: true,
+  },
+  {
+    id: "hdi",
+    logo: logoHDI,
+    nombre: "HDI Seguros",
+    href: "https://smartoffice.hdi.com.mx/",
+    externo: true,
+  },
+  {
+    id: "banorte",
+    logo: logoBanorte,
+    nombre: "Banorte Seguros",
+    href: "https://espaciobanorte.com/portal/ngPortal/#/login",
     externo: true,
   },
   {
