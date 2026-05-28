@@ -33,6 +33,7 @@ import AnalistaPolizas   from "./pages/analista/AnalistaPolizas";
 import AnalistaPagos     from "./pages/analista/AnalistaPagos";
 import AnalistaReportes  from "./pages/analista/AnalistaReportes";
 import AnalistaCorte     from "./pages/analista/AnalistaCorte";
+import OperadorPagos     from "./pages/operador/Pagos";
 
 // ── ADMINISTRACIÓN ────────────────────────────────────────────
 import AdminDashboard from "./pages/administracion/AdminDashboard";
@@ -203,23 +204,23 @@ function VendedoresRoute({ rolNombre, usuario }) {
 
 function PagosRoute({ rolNombre, usuario }) {
   switch (rolNombre) {
-    case "OPERADOR":
+    case "OPERADOR":       return <OperadorPagos usuario={usuario} />;
     case "ANALISTA":       return <AnalistaPagos usuario={usuario} />;
-    case "ADMINISTRACION": return <AdminPagos />;
+    case "ADMINISTRACION": return <AnalistaPagos usuario={usuario} />;
     default:               return <PaginaEnConstruccion titulo="Pagos" />;
   }
 }
 
 function ReportesRoute({ rolNombre }) {
-  if (rolNombre === "ANALISTA" || rolNombre === "ADMINISTRACION")
+  if (rolNombre === "ADMINISTRACION")
     return <AnalistaReportes />;
-  return <PaginaEnConstruccion titulo="Reportes" />;
+  return <PaginaEnConstruccion titulo="Reportes" icono="reportes" />;
 }
 
 function CorteRoute({ rolNombre, usuario }) {
   switch (rolNombre) {
     case "OPERADOR":       return <CorteDiario usuario={usuario} />;
-    case "ANALISTA":       return <AnalistaCorte />;
+    case "ANALISTA":       return <PaginaEnConstruccion titulo="Corte diario" icono="reportes" />;
     case "ADMINISTRACION": return <AnalistaCorte />;
     default:               return <PaginaEnConstruccion titulo="Corte Diario" />;
   }

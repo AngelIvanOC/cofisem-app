@@ -132,9 +132,35 @@ function TotalRow({ label, value }) {
   );
 }
 
+function estatusCuotaDisplay(cuota, formaPago) {
+  if (cuota.estatus === 'PAGADO') return 'PAGADO';
+  if (cuota.estatus === 'ADEUDO') return 'ADEUDO';
+  const vto = new Date((cuota.fecha_vencimiento ?? '') + 'T12:00:00');
+  if (!isNaN(vto)) {
+    const hoy = new Date();
+    hoy.setHours(12, 0, 0, 0);
+    const forma = formaPago || cuota.forma_pago || 'CONTADO';
+    // CONTADO: 0 días de gracia — PARCIALES: 7 días de gracia (al 8vo día = VENCIDO)
+    const diasGracia = forma !== 'CONTADO' ? 7 : 0;
+    const limite = new Date(vto);
+    limite.setDate(limite.getDate() + diasGracia);
+    if (hoy > limite) return 'VENCIDO';
+  }
+  return 'PENDIENTE';
+}
+
+const CUOTA_BADGE = {
+  PAGADO:   { cls: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Al corriente" },
+  ADEUDO:   { cls: "bg-amber-50 text-amber-700 border-amber-200",       label: "Adeudo"       },
+  VENCIDO:  { cls: "bg-red-50 text-red-600 border-red-200",             label: "Vencido"      },
+  PENDIENTE:{ cls: "bg-gray-50 text-gray-500 border-gray-200",          label: "Pendiente"    },
+  ANULADA:  { cls: "bg-gray-100 text-gray-500 border-gray-300",         label: "ANULADA"      },
+};
+
 export default function VerificarPoliza() {
   const { constancia } = useParams();
-  const [poliza, setPoliza] = useState(null);
+  const [poliza,  setPoliza]  = useState(null);
+  const [pagos,   setPagos]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [noFound, setNoFound] = useState(false);
 
@@ -142,11 +168,16 @@ export default function VerificarPoliza() {
     if (!constancia) return;
     supabase
       .rpc("verificar_poliza_publica", { p_constancia: constancia })
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (error || !data) {
           setNoFound(true);
         } else {
           setPoliza(data);
+          try {
+            const { data: pagosData } = await supabase
+              .rpc("verificar_pagos_poliza", { p_constancia: constancia });
+            setPagos(pagosData ?? []);
+          } catch (_) {}
         }
         setLoading(false);
       });
@@ -273,7 +304,58 @@ export default function VerificarPoliza() {
                 <span className="text-[11px] font-bold text-gray-400 tracking-widest uppercase">
                   ** {formaPago} **
                 </span>
+                {/* Alerta de pagos si hay adeudos o vencidos */}
+                {pagos.length > 0 && (() => {
+                  const hayAdeudo  = pagos.some(p => p.estatus === 'ADEUDO');
+                  const hayVencido = pagos.some(p => estatusCuotaDisplay(p, formaPago) === 'VENCIDO');
+                  if (poliza.estatus === 'ANULADA') return null;
+                  if (hayVencido) return (
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold mt-1">
+                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374l7.048-12.14c.866-1.5 3.032-1.5 3.898 0l7.048 12.14zM12 15.75h.007v.008H12v-.008z"/></svg>
+                      Esta póliza tiene pagos vencidos
+                    </div>
+                  );
+                  if (hayAdeudo) return (
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold mt-1">
+                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9" strokeWidth="2"/></svg>
+                      Pago en proceso de confirmación (ADEUDO)
+                    </div>
+                  );
+                  return null;
+                })()}
               </div>
+
+              {/* ── Relación de pagos (solo PARCIALES) ───────────── */}
+              {pagos.length > 0 && formaPago !== 'CONTADO' && (
+                <div className="mb-4">
+                  <div className="rounded-xl border border-gray-200 overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-[#13193a] text-white">
+                          <th className="text-left px-3 py-2 font-semibold text-[11px]">No. pago</th>
+                          <th className="text-right px-3 py-2 font-semibold text-[11px]">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {pagos.map((pago, idx) => {
+                          const est   = poliza.estatus === 'ANULADA' ? 'ANULADA' : estatusCuotaDisplay(pago, formaPago);
+                          const badge = CUOTA_BADGE[est] ?? CUOTA_BADGE.PENDIENTE;
+                          return (
+                            <tr key={pago.id} className="bg-white">
+                              <td className="px-3 py-2.5 text-gray-600 font-medium">Pago {idx + 1}</td>
+                              <td className="px-3 py-2.5 text-right">
+                                <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${badge.cls}`}>
+                                  {badge.label}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Info principal */}
               <div className="bg-gray-50 rounded-2xl px-4 py-1 mb-1">

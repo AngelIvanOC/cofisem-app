@@ -63,7 +63,7 @@ export default function FormCotizacion({
     conductorSexo: cotizacionInicial?.conductorSexo ?? "",
     conductorEdad: cotizacionInicial?.conductorEdad ?? "",
     clienteId: cotizacionInicial?.clienteId ?? null,
-    vendedorId: cotizacionInicial?.vendedorId ?? null,
+    vendedorId: cotizacionInicial?.vendedorId ?? 1,
     concesionario: cotizacionInicial?.concesionario ?? null,
     fechaInicio: cotizacionInicial?.fechaInicio ?? "",
     formaPago: cotizacionInicial?.formaPago ?? "CONTADO",
@@ -76,7 +76,9 @@ export default function FormCotizacion({
   const [clientes, setClientes] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [concesionariosLocal, setConcesionariosLocal] = useState({});
-  const [conVendedor, setConVendedor] = useState(!!(cotizacionInicial?.vendedorId));
+  const [conVendedor, setConVendedor] = useState(
+    !!(cotizacionInicial?.vendedorId && cotizacionInicial.vendedorId !== 1)
+  );
   const [loadingDB, setLoadingDB] = useState(true);
   const [isEmitting, setIsEmitting] = useState(false);
   const [modalAseg, setModalAseg] = useState(false);
@@ -210,9 +212,14 @@ export default function FormCotizacion({
   const clienteLabel = clienteSel
     ? `${clienteSel.nombre} ${clienteSel.apellido || ""}`.trim()
     : "—";
-  const vendedorLabel = vendedorSel
+  // Para el PDF el conducto de COFISEM se muestra como "1"
+  const vendedorLabel = (vendedorSel && vendedorSel.id !== 1)
     ? `${vendedorSel.nombre} ${vendedorSel.apellido || ""}`.trim()
-    : "GAMAN";
+    : "1";
+  // Para el formulario se muestra el nombre real
+  const vendedorNombre = (vendedorSel && vendedorSel.id !== 1)
+    ? `${vendedorSel.nombre} ${vendedorSel.apellido || ""}`.trim()
+    : vendedorSel?.nombre ?? "COFISEM";
 
   const concesionariosDisponibles = form.clienteId
     ? (concesionariosLocal[form.clienteId] ?? [])
@@ -631,7 +638,7 @@ export default function FormCotizacion({
                     onClick={() => {
                       const next = !conVendedor;
                       setConVendedor(next);
-                      if (!next) setF("vendedorId", null);
+                      if (!next) setF("vendedorId", 1);
                     }}
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none ${conVendedor ? "bg-[#13193a]" : "bg-gray-300"}`}
                   >
@@ -644,7 +651,7 @@ export default function FormCotizacion({
               {!conVendedor ? (
                 <input
                   type="text"
-                  value="GAMAN"
+                  value={vendedorNombre}
                   disabled
                   className={inpCls + " bg-gray-100 text-gray-400 cursor-not-allowed"}
                 />
@@ -665,7 +672,7 @@ export default function FormCotizacion({
                       {loadingDB ? "Cargando..." : "Selecciona un vendedor"}
                     </option>
                     {vendedores
-                      .filter((v) => v.activo)
+                      .filter((v) => v.activo && v.id !== 1)
                       .map((v) => (
                         <option key={v.id} value={v.id}>
                           {v.nombre} {v.apellido || ""}
