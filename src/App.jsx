@@ -211,19 +211,13 @@ function PagosRoute({ rolNombre, usuario }) {
   }
 }
 
-function ReportesRoute({ rolNombre }) {
-  if (rolNombre === "ADMINISTRACION")
-    return <AnalistaReportes />;
+function ReportesRoute() {
   return <PaginaEnConstruccion titulo="Reportes" icono="reportes" />;
 }
 
 function CorteRoute({ rolNombre, usuario }) {
-  switch (rolNombre) {
-    case "OPERADOR":       return <CorteDiario usuario={usuario} />;
-    case "ANALISTA":       return <PaginaEnConstruccion titulo="Corte diario" icono="reportes" />;
-    case "ADMINISTRACION": return <AnalistaCorte />;
-    default:               return <PaginaEnConstruccion titulo="Corte Diario" />;
-  }
+  if (rolNombre === "OPERADOR") return <CorteDiario usuario={usuario} />;
+  return <PaginaEnConstruccion titulo="Corte diario" icono="reportes" />;
 }
 
 function SiniestrosRoute({ rolNombre }) {

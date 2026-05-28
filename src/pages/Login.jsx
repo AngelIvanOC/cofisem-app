@@ -6,6 +6,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import Swal from "sweetalert2";
+import iconoGaman from "../assets/icono_gaman.png";
 
 const CAROUSEL_IMAGES = [
   {
@@ -133,21 +134,7 @@ export default function Login() {
         {/* Logo + nombre */}
         <div className="flex flex-col items-center gap-3 mb-8">
           <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center shadow-lg">
-            <svg width="36" height="36" viewBox="0 0 48 48" fill="none">
-              <path
-                d="M12 24C12 17.373 17.373 12 24 12C30.627 12 36 17.373 36 24C36 30.627 30.627 36 24 36"
-                stroke="white"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-              <path
-                d="M24 36C20 36 16 32 16 28C16 24 20 20 24 20"
-                stroke="rgba(255,255,255,0.6)"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-              <circle cx="24" cy="24" r="3" fill="white" />
-            </svg>
+            <img src={iconoGaman} alt="GAMAN" className="w-10 h-10 object-contain" />
           </div>
           <div className="text-center">
             <h1 className="text-white font-bold text-2xl tracking-tight">
