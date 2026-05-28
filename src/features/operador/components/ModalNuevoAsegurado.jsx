@@ -46,7 +46,7 @@ export default function ModalNuevoAsegurado({ onClose, onGuardar, usuarioId }) {
 
   const canSave = !!(
     form.nombre && form.apellido1 && form.apellido2 &&
-    form.telefono && form.rfc && form.curp &&
+    form.rfc && form.curp &&
     form.cp && form.estado && form.municipio && form.colonia && form.calle && form.numeroExt
   );
 
@@ -142,7 +142,6 @@ export default function ModalNuevoAsegurado({ onClose, onGuardar, usuarioId }) {
                 value={form.telefono}
                 onChange={(v) => setF("telefono", v)}
                 placeholder="55 0000 0000"
-                req
               />
               <Campo
                 label="RFC"

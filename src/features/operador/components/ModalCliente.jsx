@@ -96,7 +96,6 @@ export default function ModalCliente({
                 value={form.telefono}
                 onChange={(v) => onFieldChange("telefono", v)}
                 placeholder="55 0000 0000"
-                req
               />
               <Campo
                 label="RFC"
@@ -162,7 +161,7 @@ export default function ModalCliente({
             onClick={onGuardar}
             disabled={
               !form.nombre || !form.apellido1 || !form.apellido2 ||
-              !form.telefono || !form.rfc || !form.curp ||
+              !form.rfc || !form.curp ||
               !form.cp || !form.estado || !form.municipio || !form.colonia || !form.calle || !form.numeroExt ||
               saving
             }
