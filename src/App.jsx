@@ -14,7 +14,8 @@ import AppLayout      from "./layouts/AppLayout";
 import PaginaEnConstruccion from "./pages/PaginaEnConstruccion";
 
 // ── DEV — eliminar antes de producción ────────────────────────
-import PDFPreview from "./pages/PDFPreview";
+import PDFPreview    from "./pages/PDFPreview";
+import ReciboPreview from "./pages/ReciboPreview";
 
 // ── Verificación pública de pólizas ──────────────────────────
 import VerificarPoliza from "./pages/VerificarPoliza";
@@ -69,6 +70,7 @@ const RUTAS_POR_ROL = {
     "/gaman/cotizaciones",
     "/gaman/cotizaciones/nueva",
     "/gaman/vendedores",
+    "/gaman/pagos",
     "/gaman/corte-diario",
   ],
   ANALISTA: [
@@ -199,9 +201,10 @@ function VendedoresRoute({ rolNombre, usuario }) {
   return <PaginaEnConstruccion titulo="Vendedores" />;
 }
 
-function PagosRoute({ rolNombre }) {
+function PagosRoute({ rolNombre, usuario }) {
   switch (rolNombre) {
-    case "ANALISTA":       return <AnalistaPagos />;
+    case "OPERADOR":
+    case "ANALISTA":       return <AnalistaPagos usuario={usuario} />;
     case "ADMINISTRACION": return <AdminPagos />;
     default:               return <PaginaEnConstruccion titulo="Pagos" />;
   }
@@ -245,7 +248,8 @@ export default function App() {
         <Route path="/" element={<PaginaInicio />} />
 
         {/* ── DEV ── */}
-        <Route path="/gaman/pdf-preview" element={<PDFPreview />} />
+        <Route path="/gaman/pdf-preview"    element={<PDFPreview />} />
+        <Route path="/gaman/recibo-preview" element={<ReciboPreview />} />
 
         {/* ── Verificación pública de pólizas ── */}
         <Route path="/gaman/verificar/:constancia" element={<VerificarPoliza />} />
@@ -319,7 +323,7 @@ export default function App() {
               path="/gaman/pagos"
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/gaman/pagos">
-                  <PagosRoute rolNombre={rolNombre} />
+                  <PagosRoute rolNombre={rolNombre} usuario={usuario} />
                 </RutaProtegida>
               }
             />

@@ -53,12 +53,45 @@ function generarConstancia(fecha, seqGlobal, seqVehiculo, oficinaId) {
   return `01${yy}${ofic}${String(seqGlobal).padStart(8,'0')}-${String(seqVehiculo).padStart(2,'0')}`;
 }
 
+// ── Cuotas por forma de pago ───────────────────────────────────────────────
+const _PRECIO = {
+  normal: {
+    "CONTADO":     { primerPago: 2500.00, pagoSubs: 0,      nSubs: 0 },
+    "4 PARCIALES": { primerPago:  799.00, pagoSubs: 625.00, nSubs: 3 },
+  },
+  gestor: {
+    "CONTADO":     { primerPago: 2200.00, pagoSubs: 0,      nSubs: 0 },
+    "4 PARCIALES": { primerPago:  550.00, pagoSubs: 550.00, nSubs: 3 },
+  },
+};
+
+export async function generarCuotasPoliza(polizaId, formaPago, primaTotal, fechaInicio, esGestor) {
+  if (!fechaInicio) return;
+  const tier   = esGestor ? 'gestor' : 'normal';
+  const precio = _PRECIO[tier][formaPago] ?? _PRECIO[tier]['CONTADO'];
+  const inicio = new Date(fechaInicio + 'T12:00:00');
+  const nTotal = formaPago === '4 PARCIALES' ? 1 + precio.nSubs : 1;
+  const cuotas = [];
+  for (let i = 0; i < nTotal; i++) {
+    const d = new Date(inicio);
+    d.setDate(d.getDate() + i * 7);
+    cuotas.push({
+      poliza_id:         polizaId,
+      monto:             i === 0 ? precio.primerPago : precio.pagoSubs,
+      fecha_vencimiento: d.toISOString().split('T')[0],
+    });
+  }
+  const { error } = await supabase.from('pagos').insert(cuotas);
+  if (error) throw error;
+}
+
 // ── Emitir póliza ──────────────────────────────────────────────────────────
 export async function emitirPoliza({
   clienteId, vendedorId, vehiculoAmisId, anio, serie, numMotor, placas,
   capacidad, uso, tipoServicio, primaNeta, primaTotal,
   formaPago, fechaInicio, derechos, iva, enLetras, cpAsegurado, creadoPor,
   conductorHabitual, conductorSexo, conductorEdad, concesionarioId, oficinaId,
+  esGestor,
 }) {
   const ahora   = new Date();
   const horaStr = ahora.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }) + ' hrs.';
@@ -156,6 +189,8 @@ export async function emitirPoliza({
     `)
     .single();
   if (e2) throw e2;
+
+  await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false);
 
   return final;
 }

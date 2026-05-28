@@ -10,7 +10,7 @@
 //   TODOS LOS DEMÁS mobile → top bar + drawer hamburguesa
 // ============================================================
 import { NavLink, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { logout } from "../auth.js";
 import { NAV_POR_ROL } from "../config/navConfig";
 
@@ -286,7 +286,18 @@ const LogoSVG = ({ size = 18 }) => (
 // ============================================================
 function DesktopSidebar({ usuario, rolNombre, navItems }) {
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
+  const asideRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (!collapsed && asideRef.current && !asideRef.current.contains(e.target)) {
+        setCollapsed(true);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [collapsed]);
 
   const iniciales =
     [usuario?.nombre?.[0], usuario?.apellido?.[0]]
@@ -299,6 +310,7 @@ function DesktopSidebar({ usuario, rolNombre, navItems }) {
 
   return (
     <aside
+      ref={asideRef}
       style={{ width: collapsed ? 68 : 224, minWidth: collapsed ? 68 : 224 }}
       className="relative flex flex-col h-full bg-[#13193a] transition-all duration-300 ease-in-out select-none shrink-0"
     >
@@ -339,6 +351,7 @@ function DesktopSidebar({ usuario, rolNombre, navItems }) {
               to={item.path}
               end
               title={item.label}
+              onClick={() => setCollapsed(true)}
               className={[
                 "flex items-center mx-2 my-0.5 rounded-xl text-sm font-medium transition-all duration-150 group",
                 collapsed

@@ -1,82 +1,114 @@
-// ============================================================
-// src/pages/analista/AnalistaPagos.jsx
-// Analista: Consultar y aplicar pagos de pólizas
-// Muestra cuotas pendientes, historial de pagos, aplicar pago
-// ============================================================
-import { useState } from "react";
-
-const OFICINAS  = ["Todas", "COFISEM AV. E.ZAPATA", "OFICINA CIVAC", "COFISEM TEMIXCO", "COFISEM CUAUTLA"];
-const VENDEDORES = ["Todos", "Laura Rosher", "Marco A. Cruz", "Carlos Soto", "Patricia Morales"];
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "../../supabaseClient";
+import { generarCuotasPoliza } from "../../services/polizas";
 
 const FORMAS_PAGO = ["Efectivo", "Transferencia", "Cheque", "Tarjeta de crédito", "Tarjeta de débito"];
 
-// Mock de pólizas con cuotas
-const POLIZAS_CON_PAGOS = [
-  {
-    id: "3413167", asegurado: "Roberto Díaz Ramos", aseguradora: "GNP",
-    cobertura: "SERV. PÚB. 50/50 GAMAN 2", oficina: "COFISEM AV. E.ZAPATA",
-    vendedor: "Laura Rosher", formaPago: "4 Parciales", primaPrimerPago: 637.00,
-    cuotas: [
-      { num: 1, vto: "11/03/2026", monto: 637.00, pagado: true,  fechaPago: "11/03/2026", forma: "Efectivo",       referencia: "REC-001" },
-      { num: 2, vto: "11/04/2026", monto: 637.00, pagado: false, fechaPago: null,          forma: null,            referencia: null      },
-      { num: 3, vto: "11/05/2026", monto: 637.00, pagado: false, fechaPago: null,          forma: null,            referencia: null      },
-      { num: 4, vto: "11/06/2026", monto: 637.00, pagado: false, fechaPago: null,          forma: null,            referencia: null      },
-    ],
-  },
-  {
-    id: "3410888", asegurado: "José Martínez Ruiz", aseguradora: "AXA",
-    cobertura: "TAXI BÁSICA PAGOS 2700", oficina: "OFICINA CIVAC",
-    vendedor: "Marco A. Cruz", formaPago: "4 Parciales", primaPrimerPago: 580.00,
-    cuotas: [
-      { num: 1, vto: "22/03/2025", monto: 580.00, pagado: true,  fechaPago: "22/03/2025", forma: "Efectivo",       referencia: "REC-008" },
-      { num: 2, vto: "22/06/2025", monto: 580.00, pagado: true,  fechaPago: "20/06/2025", forma: "Transferencia",  referencia: "TRF-0421" },
-      { num: 3, vto: "22/09/2025", monto: 580.00, pagado: true,  fechaPago: "19/09/2025", forma: "Efectivo",       referencia: "REC-031" },
-      { num: 4, vto: "22/12/2025", monto: 580.00, pagado: false, fechaPago: null,          forma: null,            referencia: null       },
-    ],
-  },
-  {
-    id: "3413241", asegurado: "Angel Ivan Ortega", aseguradora: "QUALITAS",
-    cobertura: "COBERTURA APP (UBER, DIDI)", oficina: "OFICINA CIVAC",
-    vendedor: "Laura Rosher", formaPago: "Trimestral", primaPrimerPago: 785.70,
-    cuotas: [
-      { num: 1, vto: "13/03/2026", monto: 785.70, pagado: true,  fechaPago: "13/03/2026", forma: "Efectivo",       referencia: "REC-042" },
-      { num: 2, vto: "13/06/2026", monto: 785.70, pagado: false, fechaPago: null,          forma: null,            referencia: null      },
-      { num: 3, vto: "13/09/2026", monto: 785.70, pagado: false, fechaPago: null,          forma: null,            referencia: null      },
-      { num: 4, vto: "13/12/2026", monto: 785.70, pagado: false, fechaPago: null,          forma: null,            referencia: null      },
-    ],
-  },
-  {
-    id: "3408500", asegurado: "Ana Gutiérrez Pérez", aseguradora: "HDI",
-    cobertura: "COBERTURA APP (UBER, DIDI)", oficina: "COFISEM CUAUTLA",
-    vendedor: "Patricia Morales", formaPago: "Trimestral", primaPrimerPago: 785.70,
-    cuotas: [
-      { num: 1, vto: "10/01/2025", monto: 785.70, pagado: true,  fechaPago: "10/01/2025", forma: "Efectivo",       referencia: "REC-009" },
-      { num: 2, vto: "10/04/2025", monto: 785.70, pagado: true,  fechaPago: "08/04/2025", forma: "Efectivo",       referencia: "REC-021" },
-      { num: 3, vto: "10/07/2025", monto: 785.70, pagado: true,  fechaPago: "10/07/2025", forma: "Transferencia",  referencia: "TRF-0198" },
-      { num: 4, vto: "10/10/2025", monto: 785.70, pagado: false, fechaPago: null,          forma: null,            referencia: null      },
-    ],
-  },
-];
+function isoAMX(str) {
+  if (!str) return '';
+  const [y, m, d] = str.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function isoAMXCorto(str) {
+  if (!str) return '';
+  const [y, m, d] = str.split('-');
+  return `${d}/${m}/${y.slice(-2)}`;
+}
+
+function calcularImportesRecibo(poliza, cuota) {
+  if (poliza.formaPago === 'CONTADO') {
+    return {
+      primaNeta:        poliza.primaNeta,
+      gastosExpedicion: poliza.derechos,
+      iva:              poliza.iva,
+      total:            poliza.primaTotal,
+      importe:          cuota.monto,
+    };
+  }
+  // 4 PARCIALES primera cuota
+  if (cuota.num === 1) {
+    const total = cuota.monto + poliza.derechos + poliza.iva;
+    return {
+      primaNeta:        cuota.monto,
+      gastosExpedicion: poliza.derechos,
+      iva:              poliza.iva,
+      total,
+      importe:          total,
+    };
+  }
+  // 4 PARCIALES cuotas 2–4
+  return {
+    primaNeta:        cuota.monto,
+    gastosExpedicion: 0,
+    iva:              0,
+    total:            cuota.monto,
+    importe:          cuota.monto,
+  };
+}
+
+function abrirRecibo(poliza, cuota, operador) {
+  const hoy = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const importes = calcularImportesRecibo(poliza, cuota);
+  const cl = poliza.clienteData ?? {};
+
+  const datos = {
+    constancia:     poliza.id,
+    oficina:        poliza.oficina,
+    noRecibo:       cuota.id,
+
+    asegurado:  poliza.asegurado,
+    calle:      cl.calle ?? cl.direccion ?? '',
+    numExt:     cl.numero_ext ?? '',
+    numInt:     cl.numero_int ?? '',
+    colonia:    cl.colonia   ?? '',
+    municipio:  cl.ciudad    ?? '',
+    estado:     cl.estado    ?? '',
+    cp:         cl.cp        ?? '',
+    rfc:        cl.rfc       ?? '',
+    curp:       cl.curp      ?? '',
+
+    ...importes,
+
+    vencimiento: isoAMXCorto(poliza.fechaFin),
+    pagoDe:      cuota.num,
+    pagoTotal:   poliza.cuotas.length,
+    formaPago:   poliza.formaPago,
+    fechaRecibo: hoy,
+
+    vigenciaDesde: poliza.fechaInicio ? `${isoAMX(poliza.fechaInicio)} ${poliza.horaInicio}` : '',
+    vigenciaHasta: poliza.fechaFin    ? `${isoAMXCorto(poliza.fechaFin)} ${poliza.horaFin}`  : '',
+
+    conducto: poliza.conducto,
+    operador: operador ?? '',
+  };
+
+  localStorage.setItem('recibo_data', JSON.stringify(datos));
+  window.open('/gaman/recibo-preview', '_blank');
+}
 
 function CuotaBadge({ pagado, vencida }) {
-  if (pagado)   return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Pagado</span>;
-  if (vencida)  return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-200">Vencida</span>;
+  if (pagado)  return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Pagado</span>;
+  if (vencida) return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-200">Vencida</span>;
   return              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">Pendiente</span>;
 }
 
 // ── Modal aplicar pago ────────────────────────────────────────
 function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
-  const [fecha,     setFecha]     = useState(new Date().toISOString().split("T")[0]);
-  const [forma,     setForma]     = useState("Efectivo");
-  const [referencia,setReferencia]= useState("");
-  const [monto,     setMonto]     = useState(cuota.monto.toFixed(2));
-  const [aplicando, setAplicando] = useState(false);
+  const [fecha,      setFecha]      = useState(new Date().toISOString().split("T")[0]);
+  const [forma,      setForma]      = useState("Efectivo");
+  const [referencia, setReferencia] = useState("");
+  const [monto,      setMonto]      = useState(cuota.monto.toFixed(2));
+  const [aplicando,  setAplicando]  = useState(false);
 
-  const handleAplicar = () => {
+  const handleAplicar = async () => {
     setAplicando(true);
-    setTimeout(() => {
-      onAplicar({ polizaId: poliza.id, cuotaNum: cuota.num, fecha, forma, referencia, monto: parseFloat(monto) });
-    }, 700);
+    try {
+      await onAplicar({ cuotaId: cuota.id, polizaId: poliza.polizaId, fecha, forma, referencia, monto: parseFloat(monto) });
+    } catch (e) {
+      alert("Error al aplicar pago: " + e.message);
+      setAplicando(false);
+    }
   };
 
   return (
@@ -96,7 +128,6 @@ function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Resumen */}
           <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-2">
             <div className="flex justify-between text-xs">
               <span className="text-gray-500">Asegurado</span>
@@ -112,44 +143,33 @@ function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
             </div>
           </div>
 
-          {/* Monto */}
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Monto a pagar</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-semibold">$</span>
-              <input
-                type="number" step="0.01" min="0"
-                value={monto}
-                onChange={e => setMonto(e.target.value)}
-                className="w-full pl-7 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]"
-              />
+              <input type="number" step="0.01" min="0" value={monto} onChange={e => setMonto(e.target.value)}
+                className="w-full pl-7 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]"/>
             </div>
           </div>
 
-          {/* Fecha de pago */}
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Fecha de pago</label>
             <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]"/>
           </div>
 
-          {/* Forma de pago */}
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Forma de pago</label>
             <div className="flex flex-wrap gap-2">
               {FORMAS_PAGO.map(f => (
                 <button key={f} onClick={() => setForma(f)}
-                  className={[
-                    "px-3 py-1.5 rounded-xl text-xs font-semibold border-2 transition-all",
+                  className={["px-3 py-1.5 rounded-xl text-xs font-semibold border-2 transition-all",
                     forma === f ? "bg-[#13193a] text-white border-[#13193a]" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300",
-                  ].join(" ")}>
-                  {f}
-                </button>
+                  ].join(" ")}>{f}</button>
               ))}
             </div>
           </div>
 
-          {/* Referencia */}
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
               Referencia / No. de operación <span className="text-gray-300">(opcional)</span>
@@ -176,14 +196,19 @@ function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
 }
 
 // ── Modal historial de póliza ─────────────────────────────────
-function ModalHistorial({ poliza, onClose, onAplicar }) {
+function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
   const [cuotaSel, setCuotaSel] = useState(null);
   const hoy = new Date();
 
-  const pendientes = poliza.cuotas.filter(c => !c.pagado).length;
-  const pagadas    = poliza.cuotas.filter(c =>  c.pagado).length;
-  const total      = poliza.cuotas.reduce((s, c) => s + c.monto, 0);
-  const cobrado    = poliza.cuotas.filter(c => c.pagado).reduce((s, c) => s + c.monto, 0);
+  const pagadas           = poliza.cuotas.filter(c =>  c.pagado).length;
+  const total             = poliza.cuotas.reduce((s, c) => s + c.monto, 0);
+  const cobrado           = poliza.cuotas.filter(c => c.pagado).reduce((s, c) => s + c.monto, 0);
+  const primerPendienteId = poliza.cuotas.find(c => !c.pagado)?.id;
+
+  const handleAplicar = async (data) => {
+    await onAplicar(data);
+    setCuotaSel(null);
+  };
 
   return (
     <>
@@ -203,13 +228,12 @@ function ModalHistorial({ poliza, onClose, onAplicar }) {
           </div>
 
           <div className="p-6 space-y-5">
-            {/* Resumen */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label:"Forma de pago", value: poliza.formaPago,         mono: false },
-                { label:"Total póliza",  value:`$${total.toFixed(2)}`,    mono: true  },
-                { label:"Cobrado",       value:`$${cobrado.toFixed(2)}`,   mono: true  },
-                { label:"Por cobrar",    value:`$${(total-cobrado).toFixed(2)}`, mono: true },
+                { label:"Forma de pago", value: poliza.formaPago,               mono: false },
+                { label:"Total póliza",  value:`$${total.toFixed(2)}`,           mono: true  },
+                { label:"Cobrado",       value:`$${cobrado.toFixed(2)}`,         mono: true  },
+                { label:"Por cobrar",    value:`$${(total-cobrado).toFixed(2)}`, mono: true  },
               ].map(f => (
                 <div key={f.label} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{f.label}</p>
@@ -218,45 +242,38 @@ function ModalHistorial({ poliza, onClose, onAplicar }) {
               ))}
             </div>
 
-            {/* Barra de progreso */}
             <div>
               <div className="flex justify-between text-xs text-gray-500 mb-1.5">
                 <span>{pagadas} de {poliza.cuotas.length} cuotas pagadas</span>
                 <span>{Math.round((pagadas / poliza.cuotas.length) * 100)}%</span>
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all"
-                  style={{ width:`${(pagadas / poliza.cuotas.length) * 100}%` }}
-                />
+                <div className="h-full bg-emerald-500 rounded-full transition-all"
+                  style={{ width:`${(pagadas / poliza.cuotas.length) * 100}%` }}/>
               </div>
             </div>
 
-            {/* Cuotas */}
             <div className="space-y-2">
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Cuotas</p>
               {poliza.cuotas.map(c => {
                 const vtoDate = new Date(c.vto.split("/").reverse().join("-"));
-                const vencida  = !c.pagado && vtoDate < hoy;
+                const vencida = !c.pagado && vtoDate < hoy;
+                const mostrarRecibo = c.pagado || c.id === primerPendienteId;
                 return (
-                  <div key={c.num}
-                    className={[
-                      "flex items-center justify-between gap-3 p-4 rounded-2xl border transition-all",
-                      c.pagado  ? "bg-emerald-50/50 border-emerald-100" :
-                      vencida   ? "bg-red-50/50 border-red-100" :
-                                  "bg-white border-gray-200 hover:border-gray-300",
+                  <div key={c.id}
+                    className={["flex items-center justify-between gap-3 p-4 rounded-2xl border transition-all",
+                      c.pagado ? "bg-emerald-50/50 border-emerald-100" :
+                      vencida  ? "bg-red-50/50 border-red-100" :
+                                 "bg-white border-gray-200 hover:border-gray-300",
                     ].join(" ")}>
                     <div className="flex items-center gap-3 min-w-0">
-                      {/* Número */}
-                      <div className={[
-                        "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
+                      <div className={["w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
                         c.pagado ? "bg-emerald-500 text-white" : vencida ? "bg-red-500 text-white" : "bg-gray-100 text-gray-600",
                       ].join(" ")}>
-                        {c.pagado ? (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
-                        ) : c.num}
+                        {c.pagado
+                          ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                          : c.num}
                       </div>
-                      {/* Info */}
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-[#13193a]">${c.monto.toFixed(2)}</p>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -272,12 +289,19 @@ function ModalHistorial({ poliza, onClose, onAplicar }) {
                     <div className="flex items-center gap-2 shrink-0">
                       <CuotaBadge pagado={c.pagado} vencida={vencida}/>
                       {!c.pagado && (
-                        <button
-                          onClick={() => setCuotaSel(c)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#13193a] text-white text-xs font-bold hover:bg-[#1e2a50] transition-all"
-                        >
+                        <button onClick={() => setCuotaSel(c)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#13193a] text-white text-xs font-bold hover:bg-[#1e2a50] transition-all">
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
                           Aplicar
+                        </button>
+                      )}
+                      {mostrarRecibo && (
+                        <button onClick={() => abrirRecibo(poliza, c, operador)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-all">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.055 48.055 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z"/>
+                          </svg>
+                          Recibo
                         </button>
                       )}
                     </div>
@@ -289,13 +313,12 @@ function ModalHistorial({ poliza, onClose, onAplicar }) {
         </div>
       </div>
 
-      {/* Modal aplicar pago */}
       {cuotaSel && (
         <ModalAplicarPago
           poliza={poliza}
           cuota={cuotaSel}
           onClose={() => setCuotaSel(null)}
-          onAplicar={(data) => { onAplicar(data); setCuotaSel(null); }}
+          onAplicar={handleAplicar}
         />
       )}
     </>
@@ -303,74 +326,167 @@ function ModalHistorial({ poliza, onClose, onAplicar }) {
 }
 
 // ── Página principal ──────────────────────────────────────────
-export default function AnalistaPagos() {
-  const [polizas,        setPolizas]        = useState(POLIZAS_CON_PAGOS);
-  const [busqueda,       setBusqueda]       = useState("");
-  const [filtroOficina,  setFiltroOficina]  = useState("Todas");
-  const [filtroVendedor, setFiltroVendedor] = useState("Todos");
-  const [filtroEstado,   setFiltroEstado]   = useState("Todos");  // Todos | Con pendientes | Al corriente
-  const [polizaSel,      setPolizaSel]      = useState(null);
+export default function AnalistaPagos({ usuario }) {
+  const [rows,           setRows]          = useState([]);
+  const [loading,        setLoading]       = useState(true);
+  const [oficinas,       setOficinas]      = useState(["Todas"]);
+  const [vendedores,     setVendedores]    = useState(["Todos"]);
+  const [busqueda,       setBusqueda]      = useState("");
+  const [filtroOficina,  setFiltroOficina] = useState("Todas");
+  const [filtroVendedor, setFiltroVendedor]= useState("Todos");
+  const [filtroEstado,   setFiltroEstado]  = useState("Todos");
+  const [polizaSel,      setPolizaSel]     = useState(null);
 
-  const aplicarPago = ({ polizaId, cuotaNum, fecha, forma, referencia, monto }) => {
-    setPolizas(ps => ps.map(p => {
-      if (p.id !== polizaId) return p;
-      return {
-        ...p,
-        cuotas: p.cuotas.map(c =>
-          c.num === cuotaNum
-            ? { ...c, pagado: true, fechaPago: fecha, forma, referencia: referencia || `REC-${Date.now().toString().slice(-4)}` }
-            : c
-        ),
-      };
-    }));
-    // Actualizar polizaSel si está abierto
-    setPolizaSel(prev => {
-      if (!prev || prev.id !== polizaId) return prev;
-      return {
-        ...prev,
-        cuotas: prev.cuotas.map(c =>
-          c.num === cuotaNum ? { ...c, pagado: true, fechaPago: fecha, forma, referencia } : c
-        ),
-      };
-    });
+  const operador = usuario?.id_muestra ?? '';
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [{ data: polizasDB, error: e1 }, { data: pagosDB, error: e2 }] = await Promise.all([
+        supabase.from('polizas')
+          .select(`
+            id, constancia, numero_poliza, forma_pago,
+            prima_neta, prima_total, iva, derechos,
+            fecha_inicio, fecha_fin, hora_inicio, hora_fin, estatus,
+            clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
+            oficinas(id, nombre),
+            vendedores(nombre, apellido, codigo)
+          `)
+          .neq('estatus', 'COTIZACION')
+          .order('created_at', { ascending: false }),
+        supabase.from('pagos')
+          .select('*')
+          .order('fecha_vencimiento', { ascending: true }),
+      ]);
+      if (e1) throw e1;
+      if (e2) throw e2;
+
+      let pagosPorPoliza = {};
+      for (const p of pagosDB ?? []) {
+        if (!pagosPorPoliza[p.poliza_id]) pagosPorPoliza[p.poliza_id] = [];
+        pagosPorPoliza[p.poliza_id].push(p);
+      }
+
+      const sinCuotas = (polizasDB ?? []).filter(p => !pagosPorPoliza[p.id] && p.fecha_inicio);
+      for (const p of sinCuotas) {
+        const esGestor = p.forma_pago === '4 PARCIALES' && Number(p.prima_total) === 2200;
+        try {
+          await generarCuotasPoliza(p.id, p.forma_pago, p.prima_total, p.fecha_inicio, esGestor);
+        } catch (err) {
+          console.error('generarCuotasPoliza', p.id, err);
+        }
+      }
+
+      let pagosFinales = pagosDB ?? [];
+      if (sinCuotas.length > 0) {
+        const { data: nuevosPagos } = await supabase
+          .from('pagos').select('*').order('fecha_vencimiento', { ascending: true });
+        pagosFinales = nuevosPagos ?? [];
+        pagosPorPoliza = {};
+        for (const p of pagosFinales) {
+          if (!pagosPorPoliza[p.poliza_id]) pagosPorPoliza[p.poliza_id] = [];
+          pagosPorPoliza[p.poliza_id].push(p);
+        }
+      }
+
+      const rowsBuilt = (polizasDB ?? []).map(pol => {
+        const cuotas = (pagosPorPoliza[pol.id] ?? []).map((c, idx) => ({
+          id:         c.id,
+          num:        idx + 1,
+          vto:        isoAMX(c.fecha_vencimiento),
+          monto:      Number(c.monto),
+          pagado:     c.estatus === 'PAGADO',
+          fechaPago:  c.fecha_pago ? isoAMX(c.fecha_pago) : null,
+          forma:      c.forma_pago  ?? null,
+          referencia: c.referencia  ?? null,
+        }));
+        const nombreCliente  = [pol.clientes?.nombre, pol.clientes?.apellido].filter(Boolean).join(' ');
+        const nombreVendedor = pol.vendedores
+          ? [pol.vendedores.nombre, pol.vendedores.apellido].filter(Boolean).join(' ')
+          : 'GAMAN';
+        return {
+          id:          pol.constancia ?? pol.numero_poliza ?? String(pol.id),
+          polizaId:    pol.id,
+          asegurado:   nombreCliente,
+          oficina:     pol.oficinas?.nombre ?? '',
+          cobertura:   'TAXI BÁSICA 2500',
+          vendedor:    nombreVendedor,
+          formaPago:   pol.forma_pago,
+          primaTotal:  Number(pol.prima_total ?? 0),
+          primaNeta:   Number(pol.prima_neta  ?? 0),
+          iva:         Number(pol.iva         ?? 0),
+          derechos:    Number(pol.derechos    ?? 400),
+          fechaInicio: pol.fecha_inicio ?? '',
+          fechaFin:    pol.fecha_fin    ?? '',
+          horaInicio:  pol.hora_inicio  ?? '00:00:00 hrs.',
+          horaFin:     pol.hora_fin     ?? '23:59:59 hrs.',
+          conducto:    pol.vendedores?.codigo || '-',
+          clienteData: pol.clientes ?? {},
+          cuotas,
+        };
+      }).filter(r => r.cuotas.length > 0);
+
+      const oficinasSet   = [...new Set((polizasDB ?? []).map(p => p.oficinas?.nombre).filter(Boolean))];
+      const vendedoresSet = [...new Set(rowsBuilt.map(r => r.vendedor).filter(Boolean))];
+      setOficinas(["Todas", ...oficinasSet]);
+      setVendedores(["Todos", ...vendedoresSet]);
+      setRows(rowsBuilt);
+      setPolizaSel(prev => prev ? (rowsBuilt.find(r => r.polizaId === prev.polizaId) ?? null) : null);
+    } catch (err) {
+      console.error('Error cargando pagos:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const aplicarPago = async ({ cuotaId, polizaId, fecha, forma, referencia, monto }) => {
+    const { error } = await supabase.from('pagos').update({
+      estatus:    'PAGADO',
+      fecha_pago: fecha,
+      forma_pago: forma,
+      referencia: referencia || null,
+      monto:      parseFloat(monto),
+    }).eq('id', cuotaId);
+    if (error) throw error;
+    await cargar();
   };
 
-  const filtradas = polizas.filter(p => {
-    const matchBusq  = p.id.includes(busqueda) || p.asegurado.toLowerCase().includes(busqueda.toLowerCase());
-    const matchOfic  = filtroOficina  === "Todas" || p.oficina  === filtroOficina;
-    const matchVend  = filtroVendedor === "Todos"  || p.vendedor === filtroVendedor;
+  const filtradas = rows.filter(p => {
+    const matchBusq = p.id.toLowerCase().includes(busqueda.toLowerCase())
+      || p.asegurado.toLowerCase().includes(busqueda.toLowerCase());
+    const matchOfic = filtroOficina  === "Todas" || p.oficina  === filtroOficina;
+    const matchVend = filtroVendedor === "Todos"  || p.vendedor === filtroVendedor;
     const pendientes = p.cuotas.filter(c => !c.pagado).length;
-    const matchEst   = filtroEstado === "Todos"
+    const matchEst  = filtroEstado === "Todos"
       || (filtroEstado === "Con pendientes" && pendientes > 0)
       || (filtroEstado === "Al corriente"   && pendientes === 0);
     return matchBusq && matchOfic && matchVend && matchEst;
   });
 
-  // Métricas
-  const totalPendiente = polizas.flatMap(p => p.cuotas.filter(c => !c.pagado)).reduce((s, c) => s + c.monto, 0);
-  const totalCobrado   = polizas.flatMap(p => p.cuotas.filter(c =>  c.pagado)).reduce((s, c) => s + c.monto, 0);
-  const cuotasPend     = polizas.flatMap(p => p.cuotas.filter(c => !c.pagado)).length;
+  const totalPendiente = rows.flatMap(p => p.cuotas.filter(c => !c.pagado)).reduce((s, c) => s + c.monto, 0);
+  const totalCobrado   = rows.flatMap(p => p.cuotas.filter(c =>  c.pagado)).reduce((s, c) => s + c.monto, 0);
+  const cuotasPend     = rows.flatMap(p => p.cuotas.filter(c => !c.pagado)).length;
 
   const hoy = new Date();
-  const cuotasVencidas = polizas.flatMap(p =>
+  const cuotasVencidas = rows.flatMap(p =>
     p.cuotas.filter(c => !c.pagado && new Date(c.vto.split("/").reverse().join("-")) < hoy)
   ).length;
 
   return (
     <div className="p-6 min-h-full bg-gray-50 space-y-5">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-[#13193a]">Pagos</h1>
         <p className="text-gray-400 text-sm mt-0.5">Consulta y aplicación de pagos de cuotas — todas las oficinas</p>
       </div>
 
-      {/* Métricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label:"Total cobrado",     value:`$${totalCobrado.toLocaleString("es-MX", {minimumFractionDigits:2})}`, accent:"emerald" },
-          { label:"Por cobrar",        value:`$${totalPendiente.toLocaleString("es-MX", {minimumFractionDigits:2})}`, accent:"amber" },
-          { label:"Cuotas pendientes", value:cuotasPend,    accent:"blue"   },
-          { label:"Cuotas vencidas",   value:cuotasVencidas, accent:"red"   },
+          { label:"Total cobrado",     value:`$${totalCobrado.toLocaleString("es-MX", {minimumFractionDigits:2})}`,   accent:"emerald" },
+          { label:"Por cobrar",        value:`$${totalPendiente.toLocaleString("es-MX", {minimumFractionDigits:2})}`, accent:"amber"   },
+          { label:"Cuotas pendientes", value: cuotasPend,     accent:"blue" },
+          { label:"Cuotas vencidas",   value: cuotasVencidas, accent:"red"  },
         ].map(m => {
           const c = { emerald:"bg-emerald-50 text-emerald-700 border-emerald-100", amber:"bg-amber-50 text-amber-700 border-amber-100", blue:"bg-blue-50 text-blue-700 border-blue-100", red:"bg-red-50 text-red-600 border-red-100" };
           return (
@@ -382,9 +498,7 @@ export default function AnalistaPagos() {
         })}
       </div>
 
-      {/* Tabla */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Filtros */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-5 py-4 border-b border-gray-100">
           <div className="relative lg:col-span-1">
             <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -396,13 +510,13 @@ export default function AnalistaPagos() {
           <div>
             <select value={filtroOficina} onChange={e => setFiltroOficina(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none">
-              {OFICINAS.map(o => <option key={o}>{o}</option>)}
+              {oficinas.map(o => <option key={o}>{o}</option>)}
             </select>
           </div>
           <div>
             <select value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none">
-              {VENDEDORES.map(v => <option key={v}>{v}</option>)}
+              {vendedores.map(v => <option key={v}>{v}</option>)}
             </select>
           </div>
           <div>
@@ -417,21 +531,21 @@ export default function AnalistaPagos() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50/80 border-b border-gray-100">
-                {["Póliza","Asegurado","Oficina","Cobertura","Forma pago","Cuotas","Cobrado","Por cobrar",""].map(h => (
-                  <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 whitespace-nowrap">{h}</th>
+                {["Póliza","Asegurado","Oficina","Cobertura","Forma pago","Cuotas","Cobrado","Por cobrar",""].map((h, i) => (
+                  <th key={i} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtradas.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">Cargando...</td></tr>
+              ) : filtradas.length === 0 ? (
                 <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas.</td></tr>
               ) : filtradas.map((p, i) => {
-                const pagadas    = p.cuotas.filter(c =>  c.pagado).length;
-                const pendientes = p.cuotas.filter(c => !c.pagado).length;
-                const cobrado    = p.cuotas.filter(c =>  c.pagado).reduce((s, c) => s + c.monto, 0);
-                const porCobrar  = p.cuotas.filter(c => !c.pagado).reduce((s, c) => s + c.monto, 0);
-                const hayVencida = p.cuotas.some(c => !c.pagado && new Date(c.vto.split("/").reverse().join("-")) < hoy);
-
+                const pagadas   = p.cuotas.filter(c =>  c.pagado).length;
+                const cobrado   = p.cuotas.filter(c =>  c.pagado).reduce((s, c) => s + c.monto, 0);
+                const porCobrar = p.cuotas.filter(c => !c.pagado).reduce((s, c) => s + c.monto, 0);
+                const hayVencida= p.cuotas.some(c => !c.pagado && new Date(c.vto.split("/").reverse().join("-")) < hoy);
                 return (
                   <tr key={i} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-3.5 font-mono text-xs font-bold text-[#13193a]">{p.id}</td>
@@ -443,7 +557,7 @@ export default function AnalistaPagos() {
                       <div className="flex items-center gap-1.5">
                         <div className="flex gap-0.5">
                           {p.cuotas.map(c => (
-                            <div key={c.num} className={`w-2.5 h-2.5 rounded-full ${c.pagado ? "bg-emerald-500" : hayVencida && !c.pagado ? "bg-red-400" : "bg-gray-200"}`}/>
+                            <div key={c.id} className={`w-2.5 h-2.5 rounded-full ${c.pagado ? "bg-emerald-500" : hayVencida ? "bg-red-400" : "bg-gray-200"}`}/>
                           ))}
                         </div>
                         <span className="text-[11px] text-gray-500">{pagadas}/{p.cuotas.length}</span>
@@ -451,13 +565,9 @@ export default function AnalistaPagos() {
                     </td>
                     <td className="px-5 py-3.5 text-xs font-bold text-emerald-700">${cobrado.toFixed(2)}</td>
                     <td className="px-5 py-3.5">
-                      {porCobrar > 0 ? (
-                        <span className={`text-xs font-bold ${hayVencida ? "text-red-600" : "text-amber-700"}`}>
-                          ${porCobrar.toFixed(2)}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-emerald-600 font-semibold">Al corriente</span>
-                      )}
+                      {porCobrar > 0
+                        ? <span className={`text-xs font-bold ${hayVencida ? "text-red-600" : "text-amber-700"}`}>${porCobrar.toFixed(2)}</span>
+                        : <span className="text-xs text-emerald-600 font-semibold">Al corriente</span>}
                     </td>
                     <td className="px-5 py-3.5">
                       <button onClick={() => setPolizaSel(p)}
@@ -478,9 +588,13 @@ export default function AnalistaPagos() {
         </div>
       </div>
 
-      {/* Modal historial */}
       {polizaSel && (
-        <ModalHistorial poliza={polizaSel} onClose={() => setPolizaSel(null)} onAplicar={aplicarPago}/>
+        <ModalHistorial
+          poliza={polizaSel}
+          onClose={() => setPolizaSel(null)}
+          onAplicar={aplicarPago}
+          operador={operador}
+        />
       )}
     </div>
   );

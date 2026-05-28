@@ -362,6 +362,7 @@ export default function FormCotizacion({
         concesionarioId: form.concesionario || null,
         creadoPor:       usuario?.id,
         oficinaId:       usuario?.oficinas?.id ?? null,
+        esGestor:        form.esGestor ?? false,
       });
       onTramitar(poliza);
     } catch (e) {
