@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { SINIESTROS_INIT } from "./data/siniestrosMock";
 import { STATUS_CLS } from "./constants/estilos";
 import ModalDetalle from "./components/ModalDetalle";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 
 export default function Siniestros() {
   const [siniestros, setSiniestros] = useState(SINIESTROS_INIT);
@@ -11,14 +13,16 @@ export default function Siniestros() {
 
   const sinAsignar = siniestros.filter((s) => !s.ajustador).length;
 
-  const filtrados = siniestros.filter((s) => {
-    const mb =
-      busqueda === "" ||
-      s.folio.toLowerCase().includes(busqueda.toLowerCase()) ||
-      s.asegurado.toLowerCase().includes(busqueda.toLowerCase());
-    const me = filtroEstatus === "Todos" || s.estatus === filtroEstatus;
-    return mb && me;
-  });
+  const filtrados = useMemo(() => {
+    const b = busqueda.toLowerCase();
+    return siniestros.filter((s) => {
+      const mb = busqueda === "" || s.folio.toLowerCase().includes(b) || s.asegurado.toLowerCase().includes(b);
+      const me = filtroEstatus === "Todos" || s.estatus === filtroEstatus;
+      return mb && me;
+    });
+  }, [siniestros, busqueda, filtroEstatus]);
+
+  const { paginated: siniestrosPag, page: pageS, setPage: setPageS, totalPages: totalPagesS, total: totalS } = usePagination(filtrados);
 
   const asignar = (folio, nombreAjustador) => {
     setSiniestros((prev) =>
@@ -126,7 +130,7 @@ export default function Siniestros() {
                   </td>
                 </tr>
               ) : (
-                filtrados.map((s, i) => (
+                siniestrosPag.map((s, i) => (
                   <tr
                     key={i}
                     onClick={() => setModalSiniestro(s)}
@@ -225,23 +229,7 @@ export default function Siniestros() {
           </table>
         </div>
 
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400">
-            Mostrando <strong>{filtrados.length}</strong> de{" "}
-            <strong>{siniestros.length}</strong>
-          </p>
-          <div className="flex gap-1">
-            <button className="w-7 h-7 rounded-lg text-xs text-gray-400 hover:bg-gray-100">
-              ‹
-            </button>
-            <button className="w-7 h-7 rounded-lg text-xs bg-[#13193a] text-white font-semibold">
-              1
-            </button>
-            <button className="w-7 h-7 rounded-lg text-xs text-gray-400 hover:bg-gray-100">
-              ›
-            </button>
-          </div>
-        </div>
+        <Paginator page={pageS} totalPages={totalPagesS} total={totalS} pageSize={10} onPage={setPageS} />
       </div>
 
       {modalSiniestro && (

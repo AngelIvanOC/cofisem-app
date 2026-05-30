@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 
 const OFICINAS_DEFAULT = ["Todas"];
 const FORMAS           = ["Todas", "CONTADO", "4 PARCIALES"];
@@ -34,7 +36,7 @@ export default function AnalistaPagos({ usuario }) {
           id, poliza_id, monto, fecha_pago, estatus,
           operador:usuarios!pagos_recibido_por_fkey(nombre, apellido, id_muestra),
           polizas(
-            constancia, numero_poliza, forma_pago,
+            constancia, numero_poliza, forma_pago, estatus,
             clientes(nombre, apellido),
             oficinas(nombre)
           )
@@ -59,20 +61,22 @@ export default function AnalistaPagos({ usuario }) {
       }
 
       const rowsBuilt = (pagosDB ?? []).map(a => {
-        const siblings = indexMap[a.poliza_id] ?? [a.id];
-        const pol      = a.polizas;
-        const op       = a.operador;
+        const siblings    = indexMap[a.poliza_id] ?? [a.id];
+        const pol         = a.polizas;
+        const op          = a.operador;
+        const totalCuotas = pol?.forma_pago === 'CONTADO' ? 1 : 4;
         return {
           id:            a.id,
           poliza:        pol?.constancia ?? pol?.numero_poliza ?? String(a.poliza_id),
           asegurado:     [pol?.clientes?.nombre, pol?.clientes?.apellido].filter(Boolean).join(' '),
           oficina:       pol?.oficinas?.nombre ?? '',
           formaPago:     pol?.forma_pago ?? '',
-          cuota:         `${siblings.indexOf(a.id) + 1}/${siblings.length}`,
+          cuota:         `${siblings.indexOf(a.id) + 1}/${totalCuotas}`,
           monto:         Number(a.monto),
           fecha:         a.fecha_pago ? isoAMX(a.fecha_pago) : '—',
           solicitadoPor: op ? `${op.nombre ?? ''} ${op.apellido ?? ''}`.trim() || `OP-${op.id_muestra}` : '—',
-          estatus:       a.estatus,
+          estatus:        a.estatus,
+          estatusPoliza:  pol?.estatus ?? '',
         };
       });
 
@@ -109,14 +113,18 @@ export default function AnalistaPagos({ usuario }) {
   const montoPend    = porAplicar.reduce((s, p) => s + p.monto, 0);
   const montoAplic   = aplicados.reduce((s, p) => s + p.monto, 0);
 
-  const filtrados = pagos.filter(p => {
-    const mb = p.poliza.toLowerCase().includes(busqueda.toLowerCase())
-      || p.asegurado.toLowerCase().includes(busqueda.toLowerCase());
-    const mo = filtroOficina === "Todas"  || p.oficina   === filtroOficina;
-    const mf = filtroForma   === "Todas"  || p.formaPago === filtroForma;
-    const me = filtroEst     === "Todos"  || p.estatus   === filtroEst;
-    return mb && mo && mf && me;
-  });
+  const filtrados = useMemo(() => {
+    const b = busqueda.toLowerCase();
+    return pagos.filter(p => {
+      const mb = p.poliza.toLowerCase().includes(b) || p.asegurado.toLowerCase().includes(b);
+      const mo = filtroOficina === "Todas" || p.oficina   === filtroOficina;
+      const mf = filtroForma   === "Todas" || p.formaPago === filtroForma;
+      const me = filtroEst     === "Todos" || p.estatus   === filtroEst;
+      return mb && mo && mf && me;
+    });
+  }, [pagos, busqueda, filtroOficina, filtroForma, filtroEst]);
+
+  const { paginated: pagosPag, page: pageAP, setPage: setPageAP, totalPages: totalPagesAP, total: totalAP } = usePagination(filtrados);
 
   const selCls = "px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none";
 
@@ -187,7 +195,7 @@ export default function AnalistaPagos({ usuario }) {
                 <tr><td colSpan={10} className="text-center py-12 text-sm text-gray-400">Cargando...</td></tr>
               ) : filtrados.length === 0 ? (
                 <tr><td colSpan={10} className="text-center py-12 text-sm text-gray-400">No hay pagos con esos filtros.</td></tr>
-              ) : filtrados.map((p, i) => (
+              ) : pagosPag.map((p, i) => (
                 <tr key={i} className={`hover:bg-gray-50/60 transition-colors ${p.estatus === "ADEUDO" ? "bg-blue-50/20" : ""}`}>
                   <td className="px-4 py-3 font-mono text-xs font-bold text-[#13193a]">{p.poliza}</td>
                   <td className="px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
@@ -203,15 +211,25 @@ export default function AnalistaPagos({ usuario }) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {p.estatus === "ADEUDO" && (
-                      <button onClick={() => aplicar(p.id)} disabled={procesando === p.id}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all disabled:opacity-50">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
-                        </svg>
-                        {procesando === p.id ? "..." : "Aplicar"}
-                      </button>
-                    )}
+                    {p.estatus === "ADEUDO" && (() => {
+                      const bloq = ['VENCIDA','ANULADA'].includes(p.estatusPoliza);
+                      return (
+                        <button
+                          onClick={() => !bloq && aplicar(p.id)}
+                          disabled={procesando === p.id || bloq}
+                          title={bloq ? `Póliza ${p.estatusPoliza} — no se puede aplicar` : ''}
+                          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all disabled:opacity-50 ${
+                            bloq
+                              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          }`}>
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                          </svg>
+                          {procesando === p.id ? "..." : "Aplicar"}
+                        </button>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}
@@ -219,9 +237,7 @@ export default function AnalistaPagos({ usuario }) {
           </table>
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400">{filtrados.length} registros</p>
-        </div>
+        <Paginator page={pageAP} totalPages={totalPagesAP} total={totalAP} pageSize={10} onPage={setPageAP} />
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
-import { generarCuotasPoliza } from "../../services/polizas";
+// generarCuotasPoliza ya no se llama aquí — los pagos se insertan por migración
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 
 
 function isoAMX(str) {
@@ -45,7 +47,7 @@ function abrirRecibo(poliza, cuota, operador) {
     cp: cl.cp ?? '', rfc: cl.rfc ?? '', curp: cl.curp ?? '',
     ...importes,
     vencimiento: isoAMXCorto(poliza.fechaFin),
-    pagoDe: cuota.num, pagoTotal: poliza.cuotas.length,
+    pagoDe: cuota.num, pagoTotal: poliza.formaPago === 'CONTADO' ? 1 : 4,
     formaPago: poliza.formaPago, fechaRecibo: hoy,
     vigenciaDesde: poliza.fechaInicio ? `${isoAMX(poliza.fechaInicio)} ${poliza.horaInicio}` : '',
     vigenciaHasta: poliza.fechaFin    ? `${isoAMXCorto(poliza.fechaFin)} ${poliza.horaFin}`  : '',
@@ -115,7 +117,7 @@ function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-gray-500">Cuota</span>
-              <span className="font-semibold text-[#13193a]">{cuota.num} de {poliza.cuotas.length}</span>
+              <span className="font-semibold text-[#13193a]">{cuota.num} de {poliza.formaPago === 'CONTADO' ? 1 : 4}</span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-gray-500">Fecha límite</span>
@@ -162,6 +164,10 @@ function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
 function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
   const [cuotaSel, setCuotaSel] = useState(null);
 
+  // Póliza bloqueada: VENCIDA o ANULADA — no se pueden registrar ni aplicar pagos
+  const polizaBloq = ['VENCIDA', 'ANULADA'].includes(poliza.estatusPoliza);
+
+  const totalCuotas = poliza.formaPago === 'CONTADO' ? 1 : 4;
   const pagadas    = poliza.cuotas.filter(c => c.estatus === 'PAGADO').length;
   const enAdeudo   = poliza.cuotas.filter(c => c.estatus === 'ADEUDO').length;
   const total      = poliza.cuotas.reduce((s, c) => s + c.monto, 0);
@@ -170,6 +176,17 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
   const porCobrar  = poliza.cuotas.filter(c => c.estatus === 'PENDIENTE').reduce((s, c) => s + c.monto, 0);
 
   const primerPendienteId = poliza.cuotas.find(c => c.estatus === 'PENDIENTE')?.id;
+
+  // Si la emisión del primer pago tiene > 45 días, bloquear cobro
+  const diasDesdeEmision = (() => {
+    const primera = poliza.cuotas[0]?.vto; // DD/MM/YYYY (fecha emisión cuota 1)
+    if (!primera) return 0;
+    const [dd, mm, yyyy] = primera.split('/');
+    const emision = new Date(`${yyyy}-${mm}-${dd}T12:00:00`);
+    const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
+    return Math.floor((hoy - emision) / 86_400_000);
+  })();
+  const bloqueada = diasDesdeEmision > 45;
 
   const handleAplicar = async (data) => {
     await onAplicar(data);
@@ -210,34 +227,59 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
 
             <div>
               <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-                <span>{pagadas} de {poliza.cuotas.length} cuotas cobradas · {enAdeudo > 0 ? `${enAdeudo} en adeudo` : ''}</span>
-                <span>{Math.round(((pagadas + enAdeudo) / poliza.cuotas.length) * 100)}%</span>
+                <span>{pagadas} de {totalCuotas} cuotas cobradas · {enAdeudo > 0 ? `${enAdeudo} en adeudo` : ''}</span>
+                <span>{Math.round(((pagadas + enAdeudo) / totalCuotas) * 100)}%</span>
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
-                <div className="h-full bg-emerald-500 transition-all" style={{ width:`${(pagadas / poliza.cuotas.length) * 100}%` }}/>
-                <div className="h-full bg-blue-400 transition-all"    style={{ width:`${(enAdeudo / poliza.cuotas.length) * 100}%` }}/>
+                <div className="h-full bg-emerald-500 transition-all" style={{ width:`${(pagadas / totalCuotas) * 100}%` }}/>
+                <div className="h-full bg-blue-400 transition-all"    style={{ width:`${(enAdeudo / totalCuotas) * 100}%` }}/>
               </div>
             </div>
+
+            {/* Aviso de póliza VENCIDA o ANULADA */}
+            {polizaBloq && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-100 border border-gray-200 text-gray-500 text-xs font-semibold">
+                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/>
+                </svg>
+                Póliza {poliza.estatusPoliza} — no se pueden registrar pagos
+              </div>
+            )}
+
+            {/* Aviso de bloqueo por 45 días */}
+            {!polizaBloq && bloqueada && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-100 border border-gray-200 text-gray-500 text-xs font-semibold">
+                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/>
+                </svg>
+                Póliza con {diasDesdeEmision} días desde la primera emisión — cobro bloqueado (máx. 45 días)
+              </div>
+            )}
 
             <div className="space-y-2">
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Cuotas</p>
               {poliza.cuotas.map(c => {
-                const est     = estatusEfectivo(c);
+                const est           = estatusEfectivo(c);
                 const mostrarRecibo = c.estatus === 'PAGADO' || c.estatus === 'ADEUDO' || c.id === primerPendienteId;
+                const esPendiente   = c.estatus === 'PENDIENTE';
+                // Sombrear fila si está bloqueada (por estatus o por 45 días) y aún no fue pagada
+                const filaBloqueada = (polizaBloq || bloqueada) && esPendiente;
                 return (
                   <div key={c.id}
                     className={["flex items-center justify-between gap-3 p-4 rounded-2xl border transition-all",
-                      c.estatus === 'PAGADO' ? "bg-emerald-50/50 border-emerald-100" :
-                      c.estatus === 'ADEUDO' ? "bg-blue-50/50 border-blue-100"       :
-                      est       === 'VENCIDO'? "bg-red-50/50 border-red-100"         :
-                                               "bg-white border-gray-200 hover:border-gray-300",
+                      filaBloqueada                                    ? "bg-gray-50 border-gray-200 opacity-60" :
+                      c.estatus === 'PAGADO'                           ? "bg-emerald-50/50 border-emerald-100"  :
+                      c.estatus === 'ADEUDO'                           ? "bg-blue-50/50 border-blue-100"        :
+                      est       === 'VENCIDO'                          ? "bg-red-50/50 border-red-100"          :
+                                                                          "bg-white border-gray-200 hover:border-gray-300",
                     ].join(" ")}>
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={["w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
-                        c.estatus === 'PAGADO' ? "bg-emerald-500 text-white" :
-                        c.estatus === 'ADEUDO' ? "bg-blue-500 text-white"   :
-                        est       === 'VENCIDO'? "bg-red-500 text-white"    :
-                                                 "bg-gray-100 text-gray-600",
+                        filaBloqueada                                    ? "bg-gray-200 text-gray-400"    :
+                        c.estatus === 'PAGADO'                           ? "bg-emerald-500 text-white"    :
+                        c.estatus === 'ADEUDO'                           ? "bg-blue-500 text-white"       :
+                        est       === 'VENCIDO'                          ? "bg-red-500 text-white"        :
+                                                                            "bg-gray-100 text-gray-600",
                       ].join(" ")}>
                         {c.estatus === 'PAGADO'
                           ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
@@ -246,9 +288,9 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
                             : c.num}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-bold text-[#13193a]">${c.monto.toFixed(2)}</p>
+                        <p className={`text-sm font-bold ${filaBloqueada ? "text-gray-400" : "text-[#13193a]"}`}>${c.monto.toFixed(2)}</p>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <p className="text-xs text-gray-400">Vto. {c.vto}</p>
+                          <p className="text-xs text-gray-400">Vto. {c.vigencia ?? c.vto}</p>
                           {(c.estatus === 'PAGADO' || c.estatus === 'ADEUDO') && c.fechaPago && (
                             <><span className="text-gray-300">·</span>
                             <p className="text-xs text-blue-600">Recibido {c.fechaPago}</p></>
@@ -258,14 +300,20 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <CuotaBadge cuota={c}/>
-                      {c.estatus === 'PENDIENTE' && (
-                        <button onClick={() => setCuotaSel(c)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#13193a] text-white text-xs font-bold hover:bg-[#1e2a50] transition-all">
+                      {esPendiente && (
+                        <button
+                          disabled={polizaBloq || bloqueada}
+                          onClick={() => !polizaBloq && !bloqueada && setCuotaSel(c)}
+                          className={["flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                            (polizaBloq || bloqueada)
+                              ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                              : "bg-[#13193a] text-white hover:bg-[#1e2a50]",
+                          ].join(" ")}>
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/></svg>
                           Recibir
                         </button>
                       )}
-                      {mostrarRecibo && (
+                      {mostrarRecibo && !polizaBloq && (
                         <button onClick={() => abrirRecibo(poliza, c, operador)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-all">
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -309,68 +357,84 @@ export default function OperadorPagos({ usuario }) {
 
   const operador = usuario?.id_muestra ?? '';
 
+  // Convierte un pago DB en el objeto cuota que usan los componentes
+  function mapCuota(c, idx) {
+    // vto = fecha de emisión (cuando se generó el cobro) — para lógica interna
+    // vigencia = vto + 7 días — lo que se muestra como "Vto." al usuario
+    const vtoISO = c.fecha_vencimiento ?? '';
+    const vigencia = vtoISO ? (() => {
+      const d = new Date(vtoISO + 'T12:00:00');
+      d.setDate(d.getDate() + 7);
+      return isoAMX(d.toISOString().split('T')[0]);
+    })() : null;
+    return {
+      id:         c.id,
+      num:        idx + 1,
+      vto:        isoAMX(vtoISO),   // emisión — usado en cálculos de vencimiento
+      vigencia:   vigencia,          // vigencia = emisión + 7d — mostrada al usuario
+      monto:      Number(c.monto),
+      estatus:    c.estatus ?? 'PENDIENTE',
+      pagado:     c.estatus === 'PAGADO',
+      fechaPago:  c.fecha_pago ? isoAMX(c.fecha_pago) : null,
+      forma:      c.forma_pago  ?? null,
+      referencia: c.referencia  ?? null,
+    };
+  }
+
+  // Carga todos los pagos en páginas de 1000 (supera el límite de Supabase)
+  // y actualiza las filas en segundo plano conforme llegan los datos.
+  const cargarPagosBackground = useCallback(async () => {
+    const PAGE = 1000;
+    let desde  = 0;
+    let acum   = {};   // polizaId → [pago, ...]
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('pagos')
+        .select('id, poliza_id, monto, fecha_pago, fecha_vencimiento, estatus, forma_pago, referencia')
+        .range(desde, desde + PAGE - 1)
+        .order('fecha_vencimiento', { ascending: true });
+
+      if (error || !data || data.length === 0) break;
+
+      for (const p of data) {
+        if (!acum[p.poliza_id]) acum[p.poliza_id] = [];
+        acum[p.poliza_id].push(p);
+      }
+
+      // Aplicar lo que llegó hasta ahora (actualización progresiva)
+      const snap = { ...acum };
+      setRows(prev => prev.map(r => {
+        const pagos = snap[r.polizaId];
+        if (!pagos) return r;
+        return { ...r, cuotas: pagos.map(mapCuota) };
+      }));
+
+      if (data.length < PAGE) break;
+      desde += PAGE;
+    }
+  }, []);
+
+  // 1. Carga la lista de pólizas (rápido — aparecen de inmediato)
+  // 2. Dispara la carga de pagos en segundo plano
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: polizasDB, error: e1 }, { data: pagosDB, error: e2 }] = await Promise.all([
-        supabase.from('polizas')
-          .select(`
-            id, constancia, numero_poliza, forma_pago,
-            prima_neta, prima_total, iva, derechos,
-            fecha_inicio, fecha_fin, hora_inicio, hora_fin, estatus,
-            clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
-            oficinas(id, nombre),
-            vendedores(nombre, apellido, codigo)
-          `)
-          .neq('estatus', 'COTIZACION')
-          .order('created_at', { ascending: false }),
-        supabase.from('pagos')
-          .select('*')
-          .order('fecha_vencimiento', { ascending: true }),
-      ]);
-      if (e1) throw e1;
-      if (e2) throw e2;
-
-      let pagosPorPoliza = {};
-      for (const p of pagosDB ?? []) {
-        if (!pagosPorPoliza[p.poliza_id]) pagosPorPoliza[p.poliza_id] = [];
-        pagosPorPoliza[p.poliza_id].push(p);
-      }
-
-      const sinCuotas = (polizasDB ?? []).filter(p => !pagosPorPoliza[p.id] && p.fecha_inicio);
-      for (const p of sinCuotas) {
-        const esGestor = p.forma_pago === '4 PARCIALES' && Number(p.prima_total) === 2200;
-        try {
-          await generarCuotasPoliza(p.id, p.forma_pago, p.prima_total, p.fecha_inicio, esGestor);
-        } catch (err) {
-          console.error('generarCuotasPoliza', p.id, err);
-        }
-      }
-
-      let pagosFinales = pagosDB ?? [];
-      if (sinCuotas.length > 0) {
-        const { data: nuevosPagos } = await supabase
-          .from('pagos').select('*').order('fecha_vencimiento', { ascending: true });
-        pagosFinales = nuevosPagos ?? [];
-        pagosPorPoliza = {};
-        for (const p of pagosFinales) {
-          if (!pagosPorPoliza[p.poliza_id]) pagosPorPoliza[p.poliza_id] = [];
-          pagosPorPoliza[p.poliza_id].push(p);
-        }
-      }
+      const { data: polizasDB, error } = await supabase
+        .from('polizas')
+        .select(`
+          id, constancia, numero_poliza, forma_pago,
+          prima_neta, prima_total, iva, derechos,
+          fecha_inicio, fecha_fin, hora_inicio, hora_fin, estatus,
+          clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
+          oficinas(id, nombre),
+          vendedores(nombre, apellido, codigo)
+        `)
+        .neq('estatus', 'COTIZACION')
+        .order('fecha_inicio', { ascending: false });
+      if (error) throw error;
 
       const rowsBuilt = (polizasDB ?? []).map(pol => {
-        const cuotas = (pagosPorPoliza[pol.id] ?? []).map((c, idx) => ({
-          id:         c.id,
-          num:        idx + 1,
-          vto:        isoAMX(c.fecha_vencimiento),
-          monto:      Number(c.monto),
-          estatus:    c.estatus ?? 'PENDIENTE',
-          pagado:     c.estatus === 'PAGADO',
-          fechaPago:  c.fecha_pago ? isoAMX(c.fecha_pago) : null,
-          forma:      c.forma_pago  ?? null,
-          referencia: c.referencia  ?? null,
-        }));
         const nombreCliente  = [pol.clientes?.nombre, pol.clientes?.apellido].filter(Boolean).join(' ');
         const nombreVendedor = pol.vendedores
           ? [pol.vendedores.nombre, pol.vendedores.apellido].filter(Boolean).join(' ')
@@ -391,26 +455,53 @@ export default function OperadorPagos({ usuario }) {
           fechaFin:    pol.fecha_fin    ?? '',
           horaInicio:  pol.hora_inicio  ?? '00:00:00 hrs.',
           horaFin:     pol.hora_fin     ?? '23:59:59 hrs.',
-          conducto:    pol.vendedores?.codigo || '-',
-          clienteData: pol.clientes ?? {},
-          cuotas,
+          conducto:      pol.vendedores?.codigo || '-',
+          clienteData:   pol.clientes ?? {},
+          estatusPoliza: pol.estatus ?? 'VIGENTE',
+          cuotas:        null,
         };
-      }).filter(r => r.cuotas.length > 0);
+      });
 
       const oficinasSet   = [...new Set((polizasDB ?? []).map(p => p.oficinas?.nombre).filter(Boolean))];
       const vendedoresSet = [...new Set(rowsBuilt.map(r => r.vendedor).filter(Boolean))];
       setOficinas(["Todas", ...oficinasSet]);
       setVendedores(["Todos", ...vendedoresSet]);
       setRows(rowsBuilt);
-      setPolizaSel(prev => prev ? (rowsBuilt.find(r => r.polizaId === prev.polizaId) ?? null) : null);
+      setPolizaSel(null);
     } catch (err) {
       console.error('Error cargando pagos:', err);
     } finally {
       setLoading(false);
     }
+  }, [cargarPagosBackground]);
+
+  // Carga las cuotas de una póliza específica y abre el modal
+  const abrirCuotas = useCallback(async (pol) => {
+    // Si ya están cargadas, abrir directamente
+    if (pol.cuotas !== null) { setPolizaSel(pol); return; }
+
+    // Abrir modal con estado "cargando"
+    setPolizaSel({ ...pol, cuotas: [] });
+
+    const { data, error } = await supabase
+      .from('pagos')
+      .select('*')
+      .eq('poliza_id', pol.polizaId)
+      .order('fecha_vencimiento', { ascending: true });
+
+    if (error) { console.error('Error cargando cuotas:', error); return; }
+
+    const cuotas = (data ?? []).map(mapCuota);
+
+    // Cachear en rows para no volver a pedir
+    setRows(prev => prev.map(r => r.polizaId === pol.polizaId ? { ...r, cuotas } : r));
+    setPolizaSel(prev => prev?.polizaId === pol.polizaId ? { ...prev, cuotas } : prev);
   }, []);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    // Carga lista de pólizas, luego pagos en segundo plano
+    cargar().then(() => cargarPagosBackground());
+  }, [cargar, cargarPagosBackground]);
 
   const aplicarPago = async ({ cuotaId, polizaId, fecha, monto }) => {
     const { error } = await supabase.from('pagos').update({
@@ -420,27 +511,42 @@ export default function OperadorPagos({ usuario }) {
       recibido_por: usuario?.id ?? null,
     }).eq('id', cuotaId);
     if (error) throw error;
-    await cargar();
+    // Recargar cuotas del modal si está abierto
+    if (polizaSel) {
+      const { data: cuotasNew } = await supabase
+        .from('pagos').select('*').eq('poliza_id', polizaSel.polizaId)
+        .order('fecha_vencimiento', { ascending: true });
+      const cuotas = (cuotasNew ?? []).map(mapCuota);
+      setRows(prev => prev.map(r => r.polizaId === polizaSel.polizaId ? { ...r, cuotas } : r));
+      setPolizaSel(prev => prev ? { ...prev, cuotas } : null);
+    }
   };
 
   const hoy = new Date();
 
-  const filtradas = rows.filter(p => {
-    const matchBusq = p.id.toLowerCase().includes(busqueda.toLowerCase())
-      || p.asegurado.toLowerCase().includes(busqueda.toLowerCase());
-    const matchOfic = filtroOficina  === "Todas" || p.oficina  === filtroOficina;
-    const matchVend = filtroVendedor === "Todos"  || p.vendedor === filtroVendedor;
-    const pendientes = p.cuotas.filter(c => c.estatus === 'PENDIENTE').length;
-    const matchEst  = filtroEstado === "Todos"
-      || (filtroEstado === "Con pendientes" && pendientes > 0)
-      || (filtroEstado === "Al corriente"   && pendientes === 0);
-    return matchBusq && matchOfic && matchVend && matchEst;
-  });
+  const filtradas = useMemo(() => {
+    const b = busqueda.toLowerCase();
+    return rows.filter(p => {
+      const matchBusq = p.id.toLowerCase().includes(b) || p.asegurado.toLowerCase().includes(b);
+      const matchOfic = filtroOficina  === "Todas" || p.oficina  === filtroOficina;
+      const matchVend = filtroVendedor === "Todos"  || p.vendedor === filtroVendedor;
+      // Si cuotas aún no cargaron, el filtro de estado no excluye la póliza
+      const pendientes = p.cuotas ? p.cuotas.filter(c => c.estatus === 'PENDIENTE').length : -1;
+      const matchEst  = filtroEstado === "Todos"
+        || (filtroEstado === "Con pendientes" && (pendientes === -1 || pendientes > 0))
+        || (filtroEstado === "Al corriente"   && pendientes === 0);
+      return matchBusq && matchOfic && matchVend && matchEst;
+    });
+  }, [rows, busqueda, filtroOficina, filtroVendedor, filtroEstado]);
 
-  const totalCobrado   = rows.flatMap(p => p.cuotas.filter(c => c.estatus === 'PAGADO')).reduce((s, c) => s + c.monto, 0);
-  const totalAdeudo    = rows.flatMap(p => p.cuotas.filter(c => c.estatus === 'ADEUDO')).reduce((s, c) => s + c.monto, 0);
-  const cuotasPend     = rows.flatMap(p => p.cuotas.filter(c => c.estatus === 'PENDIENTE')).length;
-  const cuotasVencidas = rows.flatMap(p =>
+  const { paginated: pagosPag, page: pagePagos, setPage: setPagePagos, totalPages: totalPagesPagos, total: totalPagos } = usePagination(filtradas);
+
+  // Métricas solo sobre cuotas ya cargadas
+  const cargadas       = rows.filter(p => p.cuotas !== null);
+  const totalCobrado   = cargadas.flatMap(p => p.cuotas.filter(c => c.estatus === 'PAGADO')).reduce((s, c) => s + c.monto, 0);
+  const totalAdeudo    = cargadas.flatMap(p => p.cuotas.filter(c => c.estatus === 'ADEUDO')).reduce((s, c) => s + c.monto, 0);
+  const cuotasPend     = cargadas.flatMap(p => p.cuotas.filter(c => c.estatus === 'PENDIENTE')).length;
+  const cuotasVencidas = cargadas.flatMap(p =>
     p.cuotas.filter(c => c.estatus === 'PENDIENTE' && new Date(c.vto.split("/").reverse().join("-") + 'T12:00:00') < hoy)
   ).length;
 
@@ -516,44 +622,65 @@ export default function OperadorPagos({ usuario }) {
                 <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">Cargando...</td></tr>
               ) : filtradas.length === 0 ? (
                 <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas.</td></tr>
-              ) : filtradas.map((p, i) => {
-                const pagadas   = p.cuotas.filter(c => c.estatus === 'PAGADO').length;
-                const cobrado   = p.cuotas.filter(c => c.estatus === 'PAGADO').reduce((s, c) => s + c.monto, 0);
-                const porCobrar = p.cuotas.filter(c => c.estatus === 'PENDIENTE').reduce((s, c) => s + c.monto, 0);
-                const hayVencida= p.cuotas.some(c =>
+              ) : pagosPag.map((p, i) => {
+                const totalCuotas = p.formaPago === 'CONTADO' ? 1 : 4;
+                const cargadas    = p.cuotas !== null;
+                const cuotas      = p.cuotas ?? [];
+                const pagadas     = cuotas.filter(c => c.estatus === 'PAGADO').length;
+                const cobrado     = cuotas.filter(c => c.estatus === 'PAGADO').reduce((s, c) => s + c.monto, 0);
+                const porCobrar   = cuotas.filter(c => c.estatus === 'PENDIENTE').reduce((s, c) => s + c.monto, 0);
+                const hayVencida  = cuotas.some(c =>
                   c.estatus === 'PENDIENTE' &&
                   new Date(c.vto.split("/").reverse().join("-") + 'T12:00:00') < hoy
                 );
+                const polizaBloq  = ['VENCIDA','ANULADA'].includes(p.estatusPoliza);
                 return (
-                  <tr key={i} className="hover:bg-gray-50/60 transition-colors">
+                  <tr key={i} className={`transition-colors ${polizaBloq ? 'opacity-60 bg-gray-50/80' : 'hover:bg-gray-50/60'}`}>
                     <td className="px-5 py-3.5 font-mono text-xs font-bold text-[#13193a]">{p.id}</td>
                     <td className="px-5 py-3.5 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
                     <td className="px-5 py-3.5 text-xs text-gray-500 max-w-32 truncate">{p.oficina}</td>
                     <td className="px-5 py-3.5 text-xs text-gray-500 max-w-36 truncate">{p.cobertura}</td>
-                    <td className="px-5 py-3.5 text-xs text-gray-500">{p.formaPago}</td>
+                    <td className="px-5 py-3.5 text-xs text-gray-500">
+                      <div className="flex flex-col gap-0.5">
+                        <span>{p.formaPago}</span>
+                        {polizaBloq && (
+                          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{p.estatusPoliza}</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-1.5">
                         <div className="flex gap-0.5">
-                          {p.cuotas.map(c => (
-                            <div key={c.id} className={`w-2.5 h-2.5 rounded-full ${
-                              c.estatus === 'PAGADO' ? "bg-emerald-500" :
-                              c.estatus === 'ADEUDO' ? "bg-blue-400"   :
-                              hayVencida             ? "bg-red-400"    :
-                                                       "bg-gray-200"
-                            }`}/>
-                          ))}
+                          {Array.from({ length: totalCuotas }, (_, idx) => {
+                            const c = cargadas ? cuotas[idx] : undefined;
+                            return (
+                              <div key={idx} className={`w-2.5 h-2.5 rounded-full ${
+                                !cargadas                      ? "bg-gray-100"    :
+                                !c                             ? "bg-gray-200"    :
+                                c.estatus === 'PAGADO'         ? "bg-emerald-500" :
+                                c.estatus === 'ADEUDO'         ? "bg-blue-400"    :
+                                hayVencida                     ? "bg-red-400"     :
+                                                                  "bg-gray-200"
+                              }`}/>
+                            );
+                          })}
                         </div>
-                        <span className="text-[11px] text-gray-500">{pagadas}/{p.cuotas.length}</span>
+                        <span className="text-[11px] text-gray-500">
+                          {cargadas ? `${pagadas}/${totalCuotas}` : '—'}
+                        </span>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-xs font-bold text-emerald-700">${cobrado.toFixed(2)}</td>
-                    <td className="px-5 py-3.5">
-                      {porCobrar > 0
-                        ? <span className={`text-xs font-bold ${hayVencida ? "text-red-600" : "text-amber-700"}`}>${porCobrar.toFixed(2)}</span>
-                        : <span className="text-xs text-emerald-600 font-semibold">Al corriente</span>}
+                    <td className="px-5 py-3.5 text-xs font-bold text-emerald-700">
+                      {cargadas ? `$${cobrado.toFixed(2)}` : '—'}
                     </td>
                     <td className="px-5 py-3.5">
-                      <button onClick={() => setPolizaSel(p)}
+                      {!cargadas ? <span className="text-xs text-gray-300">—</span>
+                        : porCobrar > 0
+                          ? <span className={`text-xs font-bold ${hayVencida ? "text-red-600" : "text-amber-700"}`}>${porCobrar.toFixed(2)}</span>
+                          : <span className="text-xs text-emerald-600 font-semibold">Al corriente</span>}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <button onClick={() => abrirCuotas(p)}
                         className="flex items-center gap-1.5 text-xs font-bold text-[#13193a] border border-[#13193a]/20 px-3 py-1.5 rounded-xl hover:bg-[#13193a]/5 transition-all whitespace-nowrap">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.573-3.007-9.963-7.178z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                         Ver cuotas
@@ -566,9 +693,7 @@ export default function OperadorPagos({ usuario }) {
           </table>
         </div>
 
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400">Mostrando <strong className="text-gray-600">{filtradas.length}</strong> pólizas</p>
-        </div>
+        <Paginator page={pagePagos} totalPages={totalPagesPagos} total={totalPagos} pageSize={10} onPage={setPagePagos} />
       </div>
 
       {polizaSel && (

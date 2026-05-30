@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { fetchVendedores, crearVendedor, actualizarVendedor, toggleActivo as toggleActivoService } from "../../services/vendedores";
 import ModalVendedor from "./components/ModalVendedor";
 import { OFICINA } from "./constants/cobertura";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 
 const EMPTY_FORM = { nombre: "", apellido1: "", apellido2: "", telefono: "", email: "" };
 
@@ -31,14 +33,16 @@ export function Vendedores({ usuario }) {
 
   useEffect(() => { cargar(); }, []);
 
-  const filtrados = vendedores.filter(v => {
+  const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase();
-    return (
+    return vendedores.filter(v =>
       (v.nombre + " " + (v.apellido || "")).toLowerCase().includes(q) ||
       (v.codigo || "").toLowerCase().includes(q) ||
       (v.email || "").toLowerCase().includes(q)
     );
-  });
+  }, [vendedores, busqueda]);
+
+  const { paginated: vendedoresPag, page: pageV, setPage: setPageV, totalPages: totalPagesV, total: totalV } = usePagination(filtrados);
 
   const abrirNuevo  = () => { setForm(EMPTY_FORM); setEditId(null); setModal("nuevo"); };
   const abrirEditar = v => {
@@ -122,7 +126,7 @@ export function Vendedores({ usuario }) {
                 <tr><td colSpan={6} className="text-center py-12 text-sm text-gray-400">Cargando vendedores...</td></tr>
               ) : filtrados.length === 0 ? (
                 <tr><td colSpan={6} className="text-center py-12 text-sm text-gray-400">No se encontraron vendedores.</td></tr>
-              ) : filtrados.map(v => (
+              ) : vendedoresPag.map(v => (
                 <tr key={v.id} className="hover:bg-gray-50/60 transition-colors">
                   <td className="px-5 py-3.5 font-mono text-xs font-bold text-[#13193a]">{v.codigo || "—"}</td>
                   <td className="px-5 py-3.5 text-sm font-semibold text-[#13193a]">{v.nombre} {v.apellido || ""}</td>
@@ -150,6 +154,7 @@ export function Vendedores({ usuario }) {
               ))}
             </tbody>
           </table>
+          <Paginator page={pageV} totalPages={totalPagesV} total={totalV} pageSize={10} onPage={setPageV} />
         </div>
       </div>
 

@@ -2,13 +2,15 @@
 // src/features/administracion/AdminUsuarios.jsx
 // Administración: Crear y gestionar usuarios del sistema
 // ============================================================
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
   supabase,
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
 } from "../../supabaseClient";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 
 const ROLES_PERMITIDOS = [
   "OPERADOR",
@@ -941,21 +943,24 @@ export default function AdminUsuarios() {
       .eq("id", u.id);
   };
 
-  const filtrados = usuarios.filter((u) => {
-    const rolNombre = u.roles?.nombre ?? "";
-    const oficinaNombre = u.oficinas?.nombre ?? "";
-    const hayBusqueda =
-      u.nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      u.apellido?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      u.email?.toLowerCase().includes(busqueda.toLowerCase());
-    const hayRol = filtroRol === "Todos" || rolNombre === filtroRol;
-    const hayOfic =
-      filtroOficina === "Todas" || oficinaNombre === filtroOficina;
-    const hayActivo =
-      filtroActivo === "Todos" ||
-      (filtroActivo === "Activos" ? u.activo : !u.activo);
-    return hayBusqueda && hayRol && hayOfic && hayActivo;
-  });
+  const filtrados = useMemo(() => {
+    const b = busqueda.toLowerCase();
+    return usuarios.filter((u) => {
+      const rolNombre    = u.roles?.nombre ?? "";
+      const oficinaNombre = u.oficinas?.nombre ?? "";
+      const hayBusqueda  =
+        u.nombre?.toLowerCase().includes(b) ||
+        u.apellido?.toLowerCase().includes(b) ||
+        u.email?.toLowerCase().includes(b);
+      const hayRol    = filtroRol    === "Todos"  || rolNombre    === filtroRol;
+      const hayOfic   = filtroOficina === "Todas" || oficinaNombre === filtroOficina;
+      const hayActivo = filtroActivo === "Todos"  ||
+        (filtroActivo === "Activos" ? u.activo : !u.activo);
+      return hayBusqueda && hayRol && hayOfic && hayActivo;
+    });
+  }, [usuarios, busqueda, filtroRol, filtroOficina, filtroActivo]);
+
+  const { paginated: paginadosU, page: pageU, setPage: setPageU, totalPages: totalPagesU, total: totalU } = usePagination(filtrados);
 
   const selCls =
     "px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none";
@@ -1134,7 +1139,7 @@ export default function AdminUsuarios() {
                     </td>
                   </tr>
                 ) : (
-                  filtrados.map((u) => {
+                  paginadosU.map((u) => {
                     const rolNombre = u.roles?.nombre ?? "";
                     const cls =
                       ROL_CLS[rolNombre] ??
@@ -1258,13 +1263,7 @@ export default function AdminUsuarios() {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400">
-            {filtrados.length} usuarios —{" "}
-            {usuarios.filter((u) => u.activo).length} activos
-          </p>
-        </div>
+        <Paginator page={pageU} totalPages={totalPagesU} total={totalU} pageSize={10} onPage={setPageU} />
       </div>
 
       {/* Modal nuevo usuario */}

@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
-import { fetchPolizaById, buildPolizaPDF, cancelarPoliza, contarPolizasCliente, contarPolizasConcesionario } from "../../services/polizas";
+import { fetchPolizaById, buildPolizaPDF, cancelarPoliza, contarPolizasCliente, contarPolizasConcesionario, calcularEstatus } from "../../services/polizas";
 import { actualizarNombreCliente } from "../../services/clientes";
 import { actualizarNombreConcesionario } from "../../services/concesionarios";
 import { pdf } from "@react-pdf/renderer";
 import EndosoCancelacionPDF from "../../components/pdf/EndosoCancelacionPDF";
 import Swal from "sweetalert2";
 import StatusBadge from "../operador/components/StatusBadge";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 
 const MOTIVOS_CANCEL = {
   "Solicitud del cliente": "SE CANCELA PÓLIZA A SOLICITUD DEL CLIENTE",
@@ -523,6 +525,7 @@ export default function AdminPolizas() {
   const [polizas,        setPolizas]        = useState([]);
   const [cargando,       setCargando]       = useState(true);
   const [busqueda,       setBusqueda]       = useState("");
+  const [busquedaFiltro, setBusquedaFiltro] = useState("");
   const [filtroOficina,  setFiltroOficina]  = useState("Todas");
   const [filtroVendedor, setFiltroVendedor] = useState("Todos");
   const [filtroEstatus,  setFiltroEstatus]  = useState("Todos");
@@ -542,27 +545,37 @@ export default function AdminPolizas() {
         oficinas(id, nombre)
       `)
       .neq("estatus", "COTIZACION")
-      .order("created_at", { ascending: false });
+      .order("fecha_inicio", { ascending: false });
     if (error) console.error("Error cargando pólizas admin:", error.message);
-    setPolizas(data ?? []);
+    setPolizas((data ?? []).map(p => ({ ...p, estatus: calcularEstatus(p.estatus, p.fecha_fin) })));
     setCargando(false);
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Listas únicas para los filtros
-  const listaOficinas  = [...new Set(polizas.map(p => p.oficinas?.nombre).filter(Boolean))].sort();
-  const listaVendedores = [...new Set(polizas.map(p => `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim()).filter(Boolean))].sort();
-  const listaEstatus   = ["Todos", "VIGENTE", "POR VENCER", "VENCIDA", "CANCELADA"];
+  useEffect(() => {
+    const t = setTimeout(() => setBusquedaFiltro(busqueda), 300);
+    return () => clearTimeout(t);
+  }, [busqueda]);
 
-  const filtradas = polizas.filter(p => {
-    const txt = `${p.constancia || p.numero_poliza} ${p.clientes?.nombre || ""} ${p.clientes?.apellido || ""} ${p.placas || ""}`.toLowerCase();
-    const mb = txt.includes(busqueda.toLowerCase());
-    const mo = filtroOficina  === "Todas" || p.oficinas?.nombre  === filtroOficina;
-    const mv = filtroVendedor === "Todos"  || `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim() === filtroVendedor;
-    const me = filtroEstatus  === "Todos"  || p.estatus === filtroEstatus;
-    return mb && mo && mv && me;
-  });
+  // Listas únicas para los filtros
+  const listaOficinas  = useMemo(() => [...new Set(polizas.map(p => p.oficinas?.nombre).filter(Boolean))].sort(), [polizas]);
+  const listaVendedores = useMemo(() => [...new Set(polizas.map(p => `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim()).filter(Boolean))].sort(), [polizas]);
+  const listaEstatus   = ["Todos", "VIGENTE", "POR VENCER", "VENCIDA", "CANCELADA", "ANULADA"];
+
+  const filtradas = useMemo(() => {
+    const b = busquedaFiltro.toLowerCase();
+    return polizas.filter(p => {
+      const txt = `${p.constancia || p.numero_poliza} ${p.clientes?.nombre || ""} ${p.clientes?.apellido || ""} ${p.placas || ""}`.toLowerCase();
+      const mb = txt.includes(b);
+      const mo = filtroOficina  === "Todas" || p.oficinas?.nombre  === filtroOficina;
+      const mv = filtroVendedor === "Todos"  || `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim() === filtroVendedor;
+      const me = filtroEstatus  === "Todos"  || p.estatus === filtroEstatus;
+      return mb && mo && mv && me;
+    });
+  }, [polizas, busquedaFiltro, filtroOficina, filtroVendedor, filtroEstatus]);
+
+  const { paginated: paginadas, page, setPage, totalPages, total } = usePagination(filtradas);
 
   const cerrarModal = () => { setModal(null); setPolSel(null); };
 
@@ -628,7 +641,7 @@ export default function AdminPolizas() {
               <tbody className="divide-y divide-gray-50">
                 {filtradas.length === 0 ? (
                   <tr><td colSpan={10} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas.</td></tr>
-                ) : filtradas.map(p => (
+                ) : paginadas.map(p => (
                   <tr key={p.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-4 py-3 font-mono text-xs font-bold text-[#13193a]">{p.constancia || p.numero_poliza}</td>
                     <td className="px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">
@@ -670,9 +683,7 @@ export default function AdminPolizas() {
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400">{filtradas.length} pólizas</p>
-        </div>
+        <Paginator page={page} totalPages={totalPages} total={total} pageSize={10} onPage={setPage} />
       </div>
 
       {modal === "endoso"  && polSel && <ModalEndoso  poliza={polSel} onClose={cerrarModal} onDone={() => { cerrarModal(); cargar(); }}/>}

@@ -4,6 +4,7 @@ import { supabase } from "../supabaseClient";
 import { mockCoberturas } from "../components/pdf/mockData";
 import gamanLogo from "../assets/GamanLogoOpt.jpg";
 import { PRECIO_MATRIZ } from "../features/operador/constants/cobertura";
+import { calcularEstatus } from "../services/polizas";
 
 const ESTATUS_CONFIG = {
   VIGENTE: {
@@ -172,7 +173,7 @@ export default function VerificarPoliza() {
         if (error || !data) {
           setNoFound(true);
         } else {
-          setPoliza(data);
+          setPoliza({ ...data, estatus: calcularEstatus(data.estatus, data.fecha_fin) });
           try {
             const { data: pagosData } = await supabase
               .rpc("verificar_pagos_poliza", { p_constancia: constancia });

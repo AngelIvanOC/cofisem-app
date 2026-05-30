@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { PDFViewer } from "@react-pdf/renderer";
 import { fetchPolizas, fetchPolizaById, buildPolizaPDF, cancelarPoliza, editarPoliza, contarPolizasCliente, contarPolizasConcesionario } from "../../services/polizas";
 import { actualizarNombreCliente } from "../../services/clientes";
@@ -14,13 +14,16 @@ import TramiteExitoso from "./components/TramiteExitoso";
 import FormCotizacion from "./components/FormCotizacion";
 import ResumenPoliza from "./components/ResumenPoliza";
 import PolizaPDF from "../../components/pdf/PolizaPDF";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 
 export default function Polizas({ usuario }) {
   const [tab,          setTab]          = useState("polizas");
   const [polizas,      setPolizas]      = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
-  const [busqueda,     setBusqueda]     = useState("");
+  const [busqueda,       setBusqueda]       = useState("");
+  const [busquedaFiltro, setBusquedaFiltro] = useState("");
   const [filtroEst,    setFiltroEst]    = useState("Todos");
   const [cotizaciones,    setCotizaciones]    = useState(() => {
     try { return JSON.parse(localStorage.getItem("cofisem_cotizaciones") || "[]"); }
@@ -167,16 +170,26 @@ export default function Polizas({ usuario }) {
     catch { /* cuota llena — ignorar */ }
   }, [cotizaciones]);
 
+  useEffect(() => {
+    const t = setTimeout(() => setBusquedaFiltro(busqueda), 300);
+    return () => clearTimeout(t);
+  }, [busqueda]);
 
-  const ESTATUS_OPTS = ["Todos","VIGENTE","POR VENCER","VENCIDA","CANCELADA"];
+  const ESTATUS_OPTS = ["Todos","VIGENTE","POR VENCER","VENCIDA","CANCELADA","ANULADA"];
 
-  const polizasFiltradas = polizas.filter(p => {
-    const asegurado = `${p.clientes?.nombre || ""} ${p.clientes?.apellido || ""}`.toLowerCase();
-    const constancia = (p.constancia || p.numero_poliza || "").toLowerCase();
-    const matchBusq = asegurado.includes(busqueda.toLowerCase()) || constancia.includes(busqueda.toLowerCase());
-    const matchEst  = filtroEst === "Todos" || p.estatus === filtroEst;
-    return matchBusq && matchEst;
-  });
+  const polizasFiltradas = useMemo(() => {
+    const b = busquedaFiltro.toLowerCase();
+    return polizas.filter(p => {
+      const asegurado  = `${p.clientes?.nombre || ""} ${p.clientes?.apellido || ""}`.toLowerCase();
+      const constancia = (p.constancia || p.numero_poliza || "").toLowerCase();
+      const matchBusq  = asegurado.includes(b) || constancia.includes(b);
+      const matchEst   = filtroEst === "Todos" || p.estatus === filtroEst;
+      return matchBusq && matchEst;
+    });
+  }, [polizas, busquedaFiltro, filtroEst]);
+
+  const { paginated: polizasPag, page: pageP, setPage: setPageP, totalPages: totalPagesP, total: totalP } = usePagination(polizasFiltradas);
+  const { paginated: cotPag,     page: pageC, setPage: setPageC, totalPages: totalPagesC, total: totalC } = usePagination(cotizaciones);
 
   const guardarCotizacion = (cot) => {
     setCotizaciones(cs => [{ ...cot, guardada: true }, ...cs.filter(c => c.id !== cot.id)]);
@@ -335,17 +348,17 @@ export default function Polizas({ usuario }) {
                       <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">Cargando pólizas...</td></tr>
                     ) : polizasFiltradas.length === 0 ? (
                       <tr><td colSpan={9} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas.</td></tr>
-                    ) : polizasFiltradas.map(p => (
+                    ) : polizasPag.map(p => (
                       <tr
                         key={p.id}
                         onClick={() => abrirResumen(p)}
                         className="hover:bg-gray-50/60 transition-colors cursor-pointer"
                       >
                         <td className="px-4 py-3 font-mono text-xs font-bold text-[#13193a]">{p.constancia || p.numero_poliza}</td>
-                        <td className="px-4 py-3 text-xs font-semibold text-gray-700">
+                        <td className="px-4 py-3 text-xs font-semibold text-gray-700 max-w-[12rem] truncate" title={`${p.clientes?.nombre ?? ""} ${p.clientes?.apellido ?? ""}`.trim()}>
                           {p.clientes?.nombre} {p.clientes?.apellido || ""}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{p.cobertura}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 max-w-[10rem] truncate" title={p.cobertura}>{p.cobertura}</td>
                         <td className="px-4 py-3 text-xs text-gray-500">
                           {p.vendedores?.nombre} {p.vendedores?.apellido || ""}
                         </td>
@@ -399,6 +412,7 @@ export default function Polizas({ usuario }) {
                   </tbody>
                 </table>
               </div>
+              <Paginator page={pageP} totalPages={totalPagesP} total={totalP} pageSize={10} onPage={setPageP} />
             </>
           )}
 
@@ -416,7 +430,7 @@ export default function Polizas({ usuario }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {cotizaciones.map((c, i) => (
+                    {cotPag.map((c, i) => (
                       <tr key={i} className="hover:bg-gray-50/60 transition-colors">
                         <td className="px-5 py-3.5 font-mono text-xs font-bold text-[#13193a]">{c.id}</td>
                         <td className="px-5 py-3.5 text-xs font-semibold text-gray-700">{c.cliente}</td>
@@ -437,6 +451,7 @@ export default function Polizas({ usuario }) {
                     ))}
                   </tbody>
                 </table>
+                <Paginator page={pageC} totalPages={totalPagesC} total={totalC} pageSize={10} onPage={setPageC} />
               </div>
             )
           )}

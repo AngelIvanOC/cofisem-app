@@ -53,6 +53,25 @@ function generarConstancia(fecha, seqGlobal, seqVehiculo, oficinaId) {
   return `01${yy}${ofic}${String(seqGlobal).padStart(8,'0')}-${String(seqVehiculo).padStart(2,'0')}`;
 }
 
+// ── Estatus efectivo según fecha_fin ──────────────────────────────────────
+// El campo `estatus` en BD es estático; esta función lo recalcula en tiempo real.
+// CANCELADA es permanente y nunca se sobreescribe.
+export function calcularEstatus(dbEstatus, fechaFin) {
+  // Estatus definitivos puestos explícitamente en la BD — nunca sobreescribir
+  if (dbEstatus === 'CANCELADA' || dbEstatus === 'VENCIDA' || dbEstatus === 'ANULADA') {
+    return dbEstatus;
+  }
+  // Para los demás, calcular dinámicamente según fecha_fin
+  if (!fechaFin) return dbEstatus ?? 'VIGENTE';
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const fin = new Date(fechaFin + 'T00:00:00');
+  if (fin < hoy) return 'VENCIDA';
+  const dias = Math.floor((fin - hoy) / 86_400_000);
+  if (dias <= 30) return 'POR VENCER';
+  return 'VIGENTE';
+}
+
 // ── Cuotas por forma de pago ───────────────────────────────────────────────
 const _PRECIO = {
   normal: {
@@ -211,7 +230,7 @@ export async function fetchPolizaById(id) {
     .eq('id', id)
     .single();
   if (error) throw error;
-  return data;
+  return { ...data, estatus: calcularEstatus(data.estatus, data.fecha_fin) };
 }
 
 // ── Cancelar póliza ───────────────────────────────────────────────────────
@@ -286,9 +305,9 @@ export async function fetchPolizas() {
       vendedores(nombre, apellido)
     `)
     .neq('estatus', 'COTIZACION')
-    .order('created_at', { ascending: false });
+    .order('fecha_inicio', { ascending: false });
   if (error) throw error;
-  return data;
+  return (data ?? []).map(p => ({ ...p, estatus: calcularEstatus(p.estatus, p.fecha_fin) }));
 }
 
 // ── Mapear póliza DB → objeto PolizaPDF ───────────────────────────────────
@@ -311,7 +330,7 @@ export function buildPolizaPDF(poliza, oficina) {
     tipoPlan:     poliza.tipo_poliza || 'TAXI BÁSICA 2500',
     emision:      fmtFecha(poliza.created_at?.split('T')[0]),
     emisionHora:  poliza.emision_hora || '',
-    estatus:      poliza.estatus || 'VIGENTE',
+    estatus:      calcularEstatus(poliza.estatus, poliza.fecha_fin),
     codigoQR:     poliza.constancia
       ? `${window.location.origin}/gaman/verificar/${poliza.constancia}`
       : '',

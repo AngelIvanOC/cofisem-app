@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { fetchClientes, crearCliente, actualizarCliente } from "../../services/clientes";
 import ModalCliente from "./components/ModalCliente";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 
 const EMPTY_FORM = {
   nombre:"", apellido1:"", apellido2:"", rfc:"", curp:"", telefono:"", email:"",
@@ -33,14 +35,16 @@ export default function Clientes({ usuario }) {
 
   useEffect(() => { cargar(); }, []);
 
-  const filtrados = clientes.filter(c => {
+  const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase();
-    return (
+    return clientes.filter(c =>
       (c.nombre + " " + (c.apellido || "")).toLowerCase().includes(q) ||
       (c.rfc || "").toLowerCase().includes(q) ||
       (c.telefono || "").includes(q)
     );
-  });
+  }, [clientes, busqueda]);
+
+  const { paginated: clientesPag, page: pageC, setPage: setPageC, totalPages: totalPagesC, total: totalC } = usePagination(filtrados);
 
   const abrirNuevo   = () => { setForm(EMPTY_FORM); setEditId(null); setModal("nuevo"); };
   const abrirEditar  = c => {
@@ -128,7 +132,7 @@ export default function Clientes({ usuario }) {
                 <tr><td colSpan={7} className="text-center py-12 text-sm text-gray-400">Cargando clientes...</td></tr>
               ) : filtrados.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-12 text-sm text-gray-400">No se encontraron clientes.</td></tr>
-              ) : filtrados.map(c => (
+              ) : clientesPag.map(c => (
                 <tr key={c.id} className="hover:bg-gray-50/60 transition-colors">
                   <td className="px-5 py-3.5 text-sm font-semibold text-[#13193a]">{c.nombre} {c.apellido || ""}</td>
                   <td className="px-5 py-3.5 font-mono text-xs text-gray-600">{c.rfc}</td>
@@ -160,6 +164,7 @@ export default function Clientes({ usuario }) {
               ))}
             </tbody>
           </table>
+          <Paginator page={pageC} totalPages={totalPagesC} total={totalC} pageSize={10} onPage={setPageC} />
         </div>
       </div>
 
