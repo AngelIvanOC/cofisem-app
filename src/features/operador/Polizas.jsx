@@ -24,7 +24,9 @@ export default function Polizas({ usuario }) {
   const [error,        setError]        = useState(null);
   const [busqueda,       setBusqueda]       = useState("");
   const [busquedaFiltro, setBusquedaFiltro] = useState("");
-  const [filtroEst,    setFiltroEst]    = useState("Todos");
+  const [filtroEst,       setFiltroEst]       = useState("Todos");
+  const [filtroFormaPago, setFiltroFormaPago] = useState("Todas");
+  const [filtroCobertura, setFiltroCobertura] = useState("Todas");
   const [cotizaciones,    setCotizaciones]    = useState(() => {
     try { return JSON.parse(localStorage.getItem("cofisem_cotizaciones") || "[]"); }
     catch { return []; }
@@ -177,16 +179,22 @@ export default function Polizas({ usuario }) {
 
   const ESTATUS_OPTS = ["Todos","VIGENTE","POR VENCER","VENCIDA","CANCELADA","ANULADA"];
 
+  const listaCoberturas = useMemo(() =>
+    ["Todas", ...new Set(polizas.map(p => p.cobertura).filter(Boolean))].sort((a,b) => a === "Todas" ? -1 : a.localeCompare(b)),
+  [polizas]);
+
   const polizasFiltradas = useMemo(() => {
     const b = busquedaFiltro.toLowerCase();
     return polizas.filter(p => {
       const asegurado  = `${p.clientes?.nombre || ""} ${p.clientes?.apellido || ""}`.toLowerCase();
       const constancia = (p.constancia || p.numero_poliza || "").toLowerCase();
       const matchBusq  = asegurado.includes(b) || constancia.includes(b);
-      const matchEst   = filtroEst === "Todos" || p.estatus === filtroEst;
-      return matchBusq && matchEst;
+      const matchEst   = filtroEst       === "Todos"  || p.estatus    === filtroEst;
+      const matchFp    = filtroFormaPago === "Todas"  || p.forma_pago === filtroFormaPago;
+      const matchCob   = filtroCobertura === "Todas"  || p.cobertura  === filtroCobertura;
+      return matchBusq && matchEst && matchFp && matchCob;
     });
-  }, [polizas, busquedaFiltro, filtroEst]);
+  }, [polizas, busquedaFiltro, filtroEst, filtroFormaPago, filtroCobertura]);
 
   const { paginated: polizasPag, page: pageP, setPage: setPageP, totalPages: totalPagesP, total: totalP } = usePagination(polizasFiltradas);
   const { paginated: cotPag,     page: pageC, setPage: setPageC, totalPages: totalPagesC, total: totalC } = usePagination(cotizaciones);
@@ -320,26 +328,52 @@ export default function Polizas({ usuario }) {
               {error && (
                 <div className="m-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{error}</div>
               )}
-              <div className="flex flex-wrap items-center gap-2 px-5 py-4 border-b border-gray-100">
-                <div className="relative">
-                  <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                  </svg>
-                  <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-                    placeholder="Buscar póliza o asegurado..."
-                    className="pl-9 pr-4 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] w-56 bg-white" />
+              <div className="flex flex-wrap items-end gap-2 px-5 py-3 border-b border-gray-100">
+                {/* Búsqueda */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Buscar</span>
+                  <div className="relative">
+                    <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg>
+                    <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                      placeholder="Póliza o asegurado..."
+                      className="pl-8 pr-3 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] w-48 bg-white" />
+                  </div>
                 </div>
-                <select value={filtroEst} onChange={e => setFiltroEst(e.target.value)}
-                  className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 text-gray-600 bg-white focus:outline-none">
-                  {ESTATUS_OPTS.map(o => <option key={o}>{o}</option>)}
-                </select>
+                {/* Estatus */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Estatus</span>
+                  <select value={filtroEst} onChange={e => setFiltroEst(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-xl px-2.5 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15">
+                    {ESTATUS_OPTS.map(o => <option key={o}>{o}</option>)}
+                  </select>
+                </div>
+                {/* Forma de pago */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Forma de pago</span>
+                  <select value={filtroFormaPago} onChange={e => setFiltroFormaPago(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-xl px-2.5 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15">
+                    <option value="Todas">Todas</option>
+                    <option value="CONTADO">Contado</option>
+                    <option value="PARCIALES">Parciales</option>
+                  </select>
+                </div>
+                {/* Cobertura */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Cobertura</span>
+                  <select value={filtroCobertura} onChange={e => setFiltroCobertura(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-xl px-2.5 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 max-w-[200px]">
+                    {listaCoberturas.map(o => <option key={o}>{o}</option>)}
+                  </select>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50/80 border-b border-gray-100">
                       {["Constancia","Asegurado","Cobertura","Vendedor","Prima","Forma pago","Vence","Estatus","Acciones"].map((h, i) => (
-                        <th key={i} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
+                        <th key={i} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-1 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -354,19 +388,19 @@ export default function Polizas({ usuario }) {
                         onClick={() => abrirResumen(p)}
                         className="hover:bg-gray-50/60 transition-colors cursor-pointer"
                       >
-                        <td className="px-4 py-3 font-mono text-xs font-bold text-[#13193a]">{p.constancia || p.numero_poliza}</td>
-                        <td className="px-4 py-3 text-xs font-semibold text-gray-700 max-w-[12rem] truncate" title={`${p.clientes?.nombre ?? ""} ${p.clientes?.apellido ?? ""}`.trim()}>
+                        <td className="px-4 py-1 font-mono text-xs font-bold text-[#13193a]">{p.constancia || p.numero_poliza}</td>
+                        <td className="px-4 py-1 text-xs font-semibold text-gray-700 max-w-[12rem] truncate" title={`${p.clientes?.nombre ?? ""} ${p.clientes?.apellido ?? ""}`.trim()}>
                           {p.clientes?.nombre} {p.clientes?.apellido || ""}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-500 max-w-[10rem] truncate" title={p.cobertura}>{p.cobertura}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500">
+                        <td className="px-4 py-1 text-xs text-gray-500 max-w-[10rem] truncate" title={p.cobertura}>{p.cobertura}</td>
+                        <td className="px-4 py-1 text-xs text-gray-500">
                           {p.vendedores?.nombre} {p.vendedores?.apellido || ""}
                         </td>
-                        <td className="px-4 py-3 text-xs font-bold text-emerald-700">{fmt$(p.prima_total)}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{p.forma_pago}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{p.fecha_fin}</td>
-                        <td className="px-4 py-3"><StatusBadge estatus={p.estatus} /></td>
-                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <td className="px-4 py-1 text-xs font-bold text-emerald-700">{fmt$(p.prima_total)}</td>
+                        <td className="px-4 py-1 text-xs text-gray-500">{p.forma_pago}</td>
+                        <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{p.fecha_fin}</td>
+                        <td className="px-4 py-1"><StatusBadge estatus={p.estatus} /></td>
+                        <td className="px-4 py-1" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1.5">
                             <button
                               onClick={() => verPDF(p)}
@@ -425,20 +459,20 @@ export default function Polizas({ usuario }) {
                   <thead>
                     <tr className="bg-gray-50/80 border-b border-gray-100">
                       {["No. Cotización","Cliente","Cobertura","Vendedor","Total","Fecha",""].map(h => (
-                        <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 whitespace-nowrap">{h}</th>
+                        <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-1 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {cotPag.map((c, i) => (
                       <tr key={i} className="hover:bg-gray-50/60 transition-colors">
-                        <td className="px-5 py-3.5 font-mono text-xs font-bold text-[#13193a]">{c.id}</td>
-                        <td className="px-5 py-3.5 text-xs font-semibold text-gray-700">{c.cliente}</td>
-                        <td className="px-5 py-3.5 text-xs text-gray-500 max-w-xs truncate">{c.cobertura}</td>
-                        <td className="px-5 py-3.5 text-xs text-gray-500">{c.vendedor}</td>
-                        <td className="px-5 py-3.5 text-xs font-bold text-emerald-700">{fmt$(c.total)}</td>
-                        <td className="px-5 py-3.5 text-xs text-gray-400">{c.fecha}</td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 py-1 font-mono text-xs font-bold text-[#13193a]">{c.id}</td>
+                        <td className="px-5 py-1 text-xs font-semibold text-gray-700">{c.cliente}</td>
+                        <td className="px-5 py-1 text-xs text-gray-500 max-w-xs truncate">{c.cobertura}</td>
+                        <td className="px-5 py-1 text-xs text-gray-500">{c.vendedor}</td>
+                        <td className="px-5 py-1 text-xs font-bold text-emerald-700">{fmt$(c.total)}</td>
+                        <td className="px-5 py-1 text-xs text-gray-400">{c.fecha}</td>
+                        <td className="px-5 py-1">
                           <button onClick={() => abrirCotizacionGuardada(c)}
                             className="flex items-center gap-1.5 text-xs font-bold text-[#13193a] border border-[#13193a]/20 px-3 py-1.5 rounded-xl hover:bg-[#13193a]/5 transition-all whitespace-nowrap">
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">

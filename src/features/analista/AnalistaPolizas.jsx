@@ -3,7 +3,7 @@
 // Analista: Aplicar, consultar y cambiar estatus de pólizas
 // El analista ve TODAS las oficinas pero no cotiza ni tramita
 // ============================================================
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 // ── Mock data ─────────────────────────────────────────────────
 const OFICINAS = ["Todas", "COFISEM AV. E.ZAPATA", "OFICINA CIVAC", "COFISEM TEMIXCO", "COFISEM CUAUTLA"];
@@ -46,10 +46,10 @@ function Badge({ estatus }) {
 
 function Filtro({ label, value, onChange, opciones }) {
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">{label}</label>
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">{label}</span>
       <select value={value} onChange={e => onChange(e.target.value)}
-        className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]">
+        className="text-xs border border-gray-200 rounded-xl px-2.5 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 max-w-[160px]">
         {opciones.map(o => <option key={o}>{o}</option>)}
       </select>
     </div>
@@ -229,22 +229,34 @@ function ModalPoliza({ poliza, onClose, onGuardar }) {
 export default function AnalistaPolizas() {
   const [polizas,        setPolizas]        = useState(POLIZAS_MOCK);
   const [busqueda,       setBusqueda]       = useState("");
-  const [filtroOficina,  setFiltroOficina]  = useState("Todas");
-  const [filtroVendedor, setFiltroVendedor] = useState("Todos");
-  const [filtroEstatus,  setFiltroEstatus]  = useState("Todos");
-  const [filtroFecha,    setFiltroFecha]    = useState("");
-  const [polizaSel,      setPolizaSel]      = useState(null);
-  const [tab,            setTab]            = useState("todas");  // todas | pendientes
+  const [filtroOficina,   setFiltroOficina]   = useState("Todas");
+  const [filtroVendedor,  setFiltroVendedor]  = useState("Todos");
+  const [filtroEstatus,   setFiltroEstatus]   = useState("Todos");
+  const [filtroFormaPago, setFiltroFormaPago] = useState("Todas");
+  const [filtroCobertura, setFiltroCobertura] = useState("Todas");
+  const [filtroFecha,     setFiltroFecha]     = useState("");
+  const [polizaSel,       setPolizaSel]       = useState(null);
+  const [tab,             setTab]             = useState("todas");
 
   const pendientes = polizas.filter(p => p.estatus === "Pend. aplicar");
 
+  const listaFormasPago = useMemo(() =>
+    ["Todas", ...new Set(polizas.map(p => p.formaPago).filter(Boolean))].sort((a, b) => a === "Todas" ? -1 : a.localeCompare(b)),
+  [polizas]);
+
+  const listaCoberturas = useMemo(() =>
+    ["Todas", ...new Set(polizas.map(p => p.cobertura).filter(Boolean))].sort((a, b) => a === "Todas" ? -1 : a.localeCompare(b)),
+  [polizas]);
+
   const filtradas = polizas.filter(p => {
     const matchBusq  = p.id.includes(busqueda) || p.asegurado.toLowerCase().includes(busqueda.toLowerCase()) || p.placas.toLowerCase().includes(busqueda.toLowerCase());
-    const matchOfic  = filtroOficina  === "Todas" || p.oficina  === filtroOficina;
-    const matchVend  = filtroVendedor === "Todos"  || p.vendedor === filtroVendedor;
-    const matchEst   = filtroEstatus  === "Todos"  || p.estatus  === filtroEstatus;
+    const matchOfic  = filtroOficina   === "Todas" || p.oficina    === filtroOficina;
+    const matchVend  = filtroVendedor  === "Todos"  || p.vendedor   === filtroVendedor;
+    const matchEst   = filtroEstatus   === "Todos"  || p.estatus    === filtroEstatus;
+    const matchFp    = filtroFormaPago === "Todas"  || p.formaPago  === filtroFormaPago;
+    const matchCob   = filtroCobertura === "Todas"  || p.cobertura  === filtroCobertura;
     const matchTab   = tab === "todas" || p.estatus === "Pend. aplicar";
-    return matchBusq && matchOfic && matchVend && matchEst && matchTab;
+    return matchBusq && matchOfic && matchVend && matchEst && matchFp && matchCob && matchTab;
   });
 
   const onGuardar = (updated) => {
@@ -313,19 +325,24 @@ export default function AnalistaPolizas() {
         </div>
 
         {/* Filtros */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 px-5 py-4 border-b border-gray-100">
+        <div className="flex flex-wrap items-end gap-2 px-5 py-3 border-b border-gray-100">
           {/* Búsqueda */}
-          <div className="lg:col-span-2 relative">
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
-            </svg>
-            <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-              placeholder="Buscar póliza, asegurado, placas..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] bg-white"/>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Buscar</span>
+            <div className="relative">
+              <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+              </svg>
+              <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                placeholder="Póliza, asegurado, placas..."
+                className="pl-8 pr-3 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] w-48 bg-white"/>
+            </div>
           </div>
-          <Filtro label="Oficina"  value={filtroOficina}  onChange={setFiltroOficina}  opciones={OFICINAS}/>
-          <Filtro label="Vendedor" value={filtroVendedor} onChange={setFiltroVendedor} opciones={VENDEDORES}/>
-          <Filtro label="Estatus"  value={filtroEstatus}  onChange={setFiltroEstatus}  opciones={["Todos", ...Object.keys(ESTATUSES)]}/>
+          <Filtro label="Oficina"      value={filtroOficina}   onChange={setFiltroOficina}   opciones={OFICINAS}/>
+          <Filtro label="Vendedor"     value={filtroVendedor}  onChange={setFiltroVendedor}  opciones={VENDEDORES}/>
+          <Filtro label="Estatus"      value={filtroEstatus}   onChange={setFiltroEstatus}   opciones={["Todos", ...Object.keys(ESTATUSES)]}/>
+          <Filtro label="Forma de pago" value={filtroFormaPago} onChange={setFiltroFormaPago} opciones={listaFormasPago}/>
+          <Filtro label="Cobertura"    value={filtroCobertura} onChange={setFiltroCobertura} opciones={listaCoberturas}/>
         </div>
 
         {/* Tabla de resultados */}
@@ -334,7 +351,7 @@ export default function AnalistaPolizas() {
             <thead>
               <tr className="bg-gray-50/80 border-b border-gray-100">
                 {["Póliza","Asegurado","Aseguradora","Oficina","Vendedor","Cobertura","Placas","Prima","Vigencia","Estatus",""].map(h => (
-                  <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
+                  <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-1 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -343,17 +360,17 @@ export default function AnalistaPolizas() {
                 <tr><td colSpan={11} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas con esos filtros.</td></tr>
               ) : filtradas.map((p, i) => (
                 <tr key={i} className="hover:bg-gray-50/60 transition-colors cursor-pointer" onClick={() => setPolizaSel(p)}>
-                  <td className="px-4 py-3 font-mono text-xs font-bold text-[#13193a]">{p.id}</td>
-                  <td className="px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{p.aseguradora}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 max-w-32 truncate">{p.oficina}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{p.vendedor}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 max-w-36 truncate">{p.cobertura}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.placas}</td>
-                  <td className="px-4 py-3 text-xs font-bold text-emerald-700">${p.prima.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{p.vigHasta}</td>
-                  <td className="px-4 py-3"><Badge estatus={p.estatus}/></td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1 font-mono text-xs font-bold text-[#13193a]">{p.id}</td>
+                  <td className="px-4 py-1 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
+                  <td className="px-4 py-1 text-xs text-gray-500">{p.aseguradora}</td>
+                  <td className="px-4 py-1 text-xs text-gray-500 max-w-32 truncate">{p.oficina}</td>
+                  <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{p.vendedor}</td>
+                  <td className="px-4 py-1 text-xs text-gray-500 max-w-36 truncate">{p.cobertura}</td>
+                  <td className="px-4 py-1 font-mono text-xs text-gray-600">{p.placas}</td>
+                  <td className="px-4 py-1 text-xs font-bold text-emerald-700">${p.prima.toFixed(2)}</td>
+                  <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{p.vigHasta}</td>
+                  <td className="px-4 py-1"><Badge estatus={p.estatus}/></td>
+                  <td className="px-4 py-1">
                     <button onClick={e => { e.stopPropagation(); setPolizaSel(p); }}
                       className="w-7 h-7 rounded-lg text-gray-300 hover:text-[#13193a] hover:bg-gray-100 flex items-center justify-center transition-colors">
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -372,7 +389,7 @@ export default function AnalistaPolizas() {
           <p className="text-xs text-gray-400">
             Mostrando <strong className="text-gray-600">{filtradas.length}</strong> de <strong className="text-gray-600">{polizas.length}</strong> pólizas
           </p>
-          <button onClick={() => { setFiltroOficina("Todas"); setFiltroVendedor("Todos"); setFiltroEstatus("Todos"); setBusqueda(""); setTab("todas"); }}
+          <button onClick={() => { setFiltroOficina("Todas"); setFiltroVendedor("Todos"); setFiltroEstatus("Todos"); setFiltroFormaPago("Todas"); setFiltroCobertura("Todas"); setBusqueda(""); setTab("todas"); }}
             className="text-xs text-blue-600 hover:underline font-medium">
             Limpiar filtros
           </button>

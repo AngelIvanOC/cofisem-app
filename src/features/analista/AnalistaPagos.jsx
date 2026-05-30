@@ -186,7 +186,7 @@ export default function AnalistaPagos({ usuario }) {
             <thead>
               <tr className="bg-gray-50/80 border-b border-gray-100">
                 {["Póliza","Asegurado","Oficina","Forma pago","Cuota","Monto","Fecha","Solicitado por","Estatus","Acciones"].map(h => (
-                  <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
+                  <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-1 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -197,20 +197,20 @@ export default function AnalistaPagos({ usuario }) {
                 <tr><td colSpan={10} className="text-center py-12 text-sm text-gray-400">No hay pagos con esos filtros.</td></tr>
               ) : pagosPag.map((p, i) => (
                 <tr key={i} className={`hover:bg-gray-50/60 transition-colors ${p.estatus === "ADEUDO" ? "bg-blue-50/20" : ""}`}>
-                  <td className="px-4 py-3 font-mono text-xs font-bold text-[#13193a]">{p.poliza}</td>
-                  <td className="px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 max-w-24 truncate">{p.oficina}</td>
-                  <td className="px-4 py-3"><span className="text-[11px] px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600 font-medium">{p.formaPago || "—"}</span></td>
-                  <td className="px-4 py-3 text-xs text-center text-gray-500 font-mono">{p.cuota}</td>
-                  <td className="px-4 py-3 text-xs font-bold text-emerald-700">${p.monto.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{p.fecha}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{p.solicitadoPor}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1 font-mono text-xs font-bold text-[#13193a]">{p.poliza}</td>
+                  <td className="px-4 py-1 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
+                  <td className="px-4 py-1 text-xs text-gray-500 max-w-24 truncate">{p.oficina}</td>
+                  <td className="px-4 py-1"><span className="text-[11px] px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600 font-medium">{p.formaPago || "—"}</span></td>
+                  <td className="px-4 py-1 text-xs text-center text-gray-500 font-mono">{p.cuota}</td>
+                  <td className="px-4 py-1 text-xs font-bold text-emerald-700">${p.monto.toFixed(2)}</td>
+                  <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{p.fecha}</td>
+                  <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{p.solicitadoPor}</td>
+                  <td className="px-4 py-1">
                     <span className={`inline-flex text-[11px] font-semibold px-2.5 py-1 rounded-full border ${STATUS_CLS[p.estatus] ?? STATUS_CLS.ADEUDO}`}>
                       {p.estatus}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1">
                     {p.estatus === "ADEUDO" && (() => {
                       const bloq = ['VENCIDA','ANULADA'].includes(p.estatusPoliza);
                       return (

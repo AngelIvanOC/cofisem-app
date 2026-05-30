@@ -1121,7 +1121,7 @@ export default function AdminUsuarios() {
                   ].map((h) => (
                     <th
                       key={h}
-                      className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 whitespace-nowrap"
+                      className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-1 whitespace-nowrap"
                     >
                       {h}
                     </th>
@@ -1153,14 +1153,14 @@ export default function AdminUsuarios() {
                         className={`hover:bg-gray-50/60 transition-colors ${!u.activo ? "opacity-60" : ""}`}
                       >
                         {/* Avatar */}
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 py-1">
                           <div className="w-8 h-8 rounded-full bg-[#13193a] text-white flex items-center justify-center text-xs font-bold shrink-0">
                             {u.nombre?.[0]}
                             {u.apellido?.[0]}
                           </div>
                         </td>
                         {/* Nombre */}
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 py-1">
                           <p className="text-xs font-semibold text-[#13193a]">
                             {u.nombre} {u.apellido}
                           </p>
@@ -1169,11 +1169,11 @@ export default function AdminUsuarios() {
                           </p>
                         </td>
                         {/* Email */}
-                        <td className="px-5 py-3.5 text-xs text-gray-500">
+                        <td className="px-5 py-1 text-xs text-gray-500">
                           {u.email ?? "—"}
                         </td>
                         {/* Rol */}
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 py-1">
                           <span
                             className={`inline-flex text-[11px] font-semibold px-2.5 py-1 rounded-full border ${cls}`}
                           >
@@ -1181,17 +1181,17 @@ export default function AdminUsuarios() {
                           </span>
                         </td>
                         {/* Oficina — viene del join con oficinas vía FK oficina_id */}
-                        <td className="px-5 py-3.5 text-xs text-gray-500 max-w-32 truncate">
+                        <td className="px-5 py-1 text-xs text-gray-500 max-w-32 truncate">
                           {u.oficinas?.nombre ?? (
                             <span className="text-gray-300">—</span>
                           )}
                         </td>
                         {/* Fecha */}
-                        <td className="px-5 py-3.5 text-xs text-gray-400">
+                        <td className="px-5 py-1 text-xs text-gray-400">
                           {fecha}
                         </td>
                         {/* Toggle activo */}
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 py-1">
                           <button
                             onClick={() => toggleActivo(u)}
                             className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${u.activo ? "bg-emerald-500" : "bg-gray-200"}`}
@@ -1202,7 +1202,7 @@ export default function AdminUsuarios() {
                           </button>
                         </td>
                         {/* Acciones */}
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 py-1">
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => setUsuarioVer(u)}

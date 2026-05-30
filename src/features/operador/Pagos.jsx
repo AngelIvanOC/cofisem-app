@@ -350,9 +350,10 @@ export default function OperadorPagos({ usuario }) {
   const [oficinas,       setOficinas]      = useState(["Todas"]);
   const [vendedores,     setVendedores]    = useState(["Todos"]);
   const [busqueda,       setBusqueda]      = useState("");
-  const [filtroOficina,  setFiltroOficina] = useState("Todas");
-  const [filtroVendedor, setFiltroVendedor]= useState("Todos");
-  const [filtroEstado,   setFiltroEstado]  = useState("Todos");
+  const [filtroOficina,   setFiltroOficina]   = useState("Todas");
+  const [filtroVendedor,  setFiltroVendedor]  = useState("Todos");
+  const [filtroFormaPago, setFiltroFormaPago] = useState("Todas");
+  const [filtroEstado,    setFiltroEstado]    = useState("Todos");
   const [polizaSel,      setPolizaSel]     = useState(null);
 
   const operador = usuario?.id_muestra ?? '';
@@ -528,16 +529,16 @@ export default function OperadorPagos({ usuario }) {
     const b = busqueda.toLowerCase();
     return rows.filter(p => {
       const matchBusq = p.id.toLowerCase().includes(b) || p.asegurado.toLowerCase().includes(b);
-      const matchOfic = filtroOficina  === "Todas" || p.oficina  === filtroOficina;
-      const matchVend = filtroVendedor === "Todos"  || p.vendedor === filtroVendedor;
-      // Si cuotas aún no cargaron, el filtro de estado no excluye la póliza
+      const matchOfic = filtroOficina  === "Todas" || p.oficina    === filtroOficina;
+      const matchVend = filtroVendedor === "Todos"  || p.vendedor   === filtroVendedor;
+      const matchFp   = filtroFormaPago === "Todas" || p.formaPago  === filtroFormaPago;
       const pendientes = p.cuotas ? p.cuotas.filter(c => c.estatus === 'PENDIENTE').length : -1;
       const matchEst  = filtroEstado === "Todos"
         || (filtroEstado === "Con pendientes" && (pendientes === -1 || pendientes > 0))
         || (filtroEstado === "Al corriente"   && pendientes === 0);
-      return matchBusq && matchOfic && matchVend && matchEst;
+      return matchBusq && matchOfic && matchVend && matchFp && matchEst;
     });
-  }, [rows, busqueda, filtroOficina, filtroVendedor, filtroEstado]);
+  }, [rows, busqueda, filtroOficina, filtroVendedor, filtroFormaPago, filtroEstado]);
 
   const { paginated: pagosPag, page: pagePagos, setPage: setPagePagos, totalPages: totalPagesPagos, total: totalPagos } = usePagination(filtradas);
 
@@ -580,32 +581,32 @@ export default function OperadorPagos({ usuario }) {
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-5 py-4 border-b border-gray-100">
-          <div className="relative lg:col-span-1">
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
-            </svg>
-            <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Póliza o asegurado..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] bg-white"/>
+        <div className="flex flex-wrap items-end gap-2 px-5 py-3 border-b border-gray-100">
+          {/* Búsqueda */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Buscar</span>
+            <div className="relative">
+              <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+              </svg>
+              <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Póliza o asegurado..."
+                className="pl-8 pr-3 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] w-44 bg-white"/>
+            </div>
           </div>
-          <div>
-            <select value={filtroOficina} onChange={e => setFiltroOficina(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none">
-              {oficinas.map(o => <option key={o}>{o}</option>)}
-            </select>
-          </div>
-          <div>
-            <select value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none">
-              {vendedores.map(v => <option key={v}>{v}</option>)}
-            </select>
-          </div>
-          <div>
-            <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none">
-              {["Todos", "Con pendientes", "Al corriente"].map(o => <option key={o}>{o}</option>)}
-            </select>
-          </div>
+          {[
+            { label:"Oficina",      value:filtroOficina,   set:setFiltroOficina,   opts:oficinas.map(o=>[o, o==="Todas"?"Todas las oficinas":o]) },
+            { label:"Vendedor",     value:filtroVendedor,  set:setFiltroVendedor,  opts:vendedores.map(v=>[v, v==="Todos"?"Todos los vendedores":v]) },
+            { label:"Forma de pago",value:filtroFormaPago, set:setFiltroFormaPago, opts:[["Todas","Todas"],["CONTADO","Contado"],["PARCIALES","Parciales"]] },
+            { label:"Estado",       value:filtroEstado,    set:setFiltroEstado,    opts:[["Todos","Todos"],["Con pendientes","Con pendientes"],["Al corriente","Al corriente"]] },
+          ].map(({ label, value, set, opts }) => (
+            <div key={label} className="flex flex-col gap-0.5">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">{label}</span>
+              <select value={value} onChange={e => set(e.target.value)}
+                className="text-xs border border-gray-200 rounded-xl px-2.5 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 max-w-[150px]">
+                {opts.map(([v, lbl]) => <option key={v} value={v}>{lbl}</option>)}
+              </select>
+            </div>
+          ))}
         </div>
 
         <div className="overflow-x-auto">
@@ -613,7 +614,7 @@ export default function OperadorPagos({ usuario }) {
             <thead>
               <tr className="bg-gray-50/80 border-b border-gray-100">
                 {["Póliza","Asegurado","Oficina","Cobertura","Forma pago","Cuotas","Cobrado","Por cobrar",""].map((h, i) => (
-                  <th key={i} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 whitespace-nowrap">{h}</th>
+                  <th key={i} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-1 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -636,11 +637,11 @@ export default function OperadorPagos({ usuario }) {
                 const polizaBloq  = ['VENCIDA','ANULADA'].includes(p.estatusPoliza);
                 return (
                   <tr key={i} className={`transition-colors ${polizaBloq ? 'opacity-60 bg-gray-50/80' : 'hover:bg-gray-50/60'}`}>
-                    <td className="px-5 py-3.5 font-mono text-xs font-bold text-[#13193a]">{p.id}</td>
-                    <td className="px-5 py-3.5 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
-                    <td className="px-5 py-3.5 text-xs text-gray-500 max-w-32 truncate">{p.oficina}</td>
-                    <td className="px-5 py-3.5 text-xs text-gray-500 max-w-36 truncate">{p.cobertura}</td>
-                    <td className="px-5 py-3.5 text-xs text-gray-500">
+                    <td className="px-5 py-1 font-mono text-xs font-bold text-[#13193a]">{p.id}</td>
+                    <td className="px-5 py-1 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
+                    <td className="px-5 py-1 text-xs text-gray-500 max-w-32 truncate">{p.oficina}</td>
+                    <td className="px-5 py-1 text-xs text-gray-500 max-w-36 truncate">{p.cobertura}</td>
+                    <td className="px-5 py-1 text-xs text-gray-500">
                       <div className="flex flex-col gap-0.5">
                         <span>{p.formaPago}</span>
                         {polizaBloq && (
@@ -648,7 +649,7 @@ export default function OperadorPagos({ usuario }) {
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-1">
                       <div className="flex items-center gap-1.5">
                         <div className="flex gap-0.5">
                           {Array.from({ length: totalCuotas }, (_, idx) => {
@@ -670,16 +671,16 @@ export default function OperadorPagos({ usuario }) {
                         </span>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-xs font-bold text-emerald-700">
+                    <td className="px-5 py-1 text-xs font-bold text-emerald-700">
                       {cargadas ? `$${cobrado.toFixed(2)}` : '—'}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-1">
                       {!cargadas ? <span className="text-xs text-gray-300">—</span>
                         : porCobrar > 0
                           ? <span className={`text-xs font-bold ${hayVencida ? "text-red-600" : "text-amber-700"}`}>${porCobrar.toFixed(2)}</span>
                           : <span className="text-xs text-emerald-600 font-semibold">Al corriente</span>}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-1">
                       <button onClick={() => abrirCuotas(p)}
                         className="flex items-center gap-1.5 text-xs font-bold text-[#13193a] border border-[#13193a]/20 px-3 py-1.5 rounded-xl hover:bg-[#13193a]/5 transition-all whitespace-nowrap">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.573-3.007-9.963-7.178z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>

@@ -526,9 +526,11 @@ export default function AdminPolizas() {
   const [cargando,       setCargando]       = useState(true);
   const [busqueda,       setBusqueda]       = useState("");
   const [busquedaFiltro, setBusquedaFiltro] = useState("");
-  const [filtroOficina,  setFiltroOficina]  = useState("Todas");
-  const [filtroVendedor, setFiltroVendedor] = useState("Todos");
-  const [filtroEstatus,  setFiltroEstatus]  = useState("Todos");
+  const [filtroOficina,   setFiltroOficina]   = useState("Todas");
+  const [filtroVendedor,  setFiltroVendedor]  = useState("Todos");
+  const [filtroEstatus,   setFiltroEstatus]   = useState("Todos");
+  const [filtroFormaPago, setFiltroFormaPago] = useState("Todas");
+  const [filtroCobertura, setFiltroCobertura] = useState("Todas");
   const [tab,            setTab]            = useState("polizas");
   const [modal,          setModal]          = useState(null);
   const [polSel,         setPolSel]         = useState(null);
@@ -559,21 +561,24 @@ export default function AdminPolizas() {
   }, [busqueda]);
 
   // Listas únicas para los filtros
-  const listaOficinas  = useMemo(() => [...new Set(polizas.map(p => p.oficinas?.nombre).filter(Boolean))].sort(), [polizas]);
+  const listaOficinas   = useMemo(() => [...new Set(polizas.map(p => p.oficinas?.nombre).filter(Boolean))].sort(), [polizas]);
   const listaVendedores = useMemo(() => [...new Set(polizas.map(p => `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim()).filter(Boolean))].sort(), [polizas]);
-  const listaEstatus   = ["Todos", "VIGENTE", "POR VENCER", "VENCIDA", "CANCELADA", "ANULADA"];
+  const listaCoberturas = useMemo(() => [...new Set(polizas.map(p => p.cobertura).filter(Boolean))].sort(), [polizas]);
+  const listaEstatus    = ["Todos", "VIGENTE", "POR VENCER", "VENCIDA", "CANCELADA", "ANULADA"];
 
   const filtradas = useMemo(() => {
     const b = busquedaFiltro.toLowerCase();
     return polizas.filter(p => {
       const txt = `${p.constancia || p.numero_poliza} ${p.clientes?.nombre || ""} ${p.clientes?.apellido || ""} ${p.placas || ""}`.toLowerCase();
-      const mb = txt.includes(b);
-      const mo = filtroOficina  === "Todas" || p.oficinas?.nombre  === filtroOficina;
-      const mv = filtroVendedor === "Todos"  || `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim() === filtroVendedor;
-      const me = filtroEstatus  === "Todos"  || p.estatus === filtroEstatus;
-      return mb && mo && mv && me;
+      const mb  = txt.includes(b);
+      const mo  = filtroOficina   === "Todas" || p.oficinas?.nombre  === filtroOficina;
+      const mv  = filtroVendedor  === "Todos" || `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim() === filtroVendedor;
+      const me  = filtroEstatus   === "Todos" || p.estatus     === filtroEstatus;
+      const mfp = filtroFormaPago === "Todas" || p.forma_pago  === filtroFormaPago;
+      const mc  = filtroCobertura === "Todas" || p.cobertura   === filtroCobertura;
+      return mb && mo && mv && me && mfp && mc;
     });
-  }, [polizas, busquedaFiltro, filtroOficina, filtroVendedor, filtroEstatus]);
+  }, [polizas, busquedaFiltro, filtroOficina, filtroVendedor, filtroEstatus, filtroFormaPago, filtroCobertura]);
 
   const { paginated: paginadas, page, setPage, totalPages, total } = usePagination(filtradas);
 
@@ -598,25 +603,33 @@ export default function AdminPolizas() {
         </div>
 
         {/* Filtros */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 px-5 py-4 border-b border-gray-100">
-          <div className="lg:col-span-2 relative">
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
-            </svg>
-            <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Póliza, asegurado, placas..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] bg-white"/>
+        <div className="flex flex-wrap items-end gap-2 px-5 py-3 border-b border-gray-100">
+          {/* Búsqueda */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Buscar</span>
+            <div className="relative">
+              <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+              </svg>
+              <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Póliza, asegurado, placas..."
+                className="pl-8 pr-3 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] w-52 bg-white"/>
+            </div>
           </div>
-          <select value={filtroOficina}  onChange={e => setFiltroOficina(e.target.value)}  className={selCls}>
-            <option value="Todas">Todas las oficinas</option>
-            {listaOficinas.map(o => <option key={o}>{o}</option>)}
-          </select>
-          <select value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)} className={selCls}>
-            <option value="Todos">Todos los vendedores</option>
-            {listaVendedores.map(v => <option key={v}>{v}</option>)}
-          </select>
-          <select value={filtroEstatus}  onChange={e => setFiltroEstatus(e.target.value)}  className={selCls}>
-            {listaEstatus.map(o => <option key={o}>{o}</option>)}
-          </select>
+          {[
+            { label: "Oficina",      value: filtroOficina,   set: setFiltroOficina,   opts: [["Todas","Todas las oficinas"], ...listaOficinas.map(o=>[o,o])] },
+            { label: "Vendedor",     value: filtroVendedor,  set: setFiltroVendedor,  opts: [["Todos","Todos los vendedores"], ...listaVendedores.map(v=>[v,v])] },
+            { label: "Estatus",      value: filtroEstatus,   set: setFiltroEstatus,   opts: listaEstatus.map(o=>[o,o]) },
+            { label: "Forma de pago",value: filtroFormaPago, set: setFiltroFormaPago, opts: [["Todas","Todas"],["CONTADO","Contado"],["PARCIALES","Parciales"]] },
+            { label: "Cobertura",    value: filtroCobertura, set: setFiltroCobertura, opts: [["Todas","Todas"], ...listaCoberturas.map(c=>[c,c])] },
+          ].map(({ label, value, set, opts }) => (
+            <div key={label} className="flex flex-col gap-0.5">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">{label}</span>
+              <select value={value} onChange={e => set(e.target.value)}
+                className="text-xs border border-gray-200 rounded-xl px-2.5 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 max-w-[160px]">
+                {opts.map(([v, lbl]) => <option key={v} value={v}>{lbl}</option>)}
+              </select>
+            </div>
+          ))}
         </div>
 
         {/* Tabla */}
@@ -634,7 +647,7 @@ export default function AdminPolizas() {
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-100">
                   {["Constancia","Asegurado","Oficina","Vendedor","Cobertura","Placas","Prima","Vence","Estatus","Acciones"].map(h => (
-                    <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
+                    <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-1 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -643,24 +656,24 @@ export default function AdminPolizas() {
                   <tr><td colSpan={10} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas.</td></tr>
                 ) : paginadas.map(p => (
                   <tr key={p.id} className="hover:bg-gray-50/60 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-[#13193a]">{p.constancia || p.numero_poliza}</td>
-                    <td className="px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">
+                    <td className="px-4 py-1 font-mono text-xs font-bold text-[#13193a]">{p.constancia || p.numero_poliza}</td>
+                    <td className="px-4 py-1 text-xs font-semibold text-gray-700 whitespace-nowrap">
                       {p.clientes?.nombre} {p.clientes?.apellido}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-28 truncate">{p.oficinas?.nombre || "—"}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                    <td className="px-4 py-1 text-xs text-gray-500 max-w-28 truncate">{p.oficinas?.nombre || "—"}</td>
+                    <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">
                       {p.vendedores?.nombre} {p.vendedores?.apellido}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-36 truncate">{p.cobertura}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.placas || "—"}</td>
-                    <td className="px-4 py-3 text-xs font-bold text-emerald-700">
+                    <td className="px-4 py-1 text-xs text-gray-500 max-w-36 truncate">{p.cobertura}</td>
+                    <td className="px-4 py-1 font-mono text-xs text-gray-600">{p.placas || "—"}</td>
+                    <td className="px-4 py-1 text-xs font-bold text-emerald-700">
                       ${(p.prima_total ?? 0).toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtFecha(p.fecha_fin)}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{fmtFecha(p.fecha_fin)}</td>
+                    <td className="px-4 py-1">
                       <StatusBadge estatus={p.estatus} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1">
                       {p.estatus !== "CANCELADA" && (
                         <div className="flex gap-1.5">
                           <button
