@@ -2,6 +2,35 @@ import { supabase } from "../supabaseClient";
 import { EMPRESA } from "../components/pdf/mockData";
 import { mockCoberturas, mockCondiciones } from "../components/pdf/mockData";
 
+// Convierte cobertura_rubros de la BD al formato que espera Coberturas.jsx
+function rubrosACoberturasPDF(rubros = []) {
+  if (!rubros || rubros.length === 0) return mockCoberturas;
+  const sorted = [...rubros].sort((a, b) => a.orden - b.orden);
+  const result = [];
+  let actual = null;
+  for (const r of sorted) {
+    if (!r.es_sublimite) {
+      actual = {
+        id:            r.id,
+        nombre:        r.rubro,
+        sumaAsegurada: r.monto_maximo || '',
+        deduciblePct:  '',
+        deducibleMax:  '',
+        prima:         Number(r.prima_neta) || 0,
+        subCoberturas: [],
+      };
+      result.push(actual);
+    } else if (actual) {
+      actual.subCoberturas.push({
+        numero:   actual.subCoberturas.length + 1,
+        concepto: r.rubro,
+        monto:    r.monto_maximo || '',
+      });
+    }
+  }
+  return result.length > 0 ? result : mockCoberturas;
+}
+
 // ── Número en letras (español) ─────────────────────────────────────────────
 const _UNI = ['','UN','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE',
   'DIEZ','ONCE','DOCE','TRECE','CATORCE','QUINCE','DIECISÉIS','DIECISIETE','DIECIOCHO','DIECINUEVE'];
@@ -108,9 +137,9 @@ export async function generarCuotasPoliza(polizaId, formaPago, primaTotal, fecha
 export async function emitirPoliza({
   clienteId, vendedorId, vehiculoAmisId, anio, serie, numMotor, placas,
   capacidad, uso, tipoServicio, primaNeta, primaTotal,
-  formaPago, fechaInicio, derechos, iva, enLetras, cpAsegurado, creadoPor,
+  formaPago, fechaInicio, enLetras, cpAsegurado, creadoPor,
   conductorHabitual, conductorSexo, conductorEdad, concesionarioId, oficinaId,
-  esGestor,
+  esGestor, coberturaId,
 }) {
   const ahora   = new Date();
   const horaStr = ahora.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }) + ' hrs.';
@@ -123,6 +152,18 @@ export async function emitirPoliza({
 
   // Número de póliza provisional (se actualizará con constancia)
   const numPolizaProv = `COF-${Date.now()}`;
+
+  // Resolver coberturaId por prima_total si no se pasó explícitamente
+  let resolvedCoberturaId = coberturaId ?? null;
+  if (!resolvedCoberturaId && primaTotal) {
+    const { data: cob } = await supabase
+      .from('coberturas')
+      .select('id')
+      .eq('prima_total', primaTotal)
+      .eq('activa', true)
+      .single();
+    resolvedCoberturaId = cob?.id ?? null;
+  }
 
   // 1. Insertar póliza
   const { data: nueva, error: e1 } = await supabase
@@ -141,9 +182,7 @@ export async function emitirPoliza({
       tipo_servicio:     tipoServicio || 'TAXI',
       aseguradora:       'GAMAN S.A. DE C.V.',
       tipo_poliza:       'TAXI BÁSICA 2500',
-      cobertura:         'BÁSICA',
-      prima_neta:        primaNeta,
-      prima_total:       primaTotal,
+      cobertura_id:      resolvedCoberturaId,
       forma_pago:        formaPago,
       fecha_inicio:      fechaInicio,
       fecha_fin:         fechaFin,
@@ -152,8 +191,6 @@ export async function emitirPoliza({
       emision_hora:      horaStr,
       descuento:         0,
       recargo:           0,
-      derechos:          derechos || 400,
-      iva,
       en_letras:         enLetras,
       cp_asegurado:          cpAsegurado || null,
       uso_tarifario:         '15',
@@ -204,7 +241,8 @@ export async function emitirPoliza({
       concesionarios(id, nombre, apellido1, apellido2),
       oficinas(id, nombre),
       usuarios!polizas_creado_por_fkey(id_muestra),
-      vehiculos_amis(id, cve, mr, marca, tipo, dc, dl, anio)
+      vehiculos_amis(id, cve, mr, marca, tipo, dc, dl, anio),
+      coberturas(nombre, prima_neta, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
     `)
     .single();
   if (e2) throw e2;
@@ -225,7 +263,8 @@ export async function fetchPolizaById(id) {
       concesionarios(id, nombre, apellido1, apellido2),
       oficinas(id, nombre),
       usuarios!polizas_creado_por_fkey(id_muestra),
-      vehiculos_amis(id, cve, mr, marca, tipo, dc, dl, anio)
+      vehiculos_amis(id, cve, mr, marca, tipo, dc, dl, anio),
+      coberturas(nombre, prima_neta, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
     `)
     .eq('id', id)
     .single();
@@ -299,10 +338,11 @@ export async function fetchPolizas() {
   const { data, error } = await supabase
     .from('polizas')
     .select(`
-      id, numero_poliza, constancia, estatus, prima_total, forma_pago,
-      fecha_inicio, fecha_fin, cobertura, created_at,
+      id, numero_poliza, constancia, estatus, forma_pago,
+      fecha_inicio, fecha_fin, created_at,
       clientes(nombre, apellido),
-      vendedores(nombre, apellido)
+      vendedores(nombre, apellido),
+      coberturas(nombre, prima_neta, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
     `)
     .neq('estatus', 'COTIZACION')
     .order('fecha_inicio', { ascending: false });
@@ -311,7 +351,11 @@ export async function fetchPolizas() {
 }
 
 // ── Mapear póliza DB → objeto PolizaPDF ───────────────────────────────────
-export function buildPolizaPDF(poliza, oficina) {
+export function buildPolizaPDF(poliza, oficina, config = {}) {
+  const derechos  = config.derechos_emision ?? 400;
+  const ivaPct    = config.iva_pct          ?? 16;
+  const primaNeta = poliza.coberturas?.prima_neta ?? 0;
+  const iva       = +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);
   const cliente       = poliza.clientes       ?? {};
   const vendedor      = poliza.vendedores     ?? {};
   const concesionario = poliza.concesionarios ?? null;
@@ -378,18 +422,18 @@ export function buildPolizaPDF(poliza, oficina) {
     },
 
     prima: {
-      neta:      poliza.prima_neta   || 0,
-      descuento: poliza.descuento    || 0,
-      premioNeto:poliza.prima_neta   || 0,
-      recargo:   poliza.recargo      || 0,
-      derechos:  poliza.derechos     || 400,
-      iva:       poliza.iva          || 0,
-      total:     poliza.prima_total  || 0,
+      neta:      primaNeta,
+      descuento: poliza.descuento || 0,
+      premioNeto:primaNeta,
+      recargo:   poliza.recargo   || 0,
+      derechos,
+      iva,
+      total:     +(primaNeta + derechos + iva).toFixed(2),
       enLetras:  poliza.en_letras    || '',
       formaPago: poliza.forma_pago   || 'CONTADO',
     },
 
-    coberturas: mockCoberturas,
+    coberturas: rubrosACoberturasPDF(poliza.coberturas?.cobertura_rubros),
 
     agencia: {
       id:       oficinaPDF?.id     ?? null,

@@ -1,6 +1,10 @@
+import { useState, useEffect } from "react";
 import { COBERTURA_BASICA } from "../constants/cobertura";
 import { fmt$ } from "../utils/fmt";
 import StatusBadge from "./StatusBadge";
+import { fetchConfigCostos } from "../../../services/configuracion";
+import { ChevronLeft } from "lucide-react";
+
 
 function fmtFecha(str) {
   if (!str) return "—";
@@ -13,6 +17,10 @@ function fmtFecha(str) {
 }
 
 export default function ResumenPoliza({ poliza, onVolver }) {
+  const [config, setConfig] = useState({ derechos_emision: 400, iva_pct: 16 });
+  useEffect(() => {
+    fetchConfigCostos(poliza.fecha_inicio).then(setConfig);
+  }, [poliza.fecha_inicio]);
   const cliente = poliza.clientes ?? {};
   const vendedor = poliza.vendedores ?? {};
   const concesionario = poliza.concesionarios ?? null;
@@ -36,11 +44,12 @@ export default function ResumenPoliza({ poliza, onVolver }) {
       })
     : "—";
 
-  const primaNeta = poliza.prima_neta ?? 0;
-  const derechos = poliza.derechos ?? 400;
-  const subtotal = +(primaNeta + derechos).toFixed(2);
-  const iva = poliza.iva ?? 0;
-  const total = poliza.prima_total ?? 0;
+  const primaNeta = poliza.coberturas?.prima_neta ?? 0;
+  const derechos  = config.derechos_emision ?? 400;
+  const ivaPct    = config.iva_pct          ?? 16;
+  const subtotal  = +(primaNeta + derechos).toFixed(2);
+  const iva       = +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);
+  const total     = +(primaNeta + derechos + iva).toFixed(2);
   const formaPago = poliza.forma_pago ?? "—";
 
   const campos = [
@@ -74,19 +83,7 @@ export default function ResumenPoliza({ poliza, onVolver }) {
         onClick={onVolver}
         className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-[#13193a] transition-colors cursor-pointer"
       >
-        <svg
-          className="w-4 h-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth="2.5"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M15.75 19.5L8.25 12l7.5-7.5"
-          />
-        </svg>
+        <ChevronLeft className="w-4 h-4" />
         Volver a pólizas
       </button>
 

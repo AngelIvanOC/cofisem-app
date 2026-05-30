@@ -20,14 +20,15 @@ export const NAV_POR_ROL = {
 
   // ── ADMINISTRACIÓN ────────────────────────────────────────
   ADMINISTRACION: [
-    { label: "Inicio",       path: "/gaman/dashboard",    icon: "home"       },
-    { label: "Pólizas",      path: "/gaman/polizas",      icon: "file-text"  },
-    { label: "Pagos",        path: "/gaman/pagos",        icon: "credit-card"},
-    { label: "Usuarios",     path: "/gaman/usuarios",     icon: "shield"     },
-    { label: "Reportes",     path: "/gaman/reportes",     icon: "bar-chart"  },
-    { label: "Clientes",     path: "/gaman/clientes",     icon: "users"      },
-    { label: "Vendedores",   path: "/gaman/vendedores",   icon: "hard-hat"   },
-    { label: "Corte diario", path: "/gaman/corte-diario", icon: "calendar"   },
+    { label: "Inicio",        path: "/gaman/dashboard",       icon: "home"       },
+    { label: "Pólizas",       path: "/gaman/polizas",         icon: "file-text"  },
+    { label: "Pagos",         path: "/gaman/pagos",           icon: "credit-card"},
+    { label: "Usuarios",      path: "/gaman/usuarios",        icon: "shield"     },
+    { label: "Precios",       path: "/gaman/configuracion",   icon: "sliders"    },
+    { label: "Reportes",      path: "/gaman/reportes",        icon: "bar-chart"  },
+    { label: "Clientes",      path: "/gaman/clientes",        icon: "users"      },
+    { label: "Vendedores",    path: "/gaman/vendedores",      icon: "hard-hat"   },
+    { label: "Corte diario",  path: "/gaman/corte-diario",   icon: "calendar"   },
   ],
 
   // ── CABINERO SINIESTROS ───────────────────────────────────

@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { detectarTipo, buscarPoliza, TIPO_ICON, TIPO_LABEL } from "./utils/buscarPoliza";
 import PolizaCard from "./components/PolizaCard";
 import FormSiniestro from "./components/FormSiniestro";
+import {
+  AlertTriangle, Check, ChevronLeft, Loader2, Search,
+} from "lucide-react";
 
 export default function SiniestroNuevo() {
   const navigate  = useNavigate();
@@ -62,9 +65,7 @@ export default function SiniestroNuevo() {
           onClick={() => navigate(-1)}
           className="w-8 h-8 rounded-xl border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-[#13193a] hover:border-gray-300 transition-all shrink-0 mt-0.5"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
-          </svg>
+          <ChevronLeft className="w-4 h-4" />
         </button>
 
         <div className="flex-1">
@@ -100,9 +101,7 @@ export default function SiniestroNuevo() {
                     }`}
                   >
                     {s.done ? (
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
-                      </svg>
+                      <Check className="w-3.5 h-3.5" />
                     ) : s.n}
                   </div>
                   <span className={`text-xs font-medium ${isActive ? "text-[#13193a]" : "text-gray-400"}`}>
@@ -159,18 +158,12 @@ export default function SiniestroNuevo() {
             >
               {buscando ? (
                 <>
-                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                  </svg>
+                  <Loader2 className="animate-spin w-4 h-4" />
                   Buscando...
                 </>
               ) : (
                 <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
-                  </svg>
+                  <Search className="w-4 h-4" />
                   Buscar
                 </>
               )}
@@ -179,10 +172,7 @@ export default function SiniestroNuevo() {
 
           {noEncontrado && (
             <p className="mt-3 text-sm text-red-500 flex items-center gap-1.5">
-              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374l7.048-12.14c.866-1.5 3.032-1.5 3.898 0l7.048 12.14zM12 15.75h.007v.008H12v-.008z"/>
-              </svg>
+              <AlertTriangle className="w-4 h-4 shrink-0" />
               No se encontró ninguna póliza. Verifica el dato e intenta de nuevo.
             </p>
           )}

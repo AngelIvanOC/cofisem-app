@@ -5,6 +5,9 @@ import { mockCoberturas } from "../components/pdf/mockData";
 import gamanLogo from "../assets/GamanLogoOpt.jpg";
 import { PRECIO_MATRIZ } from "../features/operador/constants/cobertura";
 import { calcularEstatus } from "../services/polizas";
+import {
+  AlertTriangle, CheckCircle2, Clock, Loader2, XCircle,
+} from "lucide-react";
 
 const ESTATUS_CONFIG = {
   VIGENTE: {
@@ -36,50 +39,14 @@ const ESTATUS_CONFIG = {
 function StatusIcon({ type }) {
   if (type === "check")
     return (
-      <svg
-        className="w-7 h-7"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth="2.5"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-        />
-      </svg>
+      <CheckCircle2 className="w-7 h-7" />
     );
   if (type === "warning")
     return (
-      <svg
-        className="w-7 h-7"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth="2.5"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374l7.048-12.14c.866-1.5 3.032-1.5 3.898 0l7.048 12.14zM12 15.75h.007v.008H12v-.008z"
-        />
-      </svg>
+      <AlertTriangle className="w-7 h-7" />
     );
   return (
-    <svg
-      className="w-7 h-7"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth="2.5"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
+    <XCircle className="w-7 h-7" />
   );
 }
 
@@ -194,7 +161,7 @@ export default function VerificarPoliza() {
   const nombre = nombreConc ? `${nombreBase} Y/O ${nombreConc}` : nombreBase;
   const oficinaNombre = poliza?.oficina_nombre || "—";
   const formaPago = poliza?.forma_pago || "CONTADO";
-  const primaTotal = poliza?.prima_total ?? 0;
+  const primaTotal = poliza?.coberturas?.prima_total ?? poliza?.prima_total ?? 0;
 
   let primerPago = primaTotal;
   let pagoSubs = 0;
@@ -240,25 +207,7 @@ export default function VerificarPoliza() {
           {/* ── Cargando ──────────────────────────────────────── */}
           {loading && (
             <div className="flex flex-col items-center py-12">
-              <svg
-                className="animate-spin h-8 w-8 text-[#13193a] mb-3"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v8z"
-                />
-              </svg>
+              <Loader2 className="animate-spin h-8 w-8 text-[#13193a] mb-3" />
               <p className="text-sm text-gray-400">Verificando...</p>
             </div>
           )}
@@ -267,19 +216,7 @@ export default function VerificarPoliza() {
           {!loading && noFound && (
             <div className="flex flex-col items-center py-12 text-center">
               <div className="w-16 h-16 rounded-full bg-red-50 border-4 border-red-100 flex items-center justify-center mb-4 text-red-500">
-                <svg
-                  className="w-8 h-8"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
+                <XCircle className="w-8 h-8" />
               </div>
               <p className="font-bold text-[#13193a] mb-1">
                 Póliza no encontrada
@@ -312,13 +249,13 @@ export default function VerificarPoliza() {
                   if (poliza.estatus === 'ANULADA') return null;
                   if (hayVencido) return (
                     <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold mt-1">
-                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374l7.048-12.14c.866-1.5 3.032-1.5 3.898 0l7.048 12.14zM12 15.75h.007v.008H12v-.008z"/></svg>
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
                       Esta póliza tiene pagos vencidos
                     </div>
                   );
                   if (hayAdeudo) return (
                     <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold mt-1">
-                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9" strokeWidth="2"/></svg>
+                      <Clock className="w-4 h-4 shrink-0" />
                       Pago en proceso de confirmación (ADEUDO)
                     </div>
                   );
@@ -479,7 +416,7 @@ export default function VerificarPoliza() {
                 <div className="px-1">
                   <Row
                     label="Prima Neta"
-                    value={fmtMonto(poliza.prima_neta)}
+                    value={fmtMonto(poliza.coberturas?.prima_neta ?? poliza.prima_neta)}
                     mono
                   />
                   <Row

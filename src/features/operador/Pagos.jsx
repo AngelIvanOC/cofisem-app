@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
+import { fetchTodasVersionesConfig, configParaFecha } from "../../services/configuracion";
 // generarCuotasPoliza ya no se llama aquí — los pagos se insertan por migración
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
+import {
+  Banknote, Check, Clock, Eye, Loader2, Lock, Receipt, Search, X,
+} from "lucide-react";
 
 
 function isoAMX(str) {
@@ -105,7 +109,7 @@ function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
             <p className="text-xs text-gray-400 mt-0.5">Cuota {cuota.num} · Póliza <span className="font-mono">{poliza.id}</span></p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -150,8 +154,8 @@ function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
           <button onClick={handleAplicar} disabled={aplicando || !monto || !fecha}
             className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2 transition-all shadow-lg shadow-[#13193a]/15">
             {aplicando
-              ? <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Confirmando...</>
-              : <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/></svg>Recibir</>
+              ? <><Loader2 className="animate-spin w-4 h-4" />Confirmando...</>
+              : <><Banknote className="w-4 h-4" />Recibir</>
             }
           </button>
         </div>
@@ -206,7 +210,7 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
               <p className="text-xs text-gray-400 mt-0.5">Póliza <span className="font-mono font-bold">{poliza.id}</span> · {poliza.asegurado}</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              <X className="w-4 h-4" />
             </button>
           </div>
 
@@ -239,9 +243,7 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
             {/* Aviso de póliza VENCIDA o ANULADA */}
             {polizaBloq && (
               <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-100 border border-gray-200 text-gray-500 text-xs font-semibold">
-                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/>
-                </svg>
+                <Lock className="w-4 h-4 shrink-0" />
                 Póliza {poliza.estatusPoliza} — no se pueden registrar pagos
               </div>
             )}
@@ -249,9 +251,7 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
             {/* Aviso de bloqueo por 45 días */}
             {!polizaBloq && bloqueada && (
               <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-100 border border-gray-200 text-gray-500 text-xs font-semibold">
-                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/>
-                </svg>
+                <Lock className="w-4 h-4 shrink-0" />
                 Póliza con {diasDesdeEmision} días desde la primera emisión — cobro bloqueado (máx. 45 días)
               </div>
             )}
@@ -282,9 +282,9 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
                                                                             "bg-gray-100 text-gray-600",
                       ].join(" ")}>
                         {c.estatus === 'PAGADO'
-                          ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                          ? <Check className="w-4 h-4" />
                           : c.estatus === 'ADEUDO'
-                            ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9" strokeWidth="2"/></svg>
+                            ? <Clock className="w-4 h-4" />
                             : c.num}
                       </div>
                       <div className="min-w-0">
@@ -309,16 +309,14 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
                               ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                               : "bg-[#13193a] text-white hover:bg-[#1e2a50]",
                           ].join(" ")}>
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/></svg>
+                          <Banknote className="w-3.5 h-3.5" />
                           Recibir
                         </button>
                       )}
                       {mostrarRecibo && !polizaBloq && (
                         <button onClick={() => abrirRecibo(poliza, c, operador)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-all">
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.055 48.055 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z"/>
-                          </svg>
+                          <Receipt className="w-3.5 h-3.5" />
                           Recibo
                         </button>
                       )}
@@ -421,37 +419,45 @@ export default function OperadorPagos({ usuario }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: polizasDB, error } = await supabase
+      const [versionesConfig, { data: polizasDB, error }] = await Promise.all([
+        fetchTodasVersionesConfig(),
+        supabase
         .from('polizas')
         .select(`
           id, constancia, numero_poliza, forma_pago,
-          prima_neta, prima_total, iva, derechos,
           fecha_inicio, fecha_fin, hora_inicio, hora_fin, estatus,
           clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
           oficinas(id, nombre),
-          vendedores(nombre, apellido, codigo)
+          vendedores(nombre, apellido, codigo),
+          coberturas(nombre, prima_neta, prima_total)
         `)
         .neq('estatus', 'COTIZACION')
-        .order('fecha_inicio', { ascending: false });
+        .order('fecha_inicio', { ascending: false }),
+      ]);
       if (error) throw error;
 
       const rowsBuilt = (polizasDB ?? []).map(pol => {
+        const cfg        = configParaFecha(versionesConfig, pol.fecha_inicio);
+        const derechos   = cfg.derechos_emision ?? 400;
+        const ivaPct     = cfg.iva_pct          ?? 16;
         const nombreCliente  = [pol.clientes?.nombre, pol.clientes?.apellido].filter(Boolean).join(' ');
         const nombreVendedor = pol.vendedores
           ? [pol.vendedores.nombre, pol.vendedores.apellido].filter(Boolean).join(' ')
           : 'GAMAN';
+        const primaNeta = Number(pol.coberturas?.prima_neta ?? 0);
+        const iva       = +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);
         return {
           id:          pol.constancia ?? pol.numero_poliza ?? String(pol.id),
           polizaId:    pol.id,
           asegurado:   nombreCliente,
           oficina:     pol.oficinas?.nombre ?? '',
-          cobertura:   'TAXI BÁSICA 2500',
+          cobertura:   pol.coberturas?.nombre || '',
           vendedor:    nombreVendedor,
           formaPago:   pol.forma_pago,
-          primaTotal:  Number(pol.prima_total ?? 0),
-          primaNeta:   Number(pol.prima_neta  ?? 0),
-          iva:         Number(pol.iva         ?? 0),
-          derechos:    Number(pol.derechos    ?? 400),
+          primaTotal:  Number(pol.coberturas?.prima_total ?? 0),
+          primaNeta,
+          iva,
+          derechos,
           fechaInicio: pol.fecha_inicio ?? '',
           fechaFin:    pol.fecha_fin    ?? '',
           horaInicio:  pol.hora_inicio  ?? '00:00:00 hrs.',
@@ -586,9 +592,7 @@ export default function OperadorPagos({ usuario }) {
           <div className="flex flex-col gap-0.5">
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Buscar</span>
             <div className="relative">
-              <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
-              </svg>
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Póliza o asegurado..."
                 className="pl-8 pr-3 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] w-44 bg-white"/>
             </div>
@@ -683,7 +687,7 @@ export default function OperadorPagos({ usuario }) {
                     <td className="px-5 py-1">
                       <button onClick={() => abrirCuotas(p)}
                         className="flex items-center gap-1.5 text-xs font-bold text-[#13193a] border border-[#13193a]/20 px-3 py-1.5 rounded-xl hover:bg-[#13193a]/5 transition-all whitespace-nowrap">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.573-3.007-9.963-7.178z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        <Eye className="w-3.5 h-3.5" />
                         Ver cuotas
                       </button>
                     </td>

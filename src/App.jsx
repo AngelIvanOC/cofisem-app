@@ -36,10 +36,11 @@ import AnalistaCorte     from "./pages/analista/AnalistaCorte";
 import OperadorPagos     from "./pages/operador/Pagos";
 
 // ── ADMINISTRACIÓN ────────────────────────────────────────────
-import AdminDashboard from "./pages/administracion/AdminDashboard";
-import AdminPolizas   from "./pages/administracion/AdminPolizas";
-import AdminPagos     from "./pages/administracion/AdminPagos";
-import AdminUsuarios  from "./pages/administracion/AdminUsuarios";
+import AdminDashboard       from "./pages/administracion/AdminDashboard";
+import AdminPolizas         from "./pages/administracion/AdminPolizas";
+import AdminPagos           from "./pages/administracion/AdminPagos";
+import AdminUsuarios        from "./pages/administracion/AdminUsuarios";
+import AdminConfiguracion   from "./pages/administracion/AdminConfiguracion";
 
 // ── CABINERO SINIESTROS ───────────────────────────────────────
 import CabineroDashboard from "./pages/cabinero/CabineroDashboard";
@@ -86,6 +87,7 @@ const RUTAS_POR_ROL = {
     "/gaman/polizas",
     "/gaman/pagos",
     "/gaman/usuarios",
+    "/gaman/configuracion",
     "/gaman/reportes",
     "/gaman/clientes",
     "/gaman/vendedores",
@@ -349,6 +351,16 @@ export default function App() {
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/gaman/usuarios">
                   <AdminUsuarios />
+                </RutaProtegida>
+              }
+            />
+
+            {/* Configuración de precios (admin) */}
+            <Route
+              path="/gaman/configuracion"
+              element={
+                <RutaProtegida rolNombre={rolNombre} path="/gaman/configuracion">
+                  <AdminConfiguracion usuario={usuario} />
                 </RutaProtegida>
               }
             />

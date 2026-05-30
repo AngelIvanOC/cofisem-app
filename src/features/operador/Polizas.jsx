@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { PDFViewer } from "@react-pdf/renderer";
-import { fetchPolizas, fetchPolizaById, buildPolizaPDF, cancelarPoliza, editarPoliza, contarPolizasCliente, contarPolizasConcesionario } from "../../services/polizas";
+import { fetchPolizas, fetchPolizaById, buildPolizaPDF, editarPoliza, contarPolizasCliente, contarPolizasConcesionario } from "../../services/polizas";
+import { fetchConfigCostos } from "../../services/configuracion";
 import { actualizarNombreCliente } from "../../services/clientes";
 import { actualizarNombreConcesionario } from "../../services/concesionarios";
 import Swal from "sweetalert2";
@@ -16,6 +17,9 @@ import ResumenPoliza from "./components/ResumenPoliza";
 import PolizaPDF from "../../components/pdf/PolizaPDF";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
+import {
+  CheckCircle2, Eye, Loader2, Pencil, Plus, Search, X,
+} from "lucide-react";
 
 export default function Polizas({ usuario }) {
   const [tab,          setTab]          = useState("polizas");
@@ -36,11 +40,6 @@ export default function Polizas({ usuario }) {
   const [polizaViewer,    setPolizaViewer]    = useState(null);
   const [loadingViewerId, setLoadingViewerId] = useState(null);
   const [resumenData,     setResumenData]     = useState(null);
-  const [modalCancelar,   setModalCancelar]   = useState(null);
-  const [motivoCancel,    setMotivoCancel]    = useState("");
-  const [tipoEndoso,      setTipoEndoso]      = useState("C");
-  const [cancelando,      setCancelando]      = useState(false);
-
   const EDIT_FORM_VACIO = { numSerie: "", numMotor: "", placas: "", clienteNombre: "", clienteApellido1: "", clienteApellido2: "", concNombre: "", concApellido1: "", concApellido2: "" };
   const [modalEditar,     setModalEditar]     = useState(null);
   const [editFull,        setEditFull]        = useState(null);
@@ -110,7 +109,8 @@ export default function Polizas({ usuario }) {
     const constanciaLabel = modalEditar.constancia || modalEditar.numero_poliza;
     try {
       // 1. Generar PDF ENDOSO TIPO "A"
-      const polizaPDF = buildPolizaPDF(editFull, usuario?.oficinas);
+      const config = await fetchConfigCostos(editFull?.fecha_inicio);
+      const polizaPDF = buildPolizaPDF(editFull, usuario?.oficinas, config);
       const fechaEndoso = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
       const blob = await pdf(
         <EndosoCancelacionPDF
@@ -180,7 +180,7 @@ export default function Polizas({ usuario }) {
   const ESTATUS_OPTS = ["Todos","VIGENTE","POR VENCER","VENCIDA","CANCELADA","ANULADA"];
 
   const listaCoberturas = useMemo(() =>
-    ["Todas", ...new Set(polizas.map(p => p.cobertura).filter(Boolean))].sort((a,b) => a === "Todas" ? -1 : a.localeCompare(b)),
+    ["Todas", ...new Set(polizas.map(p => p.coberturas?.nombre).filter(Boolean))].sort((a,b) => a === "Todas" ? -1 : a.localeCompare(b)),
   [polizas]);
 
   const polizasFiltradas = useMemo(() => {
@@ -191,7 +191,7 @@ export default function Polizas({ usuario }) {
       const matchBusq  = asegurado.includes(b) || constancia.includes(b);
       const matchEst   = filtroEst       === "Todos"  || p.estatus    === filtroEst;
       const matchFp    = filtroFormaPago === "Todas"  || p.forma_pago === filtroFormaPago;
-      const matchCob   = filtroCobertura === "Todas"  || p.cobertura  === filtroCobertura;
+      const matchCob   = filtroCobertura === "Todas"  || p.coberturas?.nombre === filtroCobertura;
       return matchBusq && matchEst && matchFp && matchCob;
     });
   }, [polizas, busquedaFiltro, filtroEst, filtroFormaPago, filtroCobertura]);
@@ -228,8 +228,8 @@ export default function Polizas({ usuario }) {
   const verPDF = async (p) => {
     setLoadingViewerId(p.id);
     try {
-      const full      = await fetchPolizaById(p.id);
-      const base      = buildPolizaPDF(full, usuario?.oficinas);
+      const [full, config] = await Promise.all([fetchPolizaById(p.id), fetchConfigCostos(p.fecha_inicio)]);
+      const base      = buildPolizaPDF(full, usuario?.oficinas, config);
       const qrDataUrl = await generateQR(base.codigoQR);
       setPolizaViewer({ ...base, qrDataUrl });
     } catch (e) {
@@ -273,10 +273,7 @@ export default function Polizas({ usuario }) {
           />
         ) : (
           <div className="flex items-center justify-center py-24">
-            <svg className="w-8 h-8 animate-spin text-[#13193a]/30" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-            </svg>
+            <Loader2 className="w-8 h-8 animate-spin text-[#13193a]/30" />
           </div>
         )}
       </div>
@@ -292,9 +289,7 @@ export default function Polizas({ usuario }) {
         </div>
         <button onClick={() => { setCotActiva(null); setTab("nueva"); }}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-semibold hover:bg-[#1e2a50] transition-all shadow-sm shadow-[#13193a]/15">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
+          <Plus className="w-4 h-4" />
           Nueva cotización
         </button>
       </div>
@@ -333,9 +328,7 @@ export default function Polizas({ usuario }) {
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Buscar</span>
                   <div className="relative">
-                    <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                    </svg>
+                    <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
                       placeholder="Póliza o asegurado..."
                       className="pl-8 pr-3 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] w-48 bg-white" />
@@ -392,11 +385,11 @@ export default function Polizas({ usuario }) {
                         <td className="px-4 py-1 text-xs font-semibold text-gray-700 max-w-[12rem] truncate" title={`${p.clientes?.nombre ?? ""} ${p.clientes?.apellido ?? ""}`.trim()}>
                           {p.clientes?.nombre} {p.clientes?.apellido || ""}
                         </td>
-                        <td className="px-4 py-1 text-xs text-gray-500 max-w-[10rem] truncate" title={p.cobertura}>{p.cobertura}</td>
+                        <td className="px-4 py-1 text-xs text-gray-500 max-w-[10rem] truncate" title={p.coberturas?.nombre}>{p.coberturas?.nombre}</td>
                         <td className="px-4 py-1 text-xs text-gray-500">
                           {p.vendedores?.nombre} {p.vendedores?.apellido || ""}
                         </td>
-                        <td className="px-4 py-1 text-xs font-bold text-emerald-700">{fmt$(p.prima_total)}</td>
+                        <td className="px-4 py-1 text-xs font-bold text-emerald-700">{fmt$(p.coberturas?.prima_total)}</td>
                         <td className="px-4 py-1 text-xs text-gray-500">{p.forma_pago}</td>
                         <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{p.fecha_fin}</td>
                         <td className="px-4 py-1"><StatusBadge estatus={p.estatus} /></td>
@@ -408,15 +401,9 @@ export default function Polizas({ usuario }) {
                               className="flex items-center gap-1 text-xs font-semibold text-[#13193a] border border-[#13193a]/20 px-2.5 py-1.5 rounded-xl hover:bg-[#13193a]/5 transition-all disabled:opacity-40 whitespace-nowrap"
                             >
                               {loadingViewerId === p.id ? (
-                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                                </svg>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               ) : (
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
+                                <Eye className="w-3.5 h-3.5" />
                               )}
                               Ver PDF
                             </button>
@@ -424,20 +411,8 @@ export default function Polizas({ usuario }) {
                               onClick={() => abrirEdicion(p)}
                               className="flex items-center gap-1 text-xs font-semibold text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap"
                             >
-                              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                              </svg>
+                              <Pencil className="w-3.5 h-3.5 text-gray-400" />
                               Editar
-                            </button>
-                            <button
-                              onClick={() => { setMotivoCancel(""); setModalCancelar(p); }}
-                              className="flex items-center gap-1 text-xs font-semibold text-red-600 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50 transition-all whitespace-nowrap"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                              </svg>
-                              Cancelar
                             </button>
                           </div>
                         </td>
@@ -475,9 +450,7 @@ export default function Polizas({ usuario }) {
                         <td className="px-5 py-1">
                           <button onClick={() => abrirCotizacionGuardada(c)}
                             className="flex items-center gap-1.5 text-xs font-bold text-[#13193a] border border-[#13193a]/20 px-3 py-1.5 rounded-xl hover:bg-[#13193a]/5 transition-all whitespace-nowrap">
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
                             Tramitar
                           </button>
                         </td>
@@ -503,19 +476,14 @@ export default function Polizas({ usuario }) {
                 <p className="text-xs text-gray-400 mt-0.5 font-mono">{modalEditar.constancia || modalEditar.numero_poliza}</p>
               </div>
               <button onClick={cerrarEdicion} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Loading */}
             {cargandoEditar && (
               <div className="flex items-center justify-center py-16">
-                <svg className="w-7 h-7 animate-spin text-[#13193a]/30" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                </svg>
+                <Loader2 className="w-7 h-7 animate-spin text-[#13193a]/30" />
               </div>
             )}
 
@@ -704,133 +672,6 @@ export default function Polizas({ usuario }) {
         </div>
       )}
 
-      {modalCancelar && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => { setModalCancelar(null); setMotivoCancel(""); setTipoEndoso("C"); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div>
-                <p className="text-base font-bold text-[#13193a]">Cancelar póliza</p>
-                <p className="text-xs text-gray-400 mt-0.5 font-mono">{modalCancelar.constancia || modalCancelar.numero_poliza}</p>
-              </div>
-              <button
-                onClick={() => { setModalCancelar(null); setMotivoCancel(""); setTipoEndoso("C"); }}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 flex gap-3">
-                <svg className="w-4 h-4 text-red-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                </svg>
-                <p className="text-xs text-red-700">
-                  Esta acción cancelará la póliza. Por favor indica el motivo de la cancelación.
-                </p>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-                  Tipo de cancelación
-                </label>
-                <select
-                  value={tipoEndoso}
-                  onChange={e => setTipoEndoso(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400 transition-all"
-                >
-                  <option value="C">TIPO C</option>
-                  <option value="B">TIPO B</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-                  Motivo de cancelación
-                </label>
-                <textarea
-                  value={motivoCancel}
-                  onChange={e => setMotivoCancel(e.target.value)}
-                  placeholder="Describe el motivo de la cancelación..."
-                  rows={4}
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400 transition-all resize-none"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
-              <button
-                onClick={() => { setModalCancelar(null); setMotivoCancel(""); setTipoEndoso("C"); }}
-                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
-              >
-                Cerrar
-              </button>
-              <button
-                disabled={cancelando}
-                onClick={async () => {
-                  setCancelando(true);
-                  const constanciaLabel = modalCancelar.constancia || modalCancelar.numero_poliza;
-                  try {
-                    // 1. Obtener póliza completa para el PDF
-                    const polizaCompleta = await fetchPolizaById(modalCancelar.id);
-                    const polizaPDF = buildPolizaPDF(polizaCompleta, usuario?.oficinas);
-
-                    // 2. Fecha del endoso = hoy en DD/MM/YYYY
-                    const fechaEndoso = new Date().toLocaleDateString("es-MX", {
-                      day: "2-digit", month: "2-digit", year: "numeric",
-                    });
-
-                    // 3. Generar y descargar PDF del endoso
-                    const blob = await pdf(
-                      <EndosoCancelacionPDF
-                        poliza={polizaPDF}
-                        motivo={motivoCancel}
-                        fechaEndoso={fechaEndoso}
-                        tipoEndoso={tipoEndoso}
-                        numeroControl={modalCancelar.id}
-                      />
-                    ).toBlob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `ENDOSO_CANCELACION-${constanciaLabel}.pdf`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-
-                    // 4. Cancelar en BD
-                    await cancelarPoliza(modalCancelar.id, motivoCancel, usuario?.id);
-                    setModalCancelar(null);
-                    setMotivoCancel("");
-                    setTipoEndoso("C");
-                    await cargar();
-
-                    Swal.fire({
-                      icon: "success",
-                      title: "Póliza cancelada",
-                      text: `La póliza ${constanciaLabel} fue cancelada y se descargó el endoso.`,
-                      confirmButtonColor: "#13193a",
-                      confirmButtonText: "Aceptar",
-                      timer: 5000,
-                      timerProgressBar: true,
-                    });
-                  } catch (e) {
-                    Swal.fire({
-                      icon: "error",
-                      title: "Error",
-                      text: "No se pudo cancelar la póliza: " + e.message,
-                      confirmButtonColor: "#13193a",
-                    });
-                  } finally {
-                    setCancelando(false);
-                  }
-                }}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-all shadow-sm shadow-red-600/20 disabled:opacity-50"
-              >
-                {cancelando ? "Cancelando..." : "Cancelar póliza"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {polizaViewer && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-5xl h-[90vh] overflow-hidden">
@@ -840,9 +681,7 @@ export default function Polizas({ usuario }) {
                 onClick={() => setPolizaViewer(null)}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-5 h-5" />
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
