@@ -482,6 +482,9 @@ function EndosoPage({
   );
 }
 
+// ── Página del endoso (exportada para reutilizar en otros PDFs) ──────────
+export { EndosoPage };
+
 // ── Documento exportable ───────────────────────────────────────
 export default function EndosoCancelacionPDF({
   poliza = mockPoliza,

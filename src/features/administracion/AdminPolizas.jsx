@@ -4,14 +4,15 @@ import { fetchPolizaById, buildPolizaPDF, cancelarPoliza, contarPolizasCliente, 
 import { fetchConfigCostos } from "../../services/configuracion";
 import { actualizarNombreCliente } from "../../services/clientes";
 import { actualizarNombreConcesionario } from "../../services/concesionarios";
-import { pdf } from "@react-pdf/renderer";
+import { pdf, PDFViewer } from "@react-pdf/renderer";
 import EndosoCancelacionPDF from "../../components/pdf/EndosoCancelacionPDF";
+import CancelacionProrrataPDF from "../../components/pdf/CancelacionProrrataPDF";
 import Swal from "sweetalert2";
 import StatusBadge from "../operador/components/StatusBadge";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 import {
-  AlertTriangle, Loader2, Pencil, Search, X,
+  AlertTriangle, CheckCircle2, Eye, Loader2, Pencil, Search, TrendingDown, X,
 } from "lucide-react";
 
 const MOTIVOS_CANCEL = {
@@ -373,7 +374,6 @@ function ModalEndoso({ poliza, onClose, onDone }) {
 function ModalCancelar({ poliza, onClose, onDone }) {
   const [motivo,       setMotivo]       = useState("");
   const [motivoCustom, setMotivoCustom] = useState("");
-  const [tipoEndoso,   setTipoEndoso]   = useState("C");
   const [procesando,   setProcesando]   = useState(false);
 
   const valido = motivo && (motivo !== "Otro" || motivoCustom.trim());
@@ -397,7 +397,7 @@ function ModalCancelar({ poliza, onClose, onDone }) {
           poliza={polizaPDF}
           motivo={descripcion}
           fechaEndoso={fechaEndoso}
-          tipoEndoso={tipoEndoso}
+          tipoEndoso="C"
           numeroControl={full.id}
         />
       ).toBlob();
@@ -447,15 +447,6 @@ function ModalCancelar({ poliza, onClose, onDone }) {
         <div className="p-6 space-y-4">
           <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 font-medium">
             Esta acción cancelará la póliza. El asegurado perderá cobertura de inmediato.
-          </div>
-
-          {/* Tipo cancelación */}
-          <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Tipo de cancelación</label>
-            <select value={tipoEndoso} onChange={e => setTipoEndoso(e.target.value)} className={inpCls}>
-              <option value="C">TIPO C</option>
-              <option value="B">TIPO B</option>
-            </select>
           </div>
 
           {/* Motivo pills */}
@@ -512,6 +503,270 @@ function ModalCancelar({ poliza, onClose, onDone }) {
   );
 }
 
+// ── Cálculo de prorrata ───────────────────────────────────────
+function calcularProrrata(poliza, config) {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const inicio = new Date(poliza.fecha_inicio + "T00:00:00");
+  const fin    = new Date(poliza.fecha_fin    + "T00:00:00");
+
+  const diasTotales      = Math.round((fin   - inicio) / 86400000);
+  const diasTranscurridos= Math.max(0, Math.round((hoy   - inicio) / 86400000));
+  const diasRestantes    = Math.max(0, diasTotales - diasTranscurridos);
+
+  const primaTotal   = poliza.coberturas?.prima_total ?? 0;
+  const ivaPct       = config?.iva_pct          ?? 16;
+  const derechos     = config?.derechos_emision ?? 400;
+
+  const ivaOriginal     = +(primaTotal * ivaPct / (100 + ivaPct)).toFixed(2);
+  const primaNeta       = +(primaTotal - ivaOriginal - derechos).toFixed(2);
+  const primaNetaDia    = diasTotales > 0 ? +(primaNeta / diasTotales).toFixed(4) : 0;
+  const primaNoDevengada= +(primaNetaDia * diasRestantes).toFixed(2);
+  const ivaNoDevengada  = +(primaNoDevengada * ivaPct / 100).toFixed(2);
+  const totalDevolver   = +(primaNoDevengada + ivaNoDevengada).toFixed(2);
+
+  return {
+    primaTotal, ivaOriginal, derechos, primaNeta, primaNetaDia,
+    diasTotales, diasTranscurridos, diasRestantes,
+    primaNoDevengada, ivaNoDevengada, totalDevolver,
+    fechaCancelacion: hoy.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }),
+  };
+}
+
+// ── Modal Cancelar y Devengar (Tipo B) ────────────────────────
+function ModalCancelarProrrata({ poliza, onClose, onDone }) {
+  const [cargando,       setCargando]       = useState(true);
+  const [prorrata,       setProrrata]       = useState(null);
+  const [polizaPDF,      setPolizaPDF]      = useState(null);
+  const [abreNueva,      setAbreNueva]      = useState(false);
+  const [proxConstancia, setProxConstancia] = useState(null);
+  const [cargandoProx,   setCargandoProx]   = useState(false);
+  const [procesando,     setProcesando]     = useState(false);
+  const [preview,        setPreview]        = useState(false);
+
+  const fmt$ = (n) => `$${Number(n ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fechaHoy = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+  // Carga datos completos al abrir
+  useEffect(() => {
+    (async () => {
+      try {
+        const [full, config] = await Promise.all([
+          fetchPolizaById(poliza.id),
+          fetchConfigCostos(poliza.fecha_inicio),
+        ]);
+        setProrrata(calcularProrrata(poliza, config));
+        setPolizaPDF(buildPolizaPDF(full, full.oficinas, config));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setCargando(false);
+      }
+    })();
+  }, []);
+
+  // Predice la próxima constancia cuando el switch se activa
+  useEffect(() => {
+    if (!abreNueva) { setProxConstancia(null); return; }
+    setCargandoProx(true);
+    (async () => {
+      try {
+        const { count } = await supabase
+          .from("polizas")
+          .select("id", { count: "exact", head: true })
+          .in("estatus", ["VIGENTE","POR VENCER","VENCIDA","CANCELADA"]);
+        const fecha = new Date();
+        const yy   = String(fecha.getFullYear()).slice(-2);
+        const ofic = String(poliza.oficinas?.id || 1).padStart(2, "0");
+        setProxConstancia(`01${yy}${ofic}${String((count ?? 0) + 1).padStart(8, "0")}-01`);
+      } catch { setProxConstancia(null); }
+      finally  { setCargandoProx(false); }
+    })();
+  }, [abreNueva]);
+
+  const pdfProps = prorrata && polizaPDF ? {
+    poliza:           polizaPDF,
+    prorrata:         { ...prorrata, fechaCancelacion: fechaHoy },
+    constanciaFutura: abreNueva ? proxConstancia : null,
+    fechaEndoso:      fechaHoy,
+    numeroControl:    poliza.id,
+  } : null;
+
+  const handleConfirmar = async () => {
+    if (!pdfProps) return;
+    setProcesando(true);
+    const constanciaLabel = poliza.constancia || poliza.numero_poliza;
+    try {
+      const blob = await pdf(<CancelacionProrrataPDF {...pdfProps} />).toBlob();
+      descargarBlob(blob, `CANCELACION_PRORRATA-${constanciaLabel}.pdf`);
+      await cancelarPoliza(poliza.id, "CANCELACION POR BAJA DE UNIDAD", null);
+      onDone();
+      Swal.fire({
+        icon: "success",
+        title: "Póliza cancelada",
+        text: `La póliza ${constanciaLabel} fue cancelada. Se descargó el endoso tipo B y el recibo de prorrata.`,
+        confirmButtonColor: "#13193a",
+        timer: 5000,
+        timerProgressBar: true,
+      });
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Error", text: "No se pudo procesar: " + e.message, confirmButtonColor: "#13193a" });
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  // ── Visor de preview ────────────────────────────────────────
+  if (preview && pdfProps) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/60 flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-100 shrink-0">
+          <span className="text-sm font-bold text-[#13193a]">
+            Vista previa — Cancelación a prorrata
+            <span className="ml-2 text-xs font-normal text-gray-400 font-mono">{poliza.constancia}</span>
+          </span>
+          <button
+            onClick={() => setPreview(false)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+            <X className="w-4 h-4" /> Volver al modal
+          </button>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <PDFViewer width="100%" height="100%" style={{ border: "none" }}>
+            <CancelacionProrrataPDF {...pdfProps} />
+          </PDFViewer>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.55)" }}
+      onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
+            <TrendingDown className="w-5 h-5 text-blue-600" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-sm font-bold text-[#13193a]">Cancelar y Devengar — Tipo B</h2>
+            <p className="text-xs text-gray-400 mt-0.5 font-mono">
+              {poliza.constancia || poliza.numero_poliza} · {poliza.clientes?.nombre} {poliza.clientes?.apellido}
+            </p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6">
+          {cargando ? (
+            <div className="flex items-center justify-center py-10 gap-2 text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Calculando prorrata…</span>
+            </div>
+          ) : prorrata ? (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 font-medium">
+                Cancelación por baja de unidad. El asegurado recibirá de vuelta su prima no devengada.
+              </div>
+
+              {/* Desglose */}
+              <div className="rounded-xl border border-gray-100 overflow-hidden">
+                <div className="bg-gray-50 px-4 py-2 border-b border-gray-100">
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Cálculo de prorrata</p>
+                </div>
+                <div className="px-4 py-3 space-y-1.5 text-xs">
+                  {[
+                    ["Días totales de vigencia",  String(prorrata.diasTotales)],
+                    ["Días transcurridos",        String(prorrata.diasTranscurridos)],
+                    ["Días por transcurrir",      String(prorrata.diasRestantes)],
+                    null,
+                    ["Prima total",               fmt$(prorrata.primaTotal)],
+                    ["IVA (incluido en prima)",   fmt$(prorrata.ivaOriginal)],
+                    ["Gastos de expedición",      fmt$(prorrata.derechos)],
+                    ["Prima neta",                fmt$(prorrata.primaNeta)],
+                    ["Prima neta / día",          fmt$(prorrata.primaNetaDia)],
+                    null,
+                    ["Prima no devengada",        fmt$(prorrata.primaNoDevengada)],
+                    ["IVA s/ prima no devengada", fmt$(prorrata.ivaNoDevengada)],
+                  ].map((row, i) =>
+                    row === null ? (
+                      <div key={i} className="border-t border-gray-100 my-1" />
+                    ) : (
+                      <div key={i} className="flex justify-between">
+                        <span className="text-gray-500">{row[0]}</span>
+                        <span className="font-semibold text-gray-700 tabular-nums">{row[1]}</span>
+                      </div>
+                    )
+                  )}
+                  <div className="flex justify-between pt-2 border-t border-gray-200">
+                    <span className="font-bold text-[#13193a]">TOTAL A DEVOLVER</span>
+                    <span className="font-black text-emerald-700 tabular-nums text-sm">{fmt$(prorrata.totalDevolver)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Switch nueva póliza */}
+              <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                <div>
+                  <p className="text-xs font-semibold text-gray-700">¿Se abrirá una nueva póliza sustituta?</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    {abreNueva
+                      ? (cargandoProx ? "Calculando…" : `Próx. constancia aprox.: ${proxConstancia ?? "—"}`)
+                      : "El recibo dirá: «PARA SUSTITUIR POR PÓLIZA A FUTURO»"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAbreNueva(v => !v)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${abreNueva ? "bg-[#13193a]" : "bg-gray-300"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${abreNueva ? "translate-x-[22px]" : "translate-x-[3px]"}`} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-center text-sm text-red-500 py-6">No se pudo calcular la prorrata.</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex flex-col gap-2 px-6 pb-6">
+          {/* Preview — no cancela nada */}
+          {pdfProps && (
+            <button
+              onClick={() => setPreview(true)}
+              className="w-full py-2.5 rounded-xl border border-[#13193a]/20 text-sm font-semibold text-[#13193a] hover:bg-[#13193a]/5 transition-all flex items-center justify-center gap-2">
+              <Eye className="w-4 h-4" />
+              Vista previa del PDF (sin cancelar)
+            </button>
+          )}
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+              Cerrar
+            </button>
+            <button
+              onClick={handleConfirmar}
+              disabled={!pdfProps || procesando}
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-40 transition-all flex items-center justify-center gap-2">
+              {procesando ? (
+                <><Loader2 className="animate-spin w-4 h-4" />Procesando…</>
+              ) : (
+                <><CheckCircle2 className="w-4 h-4" />Cancelar y descargar PDF</>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ──────────────────────────────────────────
 export default function AdminPolizas() {
   const [polizas,        setPolizas]        = useState([]);
@@ -539,7 +794,7 @@ export default function AdminPolizas() {
         oficinas(id, nombre),
         coberturas(nombre, prima_neta, prima_total)
       `)
-      .neq("estatus", "COTIZACION")
+      .in("estatus", ["VIGENTE","POR VENCER","VENCIDA","CANCELADA","ANULADA"])
       .order("fecha_inicio", { ascending: false });
     if (error) console.error("Error cargando pólizas admin:", error.message);
     setPolizas((data ?? []).map(p => ({ ...p, estatus: calcularEstatus(p.estatus, p.fecha_fin) })));
@@ -674,6 +929,12 @@ export default function AdminPolizas() {
                             className="px-2.5 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[11px] font-bold hover:bg-red-100 transition-colors whitespace-nowrap">
                             Cancelar
                           </button>
+                          <button
+                            onClick={() => { setPolSel(p); setModal("devengar"); }}
+                            className="px-2.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 text-[11px] font-bold hover:bg-blue-100 transition-colors whitespace-nowrap flex items-center gap-1">
+                            <TrendingDown className="w-3 h-3" />
+                            Devengar
+                          </button>
                         </div>
                       )}
                     </td>
@@ -687,8 +948,9 @@ export default function AdminPolizas() {
         <Paginator page={page} totalPages={totalPages} total={total} pageSize={10} onPage={setPage} />
       </div>
 
-      {modal === "endoso"  && polSel && <ModalEndoso  poliza={polSel} onClose={cerrarModal} onDone={() => { cerrarModal(); cargar(); }}/>}
-      {modal === "cancelar" && polSel && <ModalCancelar poliza={polSel} onClose={cerrarModal} onDone={() => { cerrarModal(); cargar(); }}/>}
+      {modal === "endoso"   && polSel && <ModalEndoso           poliza={polSel} onClose={cerrarModal} onDone={() => { cerrarModal(); cargar(); }}/>}
+      {modal === "cancelar" && polSel && <ModalCancelar         poliza={polSel} onClose={cerrarModal} onDone={() => { cerrarModal(); cargar(); }}/>}
+      {modal === "devengar" && polSel && <ModalCancelarProrrata poliza={polSel} onClose={cerrarModal} onDone={() => { cerrarModal(); cargar(); }}/>}
     </div>
   );
 }
