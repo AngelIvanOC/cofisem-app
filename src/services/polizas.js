@@ -133,8 +133,124 @@ export async function generarCuotasPoliza(polizaId, formaPago, primaTotal, fecha
   if (error) throw error;
 }
 
+// ── Guardar cotización como borrador ──────────────────────────────────────
+export async function guardarCotizacion({ form, total, enLetras, usuario }) {
+  let coberturaId = null;
+  const { data: cob } = await supabase
+    .from('coberturas')
+    .select('id')
+    .eq('prima_total', total)
+    .eq('activa', true)
+    .maybeSingle();
+  coberturaId = cob?.id ?? null;
+
+  const { data, error } = await supabase
+    .from('polizas')
+    .insert({
+      numero_poliza:      `BORR-${Date.now()}`,
+      cliente_id:         form.clienteId,
+      vendedor_id:        form.vendedorId || null,
+      vehiculo_amis_id:   form.vehiculoAmisId || null,
+      anio:               parseInt(form.modelo) || null,
+      placas:             form.placas?.toUpperCase() || null,
+      num_serie:          form.serie?.toUpperCase() || null,
+      num_motor:          form.motor?.toUpperCase() || null,
+      capacidad:          '4 OCUPANTES',
+      uso:                'SERVICIO PUBLICO',
+      tipo_servicio:      'TAXI',
+      aseguradora:        'GAMAN S.A. DE C.V.',
+      tipo_poliza:        'TAXI BÁSICA 2500',
+      cobertura_id:       coberturaId,
+      forma_pago:         form.formaPago,
+      fecha_inicio:       form.fechaInicio || null,
+      conductor_habitual: form.conductorHabitual || null,
+      conductor_sexo:     form.conductorSexo || null,
+      conductor_edad:     form.conductorEdad || null,
+      ...(form.concesionario != null ? { concesionario_id: form.concesionario } : {}),
+      estatus:            'GUARDADO',
+      creado_por:         usuario?.id || null,
+      oficina_id:         usuario?.oficinas?.id || null,
+      en_letras:          enLetras || null,
+      notas:              JSON.stringify({ esGestor: form.esGestor ?? false }),
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ── Actualizar borrador existente ─────────────────────────────────────────
+export async function actualizarCotizacion({ polizaId, form, total, enLetras, usuario }) {
+  let coberturaId = null;
+  const { data: cob } = await supabase
+    .from('coberturas')
+    .select('id')
+    .eq('prima_total', total)
+    .eq('activa', true)
+    .maybeSingle();
+  coberturaId = cob?.id ?? null;
+
+  const { error } = await supabase
+    .from('polizas')
+    .update({
+      cliente_id:         form.clienteId,
+      vendedor_id:        form.vendedorId || null,
+      vehiculo_amis_id:   form.vehiculoAmisId || null,
+      anio:               parseInt(form.modelo) || null,
+      placas:             form.placas?.toUpperCase() || null,
+      num_serie:          form.serie?.toUpperCase() || null,
+      num_motor:          form.motor?.toUpperCase() || null,
+      cobertura_id:       coberturaId,
+      forma_pago:         form.formaPago,
+      fecha_inicio:       form.fechaInicio || null,
+      conductor_habitual: form.conductorHabitual || null,
+      conductor_sexo:     form.conductorSexo || null,
+      conductor_edad:     form.conductorEdad || null,
+      ...(form.concesionario != null ? { concesionario_id: form.concesionario } : {}),
+      en_letras:          enLetras || null,
+      notas:              JSON.stringify({ esGestor: form.esGestor ?? false }),
+      actualizado_por:    usuario?.id || null,
+      actualizado_at:     new Date().toISOString(),
+    })
+    .eq('id', polizaId)
+    .eq('estatus', 'GUARDADO');
+  if (error) throw error;
+}
+
+// ── Leer borradores del usuario ───────────────────────────────────────────
+export async function fetchCotizacionesGuardadas(usuarioId) {
+  const { data, error } = await supabase
+    .from('polizas')
+    .select(`
+      id, forma_pago, fecha_inicio, created_at, notas,
+      anio, placas, num_serie, num_motor,
+      cliente_id, vendedor_id, concesionario_id, vehiculo_amis_id,
+      conductor_habitual, conductor_sexo, conductor_edad,
+      clientes(nombre, apellido),
+      vendedores(nombre, apellido),
+      coberturas(nombre, prima_total),
+      vehiculos_amis(id, cve, marca, tipo, dc, dl)
+    `)
+    .eq('estatus', 'GUARDADO')
+    .eq('creado_por', usuarioId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ── Eliminar borrador ─────────────────────────────────────────────────────
+export async function eliminarCotizacion(id) {
+  const { error } = await supabase
+    .from('polizas')
+    .delete()
+    .eq('id', id)
+    .eq('estatus', 'GUARDADO');
+  if (error) throw error;
+}
+
 // ── Emitir póliza ──────────────────────────────────────────────────────────
 export async function emitirPoliza({
+  polizaId = null,
   clienteId, vendedorId, vehiculoAmisId, anio, serie, numMotor, placas,
   capacidad, uso, tipoServicio, primaNeta, primaTotal,
   formaPago, fechaInicio, enLetras, cpAsegurado, creadoPor,
@@ -144,14 +260,10 @@ export async function emitirPoliza({
   const ahora   = new Date();
   const horaStr = ahora.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }) + ' hrs.';
 
-  // Calcular fecha_fin (+1 año)
   const inicio = new Date(fechaInicio + 'T12:00:00');
   const fin    = new Date(inicio);
   fin.setFullYear(fin.getFullYear() + 1);
   const fechaFin = fin.toISOString().split('T')[0];
-
-  // Número de póliza provisional (se actualizará con constancia)
-  const numPolizaProv = `COF-${Date.now()}`;
 
   // Resolver coberturaId por prima_total si no se pasó explícitamente
   let resolvedCoberturaId = coberturaId ?? null;
@@ -165,57 +277,77 @@ export async function emitirPoliza({
     resolvedCoberturaId = cob?.id ?? null;
   }
 
-  // 1. Insertar póliza
-  const { data: nueva, error: e1 } = await supabase
-    .from('polizas')
-    .insert({
-      numero_poliza:     numPolizaProv,
-      cliente_id:        clienteId,
-      vendedor_id:       vendedorId || null,
-      vehiculo_amis_id:  vehiculoAmisId || null,
-      anio:              parseInt(anio) || null,
-      placas:            placas?.toUpperCase() || null,
-      num_serie:         serie?.toUpperCase() || null,
-      num_motor:         numMotor?.toUpperCase() || null,
-      capacidad:         capacidad || '4 OCUPANTES',
-      uso:               uso || 'SERVICIO PUBLICO',
-      tipo_servicio:     tipoServicio || 'TAXI',
-      aseguradora:       'GAMAN S.A. DE C.V.',
-      tipo_poliza:       'TAXI BÁSICA 2500',
-      cobertura_id:      resolvedCoberturaId,
-      forma_pago:        formaPago,
-      fecha_inicio:      fechaInicio,
-      fecha_fin:         fechaFin,
-      hora_inicio:       '00:00:00 hrs.',
-      hora_fin:          '23:59:59 hrs.',
-      emision_hora:      horaStr,
-      descuento:         0,
-      recargo:           0,
-      en_letras:         enLetras,
-      cp_asegurado:          cpAsegurado || null,
-      uso_tarifario:         '15',
-      conductor_habitual:    conductorHabitual || null,
-      conductor_sexo:        conductorSexo || null,
-      conductor_edad:        conductorEdad || null,
-      ...(concesionarioId != null ? { concesionario_id: concesionarioId } : {}),
-      estatus:               'VIGENTE',
-      creado_por:            creadoPor || null,
-      oficina_id:            oficinaId || null,
-    })
-    .select('id, cliente_id')
-    .single();
-  if (e1) throw e1;
+  const camposBase = {
+    cliente_id:         clienteId,
+    vendedor_id:        vendedorId || null,
+    vehiculo_amis_id:   vehiculoAmisId || null,
+    anio:               parseInt(anio) || null,
+    placas:             placas?.toUpperCase() || null,
+    num_serie:          serie?.toUpperCase() || null,
+    num_motor:          numMotor?.toUpperCase() || null,
+    capacidad:          capacidad || '4 OCUPANTES',
+    uso:                uso || 'SERVICIO PUBLICO',
+    tipo_servicio:      tipoServicio || 'TAXI',
+    aseguradora:        'GAMAN S.A. DE C.V.',
+    tipo_poliza:        'TAXI BÁSICA 2500',
+    cobertura_id:       resolvedCoberturaId,
+    forma_pago:         formaPago,
+    fecha_inicio:       fechaInicio,
+    fecha_fin:          fechaFin,
+    hora_inicio:        '00:00:00 hrs.',
+    hora_fin:           '23:59:59 hrs.',
+    emision_hora:       horaStr,
+    descuento:          0,
+    recargo:            0,
+    en_letras:          enLetras,
+    cp_asegurado:       cpAsegurado || null,
+    uso_tarifario:      '15',
+    conductor_habitual: conductorHabitual || null,
+    conductor_sexo:     conductorSexo || null,
+    conductor_edad:     conductorEdad || null,
+    ...(concesionarioId != null ? { concesionario_id: concesionarioId } : {}),
+    estatus:            'VIGENTE',
+    oficina_id:         oficinaId || null,
+  };
 
-  const newId = nueva.id;
+  let newId;
 
-  // 2. Contar pólizas emitidas globales (para seq de 8 dígitos)
+  if (polizaId) {
+    // Actualizar borrador existente a VIGENTE
+    const { error: eu } = await supabase
+      .from('polizas')
+      .update({
+        ...camposBase,
+        notas:           null,
+        actualizado_por: creadoPor || null,
+        actualizado_at:  new Date().toISOString(),
+      })
+      .eq('id', polizaId);
+    if (eu) throw eu;
+    newId = polizaId;
+  } else {
+    // Insertar nueva póliza
+    const { data: nueva, error: e1 } = await supabase
+      .from('polizas')
+      .insert({
+        numero_poliza: `COF-${Date.now()}`,
+        ...camposBase,
+        creado_por: creadoPor || null,
+      })
+      .select('id')
+      .single();
+    if (e1) throw e1;
+    newId = nueva.id;
+  }
+
+  // Contar pólizas emitidas globales (seq de 8 dígitos)
   const { count: globalSeq } = await supabase
     .from('polizas')
     .select('id', { count: 'exact', head: true })
     .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA'])
     .lte('id', newId);
 
-  // 3. Contar veces que este num_serie ha sido asegurado (versión del vehículo)
+  // Contar versiones del mismo vehículo
   let vehiculoSeq = 1;
   if (serie) {
     const { count } = await supabase
@@ -229,7 +361,6 @@ export async function emitirPoliza({
 
   const constancia = generarConstancia(ahora, globalSeq ?? 1, vehiculoSeq, oficinaId);
 
-  // 4. Actualizar con constancia y numero_poliza definitivo
   const { data: final, error: e2 } = await supabase
     .from('polizas')
     .update({ constancia, numero_poliza: constancia })
@@ -316,7 +447,7 @@ export async function contarPolizasCliente(clienteId) {
     .from('polizas')
     .select('id', { count: 'exact', head: true })
     .eq('cliente_id', clienteId)
-    .neq('estatus', 'COTIZACION');
+    .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA','ANULADA']);
   if (error) throw error;
   return count ?? 0;
 }
@@ -328,7 +459,7 @@ export async function contarPolizasConcesionario(concesionarioId) {
     .from('polizas')
     .select('id', { count: 'exact', head: true })
     .eq('concesionario_id', concesionarioId)
-    .neq('estatus', 'COTIZACION');
+    .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA','ANULADA']);
   if (error) throw error;
   return count ?? 0;
 }
@@ -344,7 +475,7 @@ export async function fetchPolizas() {
       vendedores(nombre, apellido),
       coberturas(nombre, prima_neta, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
     `)
-    .neq('estatus', 'COTIZACION')
+    .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA','ANULADA'])
     .order('fecha_inicio', { ascending: false });
   if (error) throw error;
   return (data ?? []).map(p => ({ ...p, estatus: calcularEstatus(p.estatus, p.fecha_fin) }));
@@ -402,7 +533,7 @@ export function buildPolizaPDF(poliza, oficina, config = {}) {
       marca:       (poliza.vehiculos_amis?.marca) || '',
       modelo:      (poliza.vehiculos_amis?.tipo)  || '',
       version:     (poliza.vehiculos_amis?.dc)    || '',
-      descripcion: (poliza.vehiculos_amis?.dl)    || '',
+      descripcion: (poliza.vehiculos_amis?.dl)    || poliza.notas || '',
       anio:        poliza.anio?.toString()         || '',
       placas:    poliza.placas                           || '',
       serie:     poliza.num_serie                        || '',

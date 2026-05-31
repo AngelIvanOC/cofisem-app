@@ -6,10 +6,22 @@ import {
 } from "../constants/cobertura";
 import { fetchClientes } from "../../../services/clientes";
 import { fetchVendedores } from "../../../services/vendedores";
-import { emitirPoliza, numeroALetras } from "../../../services/polizas";
+import {
+  emitirPoliza,
+  guardarCotizacion,
+  actualizarCotizacion,
+  numeroALetras,
+} from "../../../services/polizas";
 import { fetchConcesionariosByCliente } from "../../../services/concesionarios";
 import { supabase } from "../../../supabaseClient";
 import Swal from "sweetalert2";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  Download,
+  Plus,
+} from "lucide-react";
 import {
   getAnios,
   getMarcas,
@@ -77,10 +89,11 @@ export default function FormCotizacion({
   const [vendedores, setVendedores] = useState([]);
   const [concesionariosLocal, setConcesionariosLocal] = useState({});
   const [conVendedor, setConVendedor] = useState(
-    !!(cotizacionInicial?.vendedorId && cotizacionInicial.vendedorId !== 1)
+    !!(cotizacionInicial?.vendedorId && cotizacionInicial.vendedorId !== 1),
   );
   const [loadingDB, setLoadingDB] = useState(true);
   const [isEmitting, setIsEmitting] = useState(false);
+  const [isGuardando, setIsGuardando] = useState(false);
   const [modalAseg, setModalAseg] = useState(false);
   const [modalConc, setModalConc] = useState(false);
   const [modalVend, setModalVend] = useState(false);
@@ -113,30 +126,49 @@ export default function FormCotizacion({
   }, [form.clienteId]);
 
   // ── Catálogo vehículos — async desde BD, con caché ───────────────────────
-  const [marcasDisp,    setMarcasDisp]    = useState([]);
-  const [modelosDisp,   setModelosDisp]   = useState([]);
+  const [marcasDisp, setMarcasDisp] = useState([]);
+  const [modelosDisp, setModelosDisp] = useState([]);
   const [versionesDisp, setVersionesDisp] = useState([]);
 
   useEffect(() => {
-    if (!form.modelo) { setMarcasDisp([]); return; }
+    if (!form.modelo) {
+      setMarcasDisp([]);
+      return;
+    }
     getMarcas(form.modelo).then(setMarcasDisp).catch(console.error);
   }, [form.modelo]);
 
   useEffect(() => {
-    if (!form.marca || !form.modelo) { setModelosDisp([]); return; }
-    getModelos(form.marca, form.modelo).then(setModelosDisp).catch(console.error);
+    if (!form.marca || !form.modelo) {
+      setModelosDisp([]);
+      return;
+    }
+    getModelos(form.marca, form.modelo)
+      .then(setModelosDisp)
+      .catch(console.error);
   }, [form.marca, form.modelo]);
 
   useEffect(() => {
-    if (!form.marca || !form.tipoVehiculo || !form.modelo) { setVersionesDisp([]); return; }
-    getVersiones(form.marca, form.tipoVehiculo, form.modelo).then(setVersionesDisp).catch(console.error);
+    if (!form.marca || !form.tipoVehiculo || !form.modelo) {
+      setVersionesDisp([]);
+      return;
+    }
+    getVersiones(form.marca, form.tipoVehiculo, form.modelo)
+      .then(setVersionesDisp)
+      .catch(console.error);
   }, [form.marca, form.tipoVehiculo, form.modelo]);
 
   // Auto-rellena codAMIS, descripcion y vehiculoAmisId cuando se selecciona versión
   useEffect(() => {
     if (amisFuente.current === "busqueda") return;
-    if (!form.modelo || !form.marca || !form.tipoVehiculo || !form.version) return;
-    getVehiculoAmisRecord(form.modelo, form.marca, form.tipoVehiculo, form.version)
+    if (!form.modelo || !form.marca || !form.tipoVehiculo || !form.version)
+      return;
+    getVehiculoAmisRecord(
+      form.modelo,
+      form.marca,
+      form.tipoVehiculo,
+      form.version,
+    )
       .then((rec) => {
         if (rec) {
           setForm((f) => ({
@@ -156,17 +188,35 @@ export default function FormCotizacion({
 
   const handleAnio = (e) => {
     amisFuente.current = "auto";
-    setForm((f) => ({ ...f, modelo: e.target.value, marca: "", tipoVehiculo: "", version: "", descripcion: "" }));
+    setForm((f) => ({
+      ...f,
+      modelo: e.target.value,
+      marca: "",
+      tipoVehiculo: "",
+      version: "",
+      descripcion: "",
+    }));
   };
 
   const handleMarca = (e) => {
     amisFuente.current = "auto";
-    setForm((f) => ({ ...f, marca: e.target.value, tipoVehiculo: "", version: "", descripcion: "" }));
+    setForm((f) => ({
+      ...f,
+      marca: e.target.value,
+      tipoVehiculo: "",
+      version: "",
+      descripcion: "",
+    }));
   };
 
   const handleModeloVeh = (e) => {
     amisFuente.current = "auto";
-    setForm((f) => ({ ...f, tipoVehiculo: e.target.value, version: "", descripcion: "" }));
+    setForm((f) => ({
+      ...f,
+      tipoVehiculo: e.target.value,
+      version: "",
+      descripcion: "",
+    }));
   };
 
   const handleVersion = (e) => {
@@ -189,21 +239,23 @@ export default function FormCotizacion({
     // 4 dígitos completos → intentar lookup async
     amisFuente.current = "busqueda";
     setF("codAMIS", val);
-    getVehiculoPorAmis(val).then((v) => {
-      if (v) {
-        setForm((f) => ({
-          ...f,
-          vehiculoAmisId: v.id,
-          codAMIS: val,
-          modelo: v.anio,
-          marca: v.marca,
-          tipoVehiculo: v.modelo,
-          version: v.version,
-        }));
-      } else {
-        setAmisError(true);
-      }
-    }).catch(console.error);
+    getVehiculoPorAmis(val)
+      .then((v) => {
+        if (v) {
+          setForm((f) => ({
+            ...f,
+            vehiculoAmisId: v.id,
+            codAMIS: val,
+            modelo: v.anio,
+            marca: v.marca,
+            tipoVehiculo: v.modelo,
+            version: v.version,
+          }));
+        } else {
+          setAmisError(true);
+        }
+      })
+      .catch(console.error);
   };
 
   // ── Helpers ──
@@ -213,13 +265,15 @@ export default function FormCotizacion({
     ? `${clienteSel.nombre} ${clienteSel.apellido || ""}`.trim()
     : "—";
   // Para el PDF el conducto de COFISEM se muestra como "1"
-  const vendedorLabel = (vendedorSel && vendedorSel.id !== 1)
-    ? `${vendedorSel.nombre} ${vendedorSel.apellido || ""}`.trim()
-    : "1";
+  const vendedorLabel =
+    vendedorSel && vendedorSel.id !== 1
+      ? `${vendedorSel.nombre} ${vendedorSel.apellido || ""}`.trim()
+      : "1";
   // Para el formulario se muestra el nombre real
-  const vendedorNombre = (vendedorSel && vendedorSel.id !== 1)
-    ? `${vendedorSel.nombre} ${vendedorSel.apellido || ""}`.trim()
-    : vendedorSel?.nombre ?? "COFISEM";
+  const vendedorNombre =
+    vendedorSel && vendedorSel.id !== 1
+      ? `${vendedorSel.nombre} ${vendedorSel.apellido || ""}`.trim()
+      : (vendedorSel?.nombre ?? "COFISEM");
 
   const concesionariosDisponibles = form.clienteId
     ? (concesionariosLocal[form.clienteId] ?? [])
@@ -332,19 +386,25 @@ export default function FormCotizacion({
       .maybeSingle();
     if (data) {
       setSerieError(
-        `Este No. Serie ya tiene una póliza vigente: ${data.constancia}`
+        `Este No. Serie ya tiene una póliza vigente: ${data.constancia}`,
       );
     }
     setSerieChecking(false);
   };
 
   const handleEmitir = async () => {
-    if (!form.clienteId || !form.vehiculoAmisId || !fechaInicioValida || isEmitting)
+    if (
+      !form.clienteId ||
+      !form.vehiculoAmisId ||
+      !fechaInicioValida ||
+      isEmitting
+    )
       return;
     setIsEmitting(true);
     try {
       const enLetras = numeroALetras(total);
       const poliza = await emitirPoliza({
+        polizaId: cotizacionInicial?.polizaId ?? null,
         clienteId: form.clienteId,
         vendedorId: form.vendedorId || null,
         vehiculoAmisId: form.vehiculoAmisId,
@@ -367,9 +427,9 @@ export default function FormCotizacion({
         conductorSexo: form.conductorSexo || null,
         conductorEdad: form.conductorEdad || null,
         concesionarioId: form.concesionario || null,
-        creadoPor:       usuario?.id,
-        oficinaId:       usuario?.oficinas?.id ?? null,
-        esGestor:        form.esGestor ?? false,
+        creadoPor: usuario?.id,
+        oficinaId: usuario?.oficinas?.id ?? null,
+        esGestor: form.esGestor ?? false,
       });
       onTramitar(poliza);
     } catch (e) {
@@ -379,16 +439,32 @@ export default function FormCotizacion({
     }
   };
 
-  const handleGuardar = () => {
-    onGuardar({
-      id: nroCot,
-      ...form,
-      total,
-      fecha: `${fechaHoy} ${horaHoy}`,
-      cliente: clienteLabel,
-      vendedor: vendedorLabel,
-      cobertura: COBERTURA_BASICA.nombre,
-    });
+  const handleGuardar = async () => {
+    setIsGuardando(true);
+    try {
+      const enLetras = numeroALetras(total);
+      if (cotizacionInicial?.polizaId) {
+        await actualizarCotizacion({
+          polizaId: cotizacionInicial.polizaId,
+          form,
+          total,
+          enLetras,
+          usuario,
+        });
+      } else {
+        await guardarCotizacion({ form, total, enLetras, usuario });
+      }
+      onGuardar();
+    } catch (e) {
+      Swal.fire({
+        icon: "error",
+        title: "Error al guardar",
+        text: e.message,
+        confirmButtonColor: "#13193a",
+      });
+    } finally {
+      setIsGuardando(false);
+    }
   };
 
   return (
@@ -630,9 +706,13 @@ export default function FormCotizacion({
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className={lblCls} style={{ marginBottom: 0 }}>Vendedor</label>
+                <label className={lblCls} style={{ marginBottom: 0 }}>
+                  Vendedor
+                </label>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <span className="text-xs text-gray-500 font-medium">Vendedor</span>
+                  <span className="text-xs text-gray-500 font-medium">
+                    Vendedor
+                  </span>
                   <button
                     type="button"
                     onClick={() => {
@@ -653,7 +733,9 @@ export default function FormCotizacion({
                   type="text"
                   value={vendedorNombre}
                   disabled
-                  className={inpCls + " bg-gray-100 text-gray-400 cursor-not-allowed"}
+                  className={
+                    inpCls + " bg-gray-100 text-gray-400 cursor-not-allowed"
+                  }
                 />
               ) : (
                 <div className="flex gap-2">
@@ -685,19 +767,7 @@ export default function FormCotizacion({
                     onClick={() => setModalVend(true)}
                     className="shrink-0 w-10 h-10 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white flex items-center justify-center transition-all"
                   >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 4.5v15m7.5-7.5h-15"
-                      />
-                    </svg>
+                    <Plus className="w-4 h-4" />
                   </button>
                 </div>
               )}
@@ -733,19 +803,7 @@ export default function FormCotizacion({
                     onClick={() => setModalAseg(true)}
                     className="shrink-0 w-10 h-10 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white flex items-center justify-center transition-all"
                   >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 4.5v15m7.5-7.5h-15"
-                      />
-                    </svg>
+                    <Plus className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -791,19 +849,7 @@ export default function FormCotizacion({
                     disabled={!form.clienteId}
                     className="shrink-0 w-10 h-10 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white flex items-center justify-center transition-all disabled:opacity-40"
                   >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 4.5v15m7.5-7.5h-15"
-                      />
-                    </svg>
+                    <Plus className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -1198,22 +1244,11 @@ export default function FormCotizacion({
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button
                 onClick={handleGuardar}
-                className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl border-2 border-[#13193a] text-sm font-bold text-[#13193a] hover:bg-[#13193a]/5 transition-all"
+                disabled={isGuardando}
+                className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl border-2 border-[#13193a] text-sm font-bold text-[#13193a] hover:bg-[#13193a]/5 transition-all disabled:opacity-50"
               >
-                <svg
-                  className="w-4 h-4 shrink-0"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M17 16v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2M14 12l-4 4m0 0L6 12m4 4V4"
-                  />
-                </svg>
-                Guardar cotización
+                <Download className="w-4 h-4 shrink-0" />
+                {isGuardando ? "Guardando..." : "Guardar cotización"}
               </button>
 
               <button
@@ -1226,19 +1261,7 @@ export default function FormCotizacion({
                 }
                 className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-[#13193a]/15"
               >
-                <svg
-                  className="w-4 h-4 shrink-0"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 {isEmitting ? "Emitiendo..." : "Emitir póliza"}
               </button>
             </div>
@@ -1254,19 +1277,7 @@ export default function FormCotizacion({
                   onClick={() => setPaso((p) => p - 1)}
                   className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15.75 19.5L8.25 12l7.5-7.5"
-                    />
-                  </svg>
+                  <ChevronLeft className="w-4 h-4" />
                   Anterior
                 </button>
               ) : (
@@ -1296,19 +1307,7 @@ export default function FormCotizacion({
               className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm shadow-[#13193a]/15"
             >
               Siguiente
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8.25 4.5l7.5 7.5-7.5 7.5"
-                />
-              </svg>
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         )}
