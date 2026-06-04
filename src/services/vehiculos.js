@@ -16,7 +16,7 @@ async function cached(key, fn) {
 // ── Años disponibles (rango estático — la BD cubre 2012-2027) ───────────────
 export function getAnios() {
   const result = [];
-  for (let y = new Date().getFullYear() + 1; y >= 2012; y--) result.push(String(y));
+  for (let y = new Date().getFullYear() + 1; y >= 2008; y--) result.push(String(y));
   return result;
 }
 
