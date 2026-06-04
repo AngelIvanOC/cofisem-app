@@ -9,6 +9,7 @@ import {
   contarPolizasConcesionario,
   fetchCotizacionesGuardadas,
   eliminarCotizacion,
+  fetchPolizasSubsecuentes,
 } from "../../services/polizas";
 import { fetchConfigCostos } from "../../services/configuracion";
 import { actualizarNombreCliente } from "../../services/clientes";
@@ -31,6 +32,7 @@ import {
   Eye,
   Loader2,
   Pencil,
+  ClipboardList,
   Plus,
   Search,
   Trash2,
@@ -49,6 +51,8 @@ export default function Polizas({ usuario }) {
   const [filtroCobertura, setFiltroCobertura] = useState("Todas");
   const [cotizaciones, setCotizaciones] = useState([]);
   const [loadingCot, setLoadingCot] = useState(false);
+  const [subsecuentes, setSubsecuentes] = useState([]);
+  const [loadingSubs, setLoadingSubs] = useState(false);
   const [tramiteOk, setTramiteOk] = useState(null);
   const [cotActiva, setCotActiva] = useState(null);
   const [polizaViewer, setPolizaViewer] = useState(null);
@@ -82,6 +86,18 @@ export default function Polizas({ usuario }) {
       setError("Error cargando pólizas: " + e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const cargarSubsecuentes = async () => {
+    if (!usuario?.id) return;
+    setLoadingSubs(true);
+    try {
+      setSubsecuentes(await fetchPolizasSubsecuentes(usuario.id));
+    } catch (e) {
+      console.error("Error cargando subsecuentes:", e.message);
+    } finally {
+      setLoadingSubs(false);
     }
   };
 
@@ -234,6 +250,7 @@ export default function Polizas({ usuario }) {
   useEffect(() => {
     cargar();
     cargarCotizaciones();
+    cargarSubsecuentes();
   }, []);
 
   useEffect(() => {
@@ -299,7 +316,7 @@ export default function Polizas({ usuario }) {
     setCotActiva(null);
     setTramiteOk(poliza);
     setTab("exito");
-    await Promise.all([cargar(), cargarCotizaciones()]);
+    await Promise.all([cargar(), cargarCotizaciones(), cargarSubsecuentes()]);
   };
 
   const abrirCotizacionGuardada = (row) => {
@@ -340,6 +357,26 @@ export default function Polizas({ usuario }) {
     } catch (e) {
       console.error("Error eliminando cotización:", e.message);
     }
+  };
+
+  const abrirSubsecuente = (row) => {
+    setCotActiva({
+      polizaId:      row.id,
+      id:            row.constancia,
+      pasoInicial:   1,
+      esSubsecuente: true,
+      coberturaId:   row.coberturas?.id ?? null,
+      coberturaData: row.coberturas ?? null,
+      clienteId:    row.cliente_id,
+      vendedorId:   1,
+      concesionario: null,
+      vehiculoAmisId: null, codAMIS: "", marca: "", tipoVehiculo: "",
+      version: "", descripcion: "", modelo: String(new Date().getFullYear()),
+      serie: "", motor: "", placas: "",
+      conductorHabitual: "", conductorSexo: "", conductorEdad: "",
+      fechaInicio: "", formaPago: "CONTADO", esGestor: false,
+    });
+    setTab("nueva");
   };
 
   const abrirResumen = async (p) => {
@@ -456,7 +493,7 @@ export default function Polizas({ usuario }) {
         />
       )}
 
-      {(tab === "polizas" || tab === "cotizaciones") && (
+      {(tab === "polizas" || tab === "cotizaciones" || tab === "subsecuentes") && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="flex items-center border-b border-gray-100 px-2 overflow-x-auto">
             <Tab active={tab === "polizas"} onClick={() => setTab("polizas")}>
@@ -473,6 +510,14 @@ export default function Polizas({ usuario }) {
               {cotizaciones.length > 0 && (
                 <span className="ml-1.5 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                   {cotizaciones.length}
+                </span>
+              )}
+            </Tab>
+            <Tab active={tab === "subsecuentes"} onClick={() => { setTab("subsecuentes"); cargarSubsecuentes(); }}>
+              Pólizas subsecuentes
+              {subsecuentes.length > 0 && (
+                <span className="ml-1.5 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {subsecuentes.length}
                 </span>
               )}
             </Tab>
@@ -756,6 +801,52 @@ export default function Polizas({ usuario }) {
                 />
               </div>
             ))}
+
+          {/* ── Tab: Subsecuentes ── */}
+          {tab === "subsecuentes" && (
+            loadingSubs ? (
+              <div className="flex items-center justify-center gap-2 py-12 text-gray-400 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" /> Cargando…
+              </div>
+            ) : subsecuentes.length === 0 ? (
+              <div className="text-center py-12 text-sm text-gray-400">No hay pólizas subsecuentes pendientes.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50/80 border-b border-gray-100">
+                      {["Constancia","Asegurado","Cobertura","Fecha inicio","Fecha fin","Creada",""].map(h => (
+                        <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-1 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {subsecuentes.map((s) => (
+                      <tr key={s.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="px-5 py-2 font-mono text-xs font-bold text-[#13193a]">{s.constancia}</td>
+                        <td className="px-5 py-2 text-xs font-semibold text-gray-700">
+                          {s.clientes?.nombre} {s.clientes?.apellido || ""}
+                        </td>
+                        <td className="px-5 py-2 text-xs text-gray-500 max-w-[10rem] truncate">{s.coberturas?.nombre ?? "—"}</td>
+                        <td className="px-5 py-2 text-xs text-gray-500 whitespace-nowrap">{s.fecha_inicio}</td>
+                        <td className="px-5 py-2 text-xs text-gray-500 whitespace-nowrap">{s.fecha_fin}</td>
+                        <td className="px-5 py-2 text-xs text-gray-400 whitespace-nowrap">
+                          {new Date(s.created_at).toLocaleDateString("es-MX")}
+                        </td>
+                        <td className="px-5 py-2">
+                          <button onClick={() => abrirSubsecuente(s)}
+                            className="flex items-center gap-1.5 text-xs font-bold text-blue-600 border border-blue-200 px-3 py-1.5 rounded-xl hover:bg-blue-50 transition-all whitespace-nowrap">
+                            <ClipboardList className="w-3.5 h-3.5" />
+                            Completar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
         </div>
       )}
 

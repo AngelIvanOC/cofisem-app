@@ -3,8 +3,9 @@ import { supabase } from "../../supabaseClient";
 import Swal from "sweetalert2";
 import {
   Sliders, X, Plus, DollarSign, Percent, ChevronDown,
-  ChevronRight, Loader2,
+  ChevronRight, Loader2, Settings,
 } from "lucide-react";
+import { fetchPermitirFechasPasadas, setPermitirFechasPasadas, fetchPermitirNumeroManual, setPermitirNumeroManual } from "../../services/configuracion";
 
 // ── Helpers ───────────────────────────────────────────────────
 function fmtFecha(str) {
@@ -252,6 +253,9 @@ export default function AdminConfiguracion({ usuario }) {
   const [modalCostos,    setModalCostos]    = useState(false);
   const [cobModal,       setCobModal]       = useState(null);
   const [rubrosAbiertos, setRubrosAbiertos] = useState({});
+  const [permitirFechas,   setPermitirFechas]   = useState(false);
+  const [permitirNumMan,   setPermitirNumMan]   = useState(false);
+  const [guardandoSist,    setGuardandoSist]    = useState(false);
 
   const cargarCostos = useCallback(async () => {
     setCargandoCostos(true);
@@ -271,7 +275,12 @@ export default function AdminConfiguracion({ usuario }) {
     setCargandoCob(false);
   }, []);
 
-  useEffect(() => { cargarCostos(); cargarCoberturas(); }, [cargarCostos, cargarCoberturas]);
+  useEffect(() => {
+    cargarCostos();
+    cargarCoberturas();
+    fetchPermitirFechasPasadas().then(setPermitirFechas).catch(console.error);
+    fetchPermitirNumeroManual().then(setPermitirNumMan).catch(console.error);
+  }, [cargarCostos, cargarCoberturas]);
 
   const h = hoy();
   const currentCostos = {};
@@ -299,7 +308,7 @@ export default function AdminConfiguracion({ usuario }) {
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-center border-b border-gray-100 px-2">
-          {[{ k: "costos", l: "Costos de emisión" }, { k: "coberturas", l: "Coberturas" }].map((t) => (
+          {[{ k: "costos", l: "Costos de emisión" }, { k: "coberturas", l: "Coberturas" }, { k: "sistema", l: "Sistema" }].map((t) => (
             <button key={t.k} onClick={() => setTab(t.k)}
               className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all ${tab === t.k ? "border-[#13193a] text-[#13193a]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
               {t.l}
@@ -504,6 +513,118 @@ export default function AdminConfiguracion({ usuario }) {
                 )}
               </div>
             )}
+          </div>
+        )}
+        {/* ── Tab: Sistema ───────────────────────────────────────── */}
+        {tab === "sistema" && (
+          <div className="p-6 space-y-6">
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">Configuración de emisión</p>
+
+              {/* Toggle: número manual */}
+              <div className="flex items-start justify-between bg-white rounded-2xl border border-gray-100 px-5 py-4 gap-6 mb-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Settings className="w-4 h-4 text-[#13193a]" />
+                    <p className="text-sm font-bold text-[#13193a]">Permitir número de póliza manual</p>
+                  </div>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    Cuando está <span className="font-semibold text-[#13193a]">activado</span>, el operador puede escribir manualmente el número de constancia al cotizar.
+                    El sistema verifica que no esté duplicado. Si se deja vacío, el sistema lo asigna automáticamente.
+                  </p>
+                  {permitirNumMan && (
+                    <span className="inline-block mt-2 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5 uppercase tracking-wide">
+                      Activo — número manual habilitado
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const nuevo = !permitirNumMan;
+                    setGuardandoSist(true);
+                    try {
+                      await setPermitirNumeroManual(nuevo, usuario?.id ?? null);
+                      setPermitirNumMan(nuevo);
+                      Swal.fire({
+                        icon: "success",
+                        title: nuevo ? "Número manual habilitado" : "Número manual deshabilitado",
+                        text: nuevo
+                          ? "Los operadores pueden ingresar el número de póliza manualmente."
+                          : "El sistema asignará el número de póliza automáticamente.",
+                        confirmButtonColor: "#13193a",
+                        timer: 3500,
+                        timerProgressBar: true,
+                      });
+                    } catch (e) {
+                      Swal.fire({ icon: "error", title: "Error", text: e.message, confirmButtonColor: "#13193a" });
+                    } finally {
+                      setGuardandoSist(false);
+                    }
+                  }}
+                  disabled={guardandoSist}
+                  className={`relative inline-flex h-7 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${permitirNumMan ? "bg-[#13193a]" : "bg-gray-300"}`}
+                  style={{ minWidth: 52 }}
+                >
+                  {guardandoSist
+                    ? <Loader2 className="w-4 h-4 animate-spin text-white mx-auto" />
+                    : <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${permitirNumMan ? "translate-x-[26px]" : "translate-x-[3px]"}`} />
+                  }
+                </button>
+              </div>
+
+              {/* Toggle: fechas pasadas */}
+              <div className="flex items-start justify-between bg-white rounded-2xl border border-gray-100 px-5 py-4 gap-6">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Settings className="w-4 h-4 text-[#13193a]" />
+                    <p className="text-sm font-bold text-[#13193a]">Permitir fechas de inicio anteriores a hoy</p>
+                  </div>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    Cuando está <span className="font-semibold text-[#13193a]">activado</span>, el operador puede emitir pólizas con cualquier fecha de inicio (incluidas fechas pasadas).
+                    Cuando está <span className="font-semibold">desactivado</span> (por defecto), solo se permiten fechas desde hoy hasta 30 días en el futuro.
+                  </p>
+                  {permitirFechas && (
+                    <span className="inline-block mt-2 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5 uppercase tracking-wide">
+                      Activo — se permiten fechas pasadas
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const nuevo = !permitirFechas;
+                    setGuardandoSist(true);
+                    try {
+                      await setPermitirFechasPasadas(nuevo, usuario?.id ?? null);
+                      setPermitirFechas(nuevo);
+                      Swal.fire({
+                        icon: "success",
+                        title: nuevo ? "Fechas pasadas habilitadas" : "Fechas pasadas deshabilitadas",
+                        text: nuevo
+                          ? "Los operadores ahora pueden seleccionar cualquier fecha de inicio."
+                          : "Solo se permiten fechas desde hoy hasta 30 días adelante.",
+                        confirmButtonColor: "#13193a",
+                        timer: 3500,
+                        timerProgressBar: true,
+                      });
+                    } catch (e) {
+                      Swal.fire({ icon: "error", title: "Error", text: e.message, confirmButtonColor: "#13193a" });
+                    } finally {
+                      setGuardandoSist(false);
+                    }
+                  }}
+                  disabled={guardandoSist}
+                  className={`relative inline-flex h-7 w-13 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-50 ${permitirFechas ? "bg-[#13193a]" : "bg-gray-300"}`}
+                  style={{ minWidth: 52 }}
+                >
+                  {guardandoSist
+                    ? <Loader2 className="w-4 h-4 animate-spin text-white mx-auto" />
+                    : <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${permitirFechas ? "translate-x-[26px]" : "translate-x-[3px]"}`} />
+                  }
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

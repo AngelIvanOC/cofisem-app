@@ -43,6 +43,35 @@ export async function fetchConfigCostos(fecha = null) {
   return config;
 }
 
+// ── Configuración del sistema ─────────────────────────────────────────────
+
+async function fetchFlag(clave) {
+  const { data } = await supabase
+    .from("configuracion_sistema")
+    .select("valor")
+    .eq("clave", clave)
+    .maybeSingle();
+  return data?.valor === "1";
+}
+
+async function setFlag(clave, activar, usuarioId = null) {
+  const { error } = await supabase
+    .from("configuracion_sistema")
+    .upsert({
+      clave,
+      valor:      activar ? "1" : "0",
+      updated_at: new Date().toISOString(),
+      updated_by: usuarioId ?? null,
+    }, { onConflict: "clave" });
+  if (error) throw error;
+}
+
+export const fetchPermitirFechasPasadas = () => fetchFlag("permitir_fechas_pasadas");
+export const setPermitirFechasPasadas   = (v, uid) => setFlag("permitir_fechas_pasadas", v, uid);
+
+export const fetchPermitirNumeroManual  = () => fetchFlag("permitir_numero_manual");
+export const setPermitirNumeroManual    = (v, uid) => setFlag("permitir_numero_manual", v, uid);
+
 // Calcula IVA: (prima_neta + derechos) × iva_pct / 100
 export function calcularIVA(primaNeta, derechos, ivaPct = 16) {
   return +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);

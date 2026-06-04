@@ -113,19 +113,29 @@ const _PRECIO = {
   },
 };
 
-export async function generarCuotasPoliza(polizaId, formaPago, primaTotal, fechaInicio, esGestor) {
+// pagos: { primerPago, pagoSubs, nSubs } — si se pasa, se usa directamente (pricing desde DB)
+// Si no se pasa, se usa la matriz _PRECIO (backward compat)
+export async function generarCuotasPoliza(polizaId, formaPago, primaTotal, fechaInicio, esGestor, pagos = null) {
   if (!fechaInicio) return;
-  const tier   = esGestor ? 'gestor' : 'normal';
-  const precio = _PRECIO[tier][formaPago] ?? _PRECIO[tier]['CONTADO'];
+  let primerPago, pagoSubs, nSubs;
+  if (pagos) {
+    ({ primerPago, pagoSubs, nSubs } = pagos);
+  } else {
+    const tier   = esGestor ? 'gestor' : 'normal';
+    const precio = _PRECIO[tier][formaPago] ?? _PRECIO[tier]['CONTADO'];
+    primerPago = precio.primerPago;
+    pagoSubs   = precio.pagoSubs;
+    nSubs      = precio.nSubs;
+  }
   const inicio = new Date(fechaInicio + 'T12:00:00');
-  const nTotal = formaPago === '4 PARCIALES' ? 1 + precio.nSubs : 1;
+  const nTotal = formaPago === '4 PARCIALES' ? 1 + nSubs : 1;
   const cuotas = [];
   for (let i = 0; i < nTotal; i++) {
     const d = new Date(inicio);
     d.setDate(d.getDate() + i * 7);
     cuotas.push({
       poliza_id:         polizaId,
-      monto:             i === 0 ? precio.primerPago : precio.pagoSubs,
+      monto:             i === 0 ? primerPago : pagoSubs,
       fecha_vencimiento: d.toISOString().split('T')[0],
     });
   }
@@ -135,14 +145,13 @@ export async function generarCuotasPoliza(polizaId, formaPago, primaTotal, fecha
 
 // ── Guardar cotización como borrador ──────────────────────────────────────
 export async function guardarCotizacion({ form, total, enLetras, usuario }) {
-  let coberturaId = null;
-  const { data: cob } = await supabase
-    .from('coberturas')
-    .select('id')
-    .eq('prima_total', total)
-    .eq('activa', true)
-    .maybeSingle();
-  coberturaId = cob?.id ?? null;
+  // Usar coberturaId del form si existe (nuevo flujo con selección de cobertura)
+  // Fallback: lookup por prima_total (flujo legacy)
+  let coberturaId = form.coberturaId ?? null;
+  if (!coberturaId) {
+    const { data: cob } = await supabase.from('coberturas').select('id').eq('prima_total', total).eq('activa', true).maybeSingle();
+    coberturaId = cob?.id ?? null;
+  }
 
   const { data, error } = await supabase
     .from('polizas')
@@ -181,14 +190,11 @@ export async function guardarCotizacion({ form, total, enLetras, usuario }) {
 
 // ── Actualizar borrador existente ─────────────────────────────────────────
 export async function actualizarCotizacion({ polizaId, form, total, enLetras, usuario }) {
-  let coberturaId = null;
-  const { data: cob } = await supabase
-    .from('coberturas')
-    .select('id')
-    .eq('prima_total', total)
-    .eq('activa', true)
-    .maybeSingle();
-  coberturaId = cob?.id ?? null;
+  let coberturaId = form.coberturaId ?? null;
+  if (!coberturaId) {
+    const { data: cob } = await supabase.from('coberturas').select('id').eq('prima_total', total).eq('activa', true).maybeSingle();
+    coberturaId = cob?.id ?? null;
+  }
 
   const { error } = await supabase
     .from('polizas')
@@ -238,6 +244,17 @@ export async function fetchCotizacionesGuardadas(usuarioId) {
   return data ?? [];
 }
 
+// ── Verificar si una constancia ya existe ────────────────────────────────
+export async function verificarConstanciaExistente(constancia) {
+  const { data } = await supabase
+    .from('polizas')
+    .select('constancia, fecha_inicio, clientes(nombre, apellido)')
+    .eq('constancia', constancia.trim().toUpperCase())
+    .not('estatus', 'in', '("GUARDADO","SUBSECUENTE")')
+    .maybeSingle();
+  return data ?? null;
+}
+
 // ── Eliminar borrador ─────────────────────────────────────────────────────
 export async function eliminarCotizacion(id) {
   const { error } = await supabase
@@ -248,6 +265,65 @@ export async function eliminarCotizacion(id) {
   if (error) throw error;
 }
 
+// ── Crear póliza subsecuente (constancia reservada) ───────────────────────
+// Hereda cliente y cobertura de la póliza cancelada. Genera constancia real.
+export async function crearPolizaSubsecuente({ polizaOriginalId, clienteId, coberturaId, oficina_id, creadoPor = null }) {
+  const hoy = new Date();
+  const fin = new Date(hoy);
+  fin.setFullYear(fin.getFullYear() + 1);
+
+  const { data: nueva, error: e1 } = await supabase
+    .from('polizas')
+    .insert({
+      numero_poliza: `SUBS-${Date.now()}`,
+      cliente_id:    clienteId,
+      cobertura_id:  coberturaId,
+      estatus:       'SUBSECUENTE',
+      fecha_inicio:  hoy.toISOString().split('T')[0],
+      fecha_fin:     fin.toISOString().split('T')[0],
+      oficina_id:    oficina_id || null,
+      creado_por:    creadoPor || null,
+      notas:         JSON.stringify({ polizaOrigenId: polizaOriginalId }),
+    })
+    .select('id')
+    .single();
+  if (e1) throw e1;
+
+  const { count: globalSeq } = await supabase
+    .from('polizas')
+    .select('id', { count: 'exact', head: true })
+    .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA','SUBSECUENTE'])
+    .lte('id', nueva.id);
+
+  const constancia = generarConstancia(hoy, globalSeq ?? 1, 1, oficina_id);
+
+  const { error: e2 } = await supabase
+    .from('polizas')
+    .update({ constancia, numero_poliza: constancia })
+    .eq('id', nueva.id);
+  if (e2) throw e2;
+
+  return { id: nueva.id, constancia };
+}
+
+// ── Leer pólizas subsecuentes asignadas a un operador ────────────────────
+export async function fetchPolizasSubsecuentes(usuarioId) {
+  const { data, error } = await supabase
+    .from('polizas')
+    .select(`
+      id, constancia, numero_poliza, fecha_inicio, fecha_fin, created_at,
+      cliente_id, notas,
+      clientes(id, nombre, apellido),
+      coberturas(id, nombre, prima_neta, prima_total, duracion_meses,
+        cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
+    `)
+    .eq('estatus', 'SUBSECUENTE')
+    .eq('creado_por', usuarioId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
 // ── Emitir póliza ──────────────────────────────────────────────────────────
 export async function emitirPoliza({
   polizaId = null,
@@ -255,7 +331,7 @@ export async function emitirPoliza({
   capacidad, uso, tipoServicio, primaNeta, primaTotal,
   formaPago, fechaInicio, enLetras, cpAsegurado, creadoPor,
   conductorHabitual, conductorSexo, conductorEdad, concesionarioId, oficinaId,
-  esGestor, coberturaId,
+  esGestor, coberturaId, pagos = null, numeroManual = null,
 }) {
   const ahora   = new Date();
   const horaStr = ahora.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }) + ' hrs.';
@@ -310,10 +386,25 @@ export async function emitirPoliza({
     oficina_id:         oficinaId || null,
   };
 
+  const SELECT_FULL = `
+    *,
+    clientes(id, nombre, apellido, rfc, curp, telefono, email, direccion, colonia, ciudad, estado, cp),
+    vendedores(id, nombre, apellido, codigo),
+    concesionarios(id, nombre, apellido1, apellido2),
+    oficinas(id, nombre),
+    usuarios!polizas_creado_por_fkey(id_muestra),
+    vehiculos_amis(id, cve, mr, marca, tipo, dc, dl, anio),
+    coberturas(nombre, prima_neta, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
+  `;
+
   let newId;
 
   if (polizaId) {
-    // Actualizar borrador existente a VIGENTE
+    // Detectar si es SUBSECUENTE (constancia pre-asignada — no regenerar)
+    const { data: existente } = await supabase
+      .from('polizas').select('estatus').eq('id', polizaId).single();
+    const esSubsecuente = existente?.estatus === 'SUBSECUENTE';
+
     const { error: eu } = await supabase
       .from('polizas')
       .update({
@@ -325,12 +416,25 @@ export async function emitirPoliza({
       .eq('id', polizaId);
     if (eu) throw eu;
     newId = polizaId;
+
+    if (esSubsecuente) {
+      // Constancia ya está asignada — solo actualizar datos y generar cuotas
+      const { data: final, error: ef } = await supabase
+        .from('polizas').update({ estatus: 'VIGENTE' }).eq('id', newId)
+        .select(SELECT_FULL).single();
+      if (ef) throw ef;
+      await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
+      return final;
+    }
   } else {
     // Insertar nueva póliza
+    const numProv = numeroManual
+      ? numeroManual.trim().toUpperCase()
+      : `COF-${Date.now()}`;
     const { data: nueva, error: e1 } = await supabase
       .from('polizas')
       .insert({
-        numero_poliza: `COF-${Date.now()}`,
+        numero_poliza: numProv,
         ...camposBase,
         creado_por: creadoPor || null,
       })
@@ -338,6 +442,20 @@ export async function emitirPoliza({
       .single();
     if (e1) throw e1;
     newId = nueva.id;
+  }
+
+  // Si se proporcionó número manual: usarlo directamente, sin generar constancia
+  if (numeroManual) {
+    const constanciaManual = numeroManual.trim().toUpperCase();
+    const { data: final, error: e2 } = await supabase
+      .from('polizas')
+      .update({ constancia: constanciaManual, numero_poliza: constanciaManual })
+      .eq('id', newId)
+      .select(SELECT_FULL)
+      .single();
+    if (e2) throw e2;
+    await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
+    return final;
   }
 
   // Contar pólizas emitidas globales (seq de 8 dígitos)
@@ -365,20 +483,11 @@ export async function emitirPoliza({
     .from('polizas')
     .update({ constancia, numero_poliza: constancia })
     .eq('id', newId)
-    .select(`
-      *,
-      clientes(id, nombre, apellido, rfc, curp, telefono, email, direccion, colonia, ciudad, estado, cp),
-      vendedores(id, nombre, apellido, codigo),
-      concesionarios(id, nombre, apellido1, apellido2),
-      oficinas(id, nombre),
-      usuarios!polizas_creado_por_fkey(id_muestra),
-      vehiculos_amis(id, cve, mr, marca, tipo, dc, dl, anio),
-      coberturas(nombre, prima_neta, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
-    `)
+    .select(SELECT_FULL)
     .single();
   if (e2) throw e2;
 
-  await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false);
+  await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
 
   return final;
 }

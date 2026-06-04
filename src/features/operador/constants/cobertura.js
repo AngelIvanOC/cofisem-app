@@ -27,8 +27,26 @@ export const PRECIO_MATRIZ = {
 export const DERECHOS = 400.00;
 
 export const PASOS = [
-  { num: 1, titulo: "Vehículo" },
-  { num: 2, titulo: "Cotización" },
-  { num: 3, titulo: "Coberturas" },
-  { num: 4, titulo: "Resumen" },
+  { num: 1, titulo: "Cobertura" },
+  { num: 2, titulo: "Vehículo" },
+  { num: 3, titulo: "Cotización" },
+  { num: 4, titulo: "Coberturas" },
+  { num: 5, titulo: "Resumen" },
 ];
+
+// Calcula pricing dinámico desde una cobertura de BD
+export function calcularPrecioData(cobertura, formaPago, esGestor) {
+  const primaTotal = parseFloat(cobertura.prima_total);
+  if (formaPago !== "4 PARCIALES") {
+    return { total: primaTotal, primerPago: primaTotal, pagoSubs: 0, nSubs: 0 };
+  }
+  if (esGestor) {
+    const pago = +(primaTotal / 4).toFixed(2);
+    return { total: primaTotal, primerPago: pago, pagoSubs: pago, nSubs: 3 };
+  }
+  // Normal 4 parciales: mismas proporciones que PRECIO_MATRIZ (799/2500, 625/2500)
+  const primerPago = +(primaTotal * (799 / 2500)).toFixed(2);
+  const pagoSubs   = +(primaTotal * (625 / 2500)).toFixed(2);
+  const total      = +(primerPago + pagoSubs * 3).toFixed(2);
+  return { total, primerPago, pagoSubs, nSubs: 3 };
+}

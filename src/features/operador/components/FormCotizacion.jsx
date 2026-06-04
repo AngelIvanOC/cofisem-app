@@ -3,7 +3,11 @@ import {
   COBERTURA_BASICA,
   PRECIO_MATRIZ,
   DERECHOS,
+  calcularPrecioData,
 } from "../constants/cobertura";
+import { fetchCoberturasActivas } from "../../../services/coberturas";
+import { fetchPermitirFechasPasadas, fetchPermitirNumeroManual } from "../../../services/configuracion";
+import { verificarConstanciaExistente } from "../../../services/polizas";
 import { fetchClientes } from "../../../services/clientes";
 import { fetchVendedores } from "../../../services/vendedores";
 import {
@@ -20,6 +24,7 @@ import {
   ChevronRight,
   CheckCircle2,
   Download,
+  Loader2,
   Plus,
 } from "lucide-react";
 import {
@@ -58,9 +63,12 @@ export default function FormCotizacion({
   const nroCot =
     cotizacionInicial?.id ??
     `COT-${usuario?.oficinas?.id ?? "0"}${Date.now().toString().slice(-6)}`;
-  const [paso, setPaso] = useState(esEdicion ? 4 : 1);
+  // pasoInicial: 1=fresco, 2=subsecuente (cobertura ya elegida), 5=guardado (resumen)
+  const [paso, setPaso] = useState(cotizacionInicial?.pasoInicial ?? (esEdicion ? 5 : 1));
 
   const [form, setForm] = useState({
+    coberturaId:   cotizacionInicial?.coberturaId   ?? null,
+    coberturaData: cotizacionInicial?.coberturaData ?? null,
     vehiculoAmisId: cotizacionInicial?.vehiculoAmisId ?? null,
     codAMIS: cotizacionInicial?.codAMIS ?? "",
     marca: cotizacionInicial?.marca ?? "",
@@ -80,11 +88,17 @@ export default function FormCotizacion({
     fechaInicio: cotizacionInicial?.fechaInicio ?? "",
     formaPago: cotizacionInicial?.formaPago ?? "CONTADO",
     esGestor: cotizacionInicial?.esGestor ?? false,
-    cobertura: "BÁSICA",
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   // ── Datos DB ──
+  const [coberturas,         setCoberturas]         = useState([]);
+  const [loadingCoberturas,  setLoadingCoberturas]  = useState(true);
+  const [permitirFechasPas,  setPermitirFechasPas]  = useState(false);
+  const [permitirNumManual,  setPermitirNumManual]  = useState(false);
+  const [numeroManual,       setNumeroManual]       = useState("");
+  const [numManualError,     setNumManualError]     = useState(null);
+  const [numManualChecking,  setNumManualChecking]  = useState(false);
   const [clientes, setClientes] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [concesionariosLocal, setConcesionariosLocal] = useState({});
@@ -104,6 +118,15 @@ export default function FormCotizacion({
   // "auto"    → el código lo genera el sistema al completar los campos
   // "busqueda" → el usuario escribió el código primero
   const amisFuente = useRef("auto");
+
+  useEffect(() => {
+    fetchCoberturasActivas()
+      .then(setCoberturas)
+      .catch(console.error)
+      .finally(() => setLoadingCoberturas(false));
+    fetchPermitirFechasPasadas().then(setPermitirFechasPas).catch(console.error);
+    fetchPermitirNumeroManual().then(setPermitirNumManual).catch(console.error);
+  }, []);
 
   useEffect(() => {
     Promise.all([fetchClientes(), fetchVendedores()])
@@ -282,26 +305,30 @@ export default function FormCotizacion({
     concesionariosDisponibles.find((c) => c.id === form.concesionario)?.label ??
     "—";
 
-  const todayStr = new Date().toISOString().split("T")[0];
-  const maxDateStr = new Date(Date.now() + 29 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
-  const fechaInicioValida = !!(
-    form.fechaInicio &&
-    form.fechaInicio >= todayStr &&
-    form.fechaInicio <= maxDateStr
-  );
+  const todayStr      = new Date().toISOString().split("T")[0];
+  const maxDateStr    = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const maxDateNormal = new Date(Date.now() +  29 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const fechaInicioValida = permitirFechasPas
+    ? !!(form.fechaInicio && form.fechaInicio <= maxDateStr)
+    : !!(form.fechaInicio && form.fechaInicio >= todayStr && form.fechaInicio <= maxDateNormal);
 
-  const tierKey = form.esGestor ? "gestor" : "normal";
-  const precioData =
-    PRECIO_MATRIZ[tierKey][form.formaPago] ?? PRECIO_MATRIZ[tierKey]["CONTADO"];
-  const total = precioData.total;
+  // Pricing: desde la cobertura seleccionada en BD (o fallback a PRECIO_MATRIZ)
+  const precioData = form.coberturaData
+    ? calcularPrecioData(form.coberturaData, form.formaPago, form.esGestor)
+    : (PRECIO_MATRIZ[form.esGestor ? "gestor" : "normal"][form.formaPago]
+        ?? PRECIO_MATRIZ[form.esGestor ? "gestor" : "normal"]["CONTADO"]);
+  const total      = precioData.total;
   const primerPago = precioData.primerPago;
-  const pagoSubs = precioData.pagoSubs;
-  const nSubs = precioData.nSubs;
-  const subtotal = +(total / 1.16).toFixed(2);
-  const iva = +(total - subtotal).toFixed(2);
-  const primaNeta = +(subtotal - DERECHOS).toFixed(2);
+  const pagoSubs   = precioData.pagoSubs;
+  const nSubs      = precioData.nSubs;
+  const derechosCob= form.coberturaData
+    ? +(parseFloat(form.coberturaData.prima_total) - parseFloat(form.coberturaData.prima_neta) - +(parseFloat(form.coberturaData.prima_neta) * 0.16).toFixed(2)).toFixed(2)
+    : DERECHOS;
+  const subtotal   = +(total / 1.16).toFixed(2);
+  const iva        = +(total - subtotal).toFixed(2);
+  const primaNeta  = form.coberturaData
+    ? parseFloat(form.coberturaData.prima_neta)
+    : +(subtotal - DERECHOS).toFixed(2);
 
   const fechaHoy = new Date().toLocaleDateString("es-MX", {
     day: "2-digit",
@@ -335,8 +362,29 @@ export default function FormCotizacion({
       })
     : "—";
 
+  const checkNumeroManual = async (val) => {
+    const v = val.trim().toUpperCase();
+    if (!v) { setNumManualError(null); return; }
+    setNumManualChecking(true);
+    setNumManualError(null);
+    const existe = await verificarConstanciaExistente(v);
+    if (existe) {
+      const cliente = existe.clientes
+        ? `${existe.clientes.nombre} ${existe.clientes.apellido || ""}`.trim()
+        : "—";
+      const fecha = existe.fecha_inicio
+        ? new Date(existe.fecha_inicio + "T12:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" })
+        : "—";
+      setNumManualError(`Este número ya existe — emitida el ${fecha} a ${cliente}`);
+    }
+    setNumManualChecking(false);
+  };
+
+  const esSubsecuente = cotizacionInicial?.esSubsecuente === true;
+
   const canNext = {
-    1: !!(
+    1: !!form.coberturaId,
+    2: !!(
       form.vehiculoAmisId &&
       form.marca &&
       form.tipoVehiculo &&
@@ -347,8 +395,8 @@ export default function FormCotizacion({
       form.placas.trim() &&
       !serieChecking
     ),
-    2: !!(form.clienteId && fechaInicioValida),
-    3: true,
+    3: !!(form.clienteId && fechaInicioValida && !numManualChecking && !numManualError),
+    4: true,
   };
 
   const onGuardarAsegurado = (clienteObj) => {
@@ -404,7 +452,10 @@ export default function FormCotizacion({
     try {
       const enLetras = numeroALetras(total);
       const poliza = await emitirPoliza({
-        polizaId: cotizacionInicial?.polizaId ?? null,
+        polizaId:     cotizacionInicial?.polizaId ?? null,
+        coberturaId:  form.coberturaId ?? null,
+        pagos:        nSubs > 0 ? { primerPago, pagoSubs, nSubs } : null,
+        numeroManual: (permitirNumManual && !esSubsecuente && numeroManual.trim()) ? numeroManual.trim().toUpperCase() : null,
         clienteId: form.clienteId,
         vendedorId: form.vendedorId || null,
         vehiculoAmisId: form.vehiculoAmisId,
@@ -419,7 +470,6 @@ export default function FormCotizacion({
         primaTotal: total,
         formaPago: form.formaPago,
         fechaInicio: form.fechaInicio,
-        derechos: DERECHOS,
         iva,
         enLetras,
         cpAsegurado: clienteSel?.cp || null,
@@ -496,12 +546,64 @@ export default function FormCotizacion({
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <StepBar paso={paso} />
 
-        {/* ── PASO 1: Vehículo ── */}
+        {/* ── PASO 1: Selección de cobertura ── */}
         {paso === 1 && (
           <div className="space-y-5">
             <div>
+              <h3 className="text-base font-bold text-[#13193a]">1. Selecciona la cobertura</h3>
+              <p className="text-sm text-gray-400 mt-0.5">Elige el paquete de cobertura para esta póliza</p>
+            </div>
+            {loadingCoberturas ? (
+              <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm">Cargando coberturas…</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3">
+                {coberturas.map((cob) => {
+                  const sel = form.coberturaId === cob.id;
+                  return (
+                    <button
+                      key={cob.id}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, coberturaId: cob.id, coberturaData: cob }))}
+                      className={`w-full text-left rounded-2xl border-2 px-5 py-4 transition-all ${
+                        sel
+                          ? "border-[#13193a] bg-[#13193a]/5"
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className={`text-sm font-bold ${sel ? "text-[#13193a]" : "text-gray-700"}`}>
+                            {cob.nombre}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {cob.grupos_coberturas?.nombre ?? ""}
+                            {" · "}Duración: {cob.duracion_meses} meses
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className={`text-xl font-black tabular-nums ${sel ? "text-[#13193a]" : "text-gray-700"}`}>
+                            ${parseFloat(cob.prima_total).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide">Prima total</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── PASO 2: Vehículo ── */}
+        {paso === 2 && (
+          <div className="space-y-5">
+            <div>
               <h3 className="text-base font-bold text-[#13193a]">
-                1. Datos del vehículo
+                2. Datos del vehículo
               </h3>
               <p className="text-sm text-gray-400 mt-0.5">
                 Información del vehículo a asegurar
@@ -692,12 +794,12 @@ export default function FormCotizacion({
           </div>
         )}
 
-        {/* ── PASO 2: Cotización ── */}
-        {paso === 2 && (
+        {/* ── PASO 3: Cotización ── */}
+        {paso === 3 && (
           <div className="space-y-5">
             <div>
               <h3 className="text-base font-bold text-[#13193a]">
-                2. Datos de cotización
+                3. Datos de cotización
               </h3>
               <p className="text-sm text-gray-400 mt-0.5">
                 Información del asegurado y condiciones de la póliza
@@ -862,13 +964,15 @@ export default function FormCotizacion({
                   type="date"
                   value={form.fechaInicio}
                   onChange={(e) => setF("fechaInicio", e.target.value)}
-                  min={todayStr}
-                  max={maxDateStr}
+                  min={permitirFechasPas ? undefined : todayStr}
+                  max={permitirFechasPas ? maxDateStr : maxDateNormal}
                   className={inpCls}
                 />
                 {form.fechaInicio && !fechaInicioValida && (
                   <p className="text-xs text-red-500 mt-1">
-                    La fecha debe estar entre hoy y los próximos 30 días.
+                    {permitirFechasPas
+                      ? "La fecha no puede ser mayor a un año desde hoy."
+                      : "La fecha debe estar entre hoy y los próximos 30 días."}
                   </p>
                 )}
               </div>
@@ -924,6 +1028,40 @@ export default function FormCotizacion({
               </p>
             </div>
 
+            {/* Número de póliza manual — solo si el admin habilitó la opción y no es subsecuente */}
+            {permitirNumManual && !esSubsecuente && (
+              <div>
+                <label className={lblCls}>
+                  Número de póliza / constancia manual
+                  <span className="ml-1 normal-case font-normal text-gray-300 tracking-normal">
+                    (opcional — si se deja vacío el sistema lo asigna)
+                  </span>
+                </label>
+                <input
+                  value={numeroManual}
+                  onChange={(e) => {
+                    const v = e.target.value.toUpperCase();
+                    setNumeroManual(v);
+                    setNumManualError(null);
+                  }}
+                  onBlur={(e) => checkNumeroManual(e.target.value)}
+                  placeholder="Ej. 01260100000001-01"
+                  className={`${inpCls} font-mono ${numManualError ? "border-red-300 bg-red-50 focus:ring-red-200 focus:border-red-400" : ""}`}
+                />
+                {numManualChecking && (
+                  <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Verificando…
+                  </p>
+                )}
+                {numManualError && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">{numManualError}</p>
+                )}
+                {numeroManual && !numManualError && !numManualChecking && (
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">✓ Número disponible</p>
+                )}
+              </div>
+            )}
+
             <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
               <p className="text-sm text-blue-800">
                 <span className="font-semibold">Prima estimada: </span>
@@ -939,15 +1077,15 @@ export default function FormCotizacion({
           </div>
         )}
 
-        {/* ── PASO 3: Coberturas ── */}
-        {paso === 3 && (
+        {/* ── PASO 4: Coberturas ── */}
+        {paso === 4 && (
           <div className="space-y-4">
             <div>
               <h3 className="text-base font-bold text-[#13193a]">
-                3. Coberturas
+                4. Coberturas
               </h3>
               <p className="text-sm text-gray-400 mt-0.5">
-                Paquete de cobertura para servicio público de taxi
+                Detalle del paquete seleccionado
               </p>
             </div>
 
@@ -955,10 +1093,10 @@ export default function FormCotizacion({
               <div className="flex items-center justify-between px-5 py-3.5 bg-[#13193a]">
                 <div>
                   <p className="font-bold text-sm text-white">
-                    {COBERTURA_BASICA.nombre}
+                    {form.coberturaData?.nombre ?? COBERTURA_BASICA.nombre}
                   </p>
                   <p className="text-xs mt-0.5 text-white/60">
-                    Uso: {COBERTURA_BASICA.uso}
+                    Uso: SERVICIO PÚBLICO
                   </p>
                 </div>
                 <div className="text-right">
@@ -991,17 +1129,18 @@ export default function FormCotizacion({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {COBERTURA_BASICA.coberturas.map((c, i) => (
+                    {(form.coberturaData?.cobertura_rubros
+                      ? [...form.coberturaData.cobertura_rubros].sort((a,b) => a.orden - b.orden).filter(r => !r.es_sublimite)
+                      : COBERTURA_BASICA.coberturas.map(c => ({ rubro: c.desc, monto_maximo: c.monto }))
+                    ).map((c, i) => (
                       <tr key={i} className="hover:bg-gray-50/60">
                         <td className="px-4 py-2.5 text-gray-700 font-medium">
-                          {c.desc}
+                          {c.rubro ?? c.desc}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-600 font-semibold">
-                          {c.monto}
+                          {c.monto_maximo ?? c.monto ?? "—"}
                         </td>
-                        <td className="px-4 py-2.5 text-right text-gray-400">
-                          {c.ded}
-                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-400">{"0.00"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1011,11 +1150,11 @@ export default function FormCotizacion({
           </div>
         )}
 
-        {/* ── PASO 4: Resumen ── */}
-        {paso === 4 && (
+        {/* ── PASO 5: Resumen ── */}
+        {paso === 5 && (
           <div className="space-y-5">
             <div>
-              <h3 className="text-base font-bold text-[#13193a]">4. Resumen</h3>
+              <h3 className="text-base font-bold text-[#13193a]">5. Resumen</h3>
               <p className="text-sm text-gray-400 mt-0.5">
                 Revisa todos los datos antes de guardar o tramitar
               </p>
@@ -1028,7 +1167,7 @@ export default function FormCotizacion({
                   Características de la póliza
                 </p>
                 <button
-                  onClick={() => setPaso(2)}
+                  onClick={() => setPaso(3)}
                   className="text-xs text-blue-500 hover:underline font-semibold"
                 >
                   Editar
@@ -1044,7 +1183,7 @@ export default function FormCotizacion({
                     l: "Tipo de cliente",
                     v: form.esGestor ? "Gestor" : "Normal",
                   },
-                  { l: "Cobertura", v: COBERTURA_BASICA.nombre },
+                  { l: "Cobertura", v: form.coberturaData?.nombre ?? COBERTURA_BASICA.nombre },
                   { l: "Modalidad de pago", v: form.formaPago },
                   { l: "Inicio de vigencia", v: fechaInicioFmt },
                   { l: "Fin de vigencia", v: fechaFinVigencia },
@@ -1074,7 +1213,7 @@ export default function FormCotizacion({
                   Datos del vehículo
                 </p>
                 <button
-                  onClick={() => setPaso(1)}
+                  onClick={() => setPaso(2)}
                   className="text-xs text-blue-500 hover:underline font-semibold"
                 >
                   Editar
@@ -1139,7 +1278,7 @@ export default function FormCotizacion({
                   Coberturas
                 </p>
                 <button
-                  onClick={() => setPaso(3)}
+                  onClick={() => setPaso(4)}
                   className="text-xs text-blue-500 hover:underline font-semibold"
                 >
                   Ver
@@ -1161,17 +1300,18 @@ export default function FormCotizacion({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {COBERTURA_BASICA.coberturas.map((c, i) => (
+                    {(form.coberturaData?.cobertura_rubros
+                      ? [...form.coberturaData.cobertura_rubros].sort((a,b) => a.orden - b.orden).filter(r => !r.es_sublimite)
+                      : COBERTURA_BASICA.coberturas.map(c => ({ rubro: c.desc, monto_maximo: c.monto }))
+                    ).map((c, i) => (
                       <tr key={i} className="hover:bg-gray-50/60">
                         <td className="px-4 py-2.5 text-gray-700 font-medium">
-                          {c.desc}
+                          {c.rubro ?? c.desc}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-600 font-semibold">
-                          {c.monto}
+                          {c.monto_maximo ?? c.monto ?? "—"}
                         </td>
-                        <td className="px-4 py-2.5 text-right text-gray-400">
-                          {c.ded}
-                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-400">{"0.00"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1269,7 +1409,7 @@ export default function FormCotizacion({
         )}
 
         {/* Navegación */}
-        {paso !== 4 && (
+        {paso !== 5 && (
           <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-100">
             <div className="flex flex-col items-start gap-2">
               {paso > 1 ? (
@@ -1291,7 +1431,7 @@ export default function FormCotizacion({
             </div>
             <button
               onClick={async () => {
-                if (paso === 1 && serieError) {
+                if (paso === 2 && serieError) {
                   await Swal.fire({
                     icon: "error",
                     title: "No. Serie duplicado",

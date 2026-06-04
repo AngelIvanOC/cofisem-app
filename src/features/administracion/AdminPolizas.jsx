@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
-import { fetchPolizaById, buildPolizaPDF, cancelarPoliza, contarPolizasCliente, contarPolizasConcesionario, calcularEstatus } from "../../services/polizas";
+import { fetchPolizaById, buildPolizaPDF, cancelarPoliza, contarPolizasCliente, contarPolizasConcesionario, calcularEstatus, crearPolizaSubsecuente } from "../../services/polizas";
+import { fetchOperadores } from "../../services/usuarios";
 import { fetchConfigCostos } from "../../services/configuracion";
 import { actualizarNombreCliente } from "../../services/clientes";
 import { actualizarNombreConcesionario } from "../../services/concesionarios";
@@ -541,6 +542,8 @@ function ModalCancelarProrrata({ poliza, onClose, onDone }) {
   const [abreNueva,      setAbreNueva]      = useState(false);
   const [proxConstancia, setProxConstancia] = useState(null);
   const [cargandoProx,   setCargandoProx]   = useState(false);
+  const [operadores,     setOperadores]     = useState([]);
+  const [operadorId,     setOperadorId]     = useState("");
   const [procesando,     setProcesando]     = useState(false);
   const [preview,        setPreview]        = useState(false);
 
@@ -565,20 +568,24 @@ function ModalCancelarProrrata({ poliza, onClose, onDone }) {
     })();
   }, []);
 
-  // Predice la próxima constancia cuando el switch se activa
+  // Carga operadores y predice constancia cuando se activa el switch
   useEffect(() => {
-    if (!abreNueva) { setProxConstancia(null); return; }
+    if (!abreNueva) { setProxConstancia(null); setOperadorId(""); return; }
     setCargandoProx(true);
     (async () => {
       try {
-        const { count } = await supabase
-          .from("polizas")
-          .select("id", { count: "exact", head: true })
-          .in("estatus", ["VIGENTE","POR VENCER","VENCIDA","CANCELADA"]);
+        const [ops, countResult] = await Promise.all([
+          fetchOperadores(),
+          supabase
+            .from("polizas")
+            .select("id", { count: "exact", head: true })
+            .in("estatus", ["VIGENTE","POR VENCER","VENCIDA","CANCELADA"]),
+        ]);
+        setOperadores(ops);
         const fecha = new Date();
         const yy   = String(fecha.getFullYear()).slice(-2);
         const ofic = String(poliza.oficinas?.id || 1).padStart(2, "0");
-        setProxConstancia(`01${yy}${ofic}${String((count ?? 0) + 1).padStart(8, "0")}-01`);
+        setProxConstancia(`01${yy}${ofic}${String((countResult.count ?? 0) + 1).padStart(8, "0")}-01`);
       } catch { setProxConstancia(null); }
       finally  { setCargandoProx(false); }
     })();
@@ -597,7 +604,25 @@ function ModalCancelarProrrata({ poliza, onClose, onDone }) {
     setProcesando(true);
     const constanciaLabel = poliza.constancia || poliza.numero_poliza;
     try {
-      const blob = await pdf(<CancelacionProrrataPDF {...pdfProps} />).toBlob();
+      // Si hay póliza sustituta: primero reservar la constancia real en BD
+      let constanciaReal = null;
+      if (abreNueva) {
+        const subs = await crearPolizaSubsecuente({
+          polizaOriginalId: poliza.id,
+          clienteId:   poliza.cliente_id ?? null,
+          coberturaId: poliza.cobertura_id ?? null,
+          oficina_id:  poliza.oficinas?.id ?? poliza.oficina_id ?? null,
+          creadoPor:   operadorId || null,
+        });
+        constanciaReal = subs.constancia;
+      }
+
+      // Generar PDF con la constancia real (o null si no hay sustituta)
+      const propsConConstancia = {
+        ...pdfProps,
+        constanciaFutura: abreNueva ? constanciaReal : null,
+      };
+      const blob = await pdf(<CancelacionProrrataPDF {...propsConConstancia} />).toBlob();
       descargarBlob(blob, `CANCELACION_PRORRATA-${constanciaLabel}.pdf`);
       await cancelarPoliza(poliza.id, "CANCELACION POR BAJA DE UNIDAD", null);
       onDone();
@@ -675,7 +700,7 @@ function ModalCancelarProrrata({ poliza, onClose, onDone }) {
                 Cancelación por baja de unidad. El asegurado recibirá de vuelta su prima no devengada.
               </div>
 
-              {/* Desglose */}
+              {/* TODO: desglose oculto temporalmente — descomentar para pruebas
               <div className="rounded-xl border border-gray-100 overflow-hidden">
                 <div className="bg-gray-50 px-4 py-2 border-b border-gray-100">
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Cálculo de prorrata</p>
@@ -710,24 +735,55 @@ function ModalCancelarProrrata({ poliza, onClose, onDone }) {
                   </div>
                 </div>
               </div>
+              */}
 
               {/* Switch nueva póliza */}
-              <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
-                <div>
-                  <p className="text-xs font-semibold text-gray-700">¿Se abrirá una nueva póliza sustituta?</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    {abreNueva
-                      ? (cargandoProx ? "Calculando…" : `Próx. constancia aprox.: ${proxConstancia ?? "—"}`)
-                      : "El recibo dirá: «PARA SUSTITUIR POR PÓLIZA A FUTURO»"}
-                  </p>
+              <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-700">¿Se abrirá una nueva póliza sustituta?</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      {abreNueva
+                        ? (cargandoProx ? "Calculando constancia…" : `Próx. constancia aprox.: ${proxConstancia ?? "—"}`)
+                        : "El recibo dirá: «PARA SUSTITUIR POR PÓLIZA A FUTURO»"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAbreNueva(v => !v)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${abreNueva ? "bg-[#13193a]" : "bg-gray-300"}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${abreNueva ? "translate-x-[22px]" : "translate-x-[3px]"}`} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setAbreNueva(v => !v)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${abreNueva ? "bg-[#13193a]" : "bg-gray-300"}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${abreNueva ? "translate-x-[22px]" : "translate-x-[3px]"}`} />
-                </button>
+
+                {/* Select de operador — solo visible cuando abreNueva está ON */}
+                {abreNueva && (
+                  <div className="px-4 pb-3 border-t border-gray-100 pt-3">
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                      Asignar seguimiento a <span className="text-red-400">*</span>
+                    </label>
+                    {cargandoProx ? (
+                      <div className="flex items-center gap-2 text-gray-400 text-xs py-1">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando operadores…
+                      </div>
+                    ) : (
+                      <select
+                        value={operadorId}
+                        onChange={e => setOperadorId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all"
+                      >
+                        <option value="">— Sin asignar —</option>
+                        {operadores.map(op => (
+                          <option key={op.id} value={op.id}>
+                            {op.nombre} {op.apellido || ""}
+                            {op.oficinas?.nombre ? ` · ${op.oficinas.nombre}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -737,7 +793,7 @@ function ModalCancelarProrrata({ poliza, onClose, onDone }) {
 
         {/* Footer */}
         <div className="flex flex-col gap-2 px-6 pb-6">
-          {/* Preview — no cancela nada */}
+          {/* TODO: preview oculto temporalmente — descomentar para pruebas
           {pdfProps && (
             <button
               onClick={() => setPreview(true)}
@@ -746,6 +802,7 @@ function ModalCancelarProrrata({ poliza, onClose, onDone }) {
               Vista previa del PDF (sin cancelar)
             </button>
           )}
+          */}
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
               Cerrar
@@ -789,6 +846,7 @@ export default function AdminPolizas() {
       .select(`
         id, numero_poliza, constancia, estatus, forma_pago,
         fecha_inicio, fecha_fin, placas, aseguradora, created_at,
+        cliente_id, cobertura_id, oficina_id,
         clientes(nombre, apellido),
         vendedores(nombre, apellido),
         oficinas(id, nombre),
