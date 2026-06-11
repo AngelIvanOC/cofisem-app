@@ -65,7 +65,7 @@ export default function Clientes({ usuario }) {
   const guardar = async () => {
     if (
       !form.nombre || !form.apellido1 || !form.apellido2 ||
-      !form.telefono || !form.rfc || !form.curp ||
+      !form.rfc || !form.curp ||
       !form.cp || !form.estado || !form.municipio || !form.colonia || !form.calle || !form.numeroExt
     ) return;
     setSaving(true);

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { SPARK_POLIZAS, SPARK_COBRO } from "./data/dashboardData";
 import SparkBar from "./components/SparkBar";
-import { AlertTriangle, ChevronRight, ClipboardList, FileText, Plus, Ticket } from "lucide-react";
+import { AlertTriangle, ChevronRight, ClipboardList, FileText, Plus } from "lucide-react";
 
 const HOY = new Date().toLocaleDateString("es-MX", {
   weekday: "long",
@@ -36,7 +36,7 @@ export default function OperadorDashboard({ usuario }) {
   const [loading,       setLoading]       = useState(true);
   const [kpiHoy,        setKpiHoy]        = useState(0);
   const [kpiVencer,     setKpiVencer]     = useState(0);
-  const [kpiPrima,      setKpiPrima]      = useState(0);
+  const [kpiClientes,   setKpiClientes]   = useState(0);
   const [ultimas,       setUltimas]       = useState([]);
   const [vencen,        setVencen]        = useState([]);
   const [cotizaciones,  setCotizaciones]  = useState(() => {
@@ -59,7 +59,7 @@ export default function OperadorDashboard({ usuario }) {
           { count: cVencer },
           { data: dUltimas },
           { data: dVencen },
-          { data: dPrima },
+          { count: cClientes },
         ] = await Promise.all([
           supabase.from("polizas").select("id", { count: "exact", head: true })
             .eq("oficina_id", oid).neq("estatus", "COTIZACION")
@@ -80,15 +80,14 @@ export default function OperadorDashboard({ usuario }) {
             .gte("fecha_fin", today).lte("fecha_fin", en7)
             .order("fecha_fin", { ascending: true }).limit(5),
 
-          supabase.from("polizas")
-            .select("coberturas(prima_total)")
-            .eq("oficina_id", oid).neq("estatus", "COTIZACION")
+          supabase.from("clientes").select("id", { count: "exact", head: true })
+            .eq("creado_por", usuario?.id)
             .gte("created_at", inicioMes + "T00:00:00"),
         ]);
 
         setKpiHoy(cHoy ?? 0);
         setKpiVencer(cVencer ?? 0);
-        setKpiPrima((dPrima || []).reduce((s, r) => s + (r.coberturas?.prima_total ?? 0), 0));
+        setKpiClientes(cClientes ?? 0);
         setUltimas(dUltimas || []);
         setVencen(dVencen || []);
       } catch (e) {
@@ -124,15 +123,6 @@ export default function OperadorDashboard({ usuario }) {
             >
               <Plus className="w-4 h-4" />
               Nueva cotización
-            </button>
-            {/* Corte del día — deshabilitado temporalmente */}
-            <button
-              disabled
-              title="Próximamente"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-400 opacity-40 cursor-not-allowed select-none"
-            >
-              <Ticket className="w-4 h-4" />
-              Corte del día
             </button>
           </div>
         </div>
@@ -187,19 +177,19 @@ export default function OperadorDashboard({ usuario }) {
             </p>
           </button>
 
-          {/* Prima acumulada del mes — REAL */}
+          {/* Clientes registrados en el mes — REAL */}
           <button
-            onClick={() => navigate("/gaman/polizas")}
+            onClick={() => navigate("/gaman/clientes")}
             className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
           >
             <div className="flex items-start justify-between mb-3">
-              <p className="text-xs text-gray-400 font-medium leading-snug">Prima acumulada del mes</p>
+              <p className="text-xs text-gray-400 font-medium leading-snug">Clientes registrados en el mes</p>
               <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400 transition-colors shrink-0 ml-2" />
             </div>
-            <p className="text-2xl font-bold text-[#13193a] tabular-nums mb-2">{loading ? "—" : fmt$(kpiPrima)}</p>
+            <p className="text-2xl font-bold text-[#13193a] tabular-nums mb-2">{loading ? "—" : kpiClientes}</p>
             <SparkBar data={SPARK_COBRO} color="#059669" />
             <p className="text-[11px] font-medium mt-2 flex items-center gap-1 text-emerald-600">
-              ↑ pólizas emitidas este mes
+              ↑ registrados por ti este mes
             </p>
           </button>
         </div>

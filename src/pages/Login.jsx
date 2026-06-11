@@ -4,6 +4,7 @@
 // Mobile:  formulario centrado con logo y fondo sutil
 // ============================================================
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Swal from "sweetalert2";
 import iconoGaman from "../assets/icono_gaman.svg";
@@ -25,6 +26,7 @@ const CAROUSEL_IMAGES = [
 ];
 
 export default function Login() {
+  const navigate = useNavigate();
   const [usuario, setUsuario] = useState("");
   const [contrasena, setContrasena] = useState("");
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -89,7 +91,18 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen w-screen flex bg-[#0f1629]">
+    <div className="min-h-screen w-screen flex bg-[#0f1629] relative">
+      {/* Volver a la landing */}
+      <button
+        onClick={() => navigate("/")}
+        className="absolute top-5 left-5 z-20 flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+        </svg>
+        Inicio
+      </button>
+
       {/* ── IZQUIERDA: carrusel (solo desktop) ── */}
       <div className="hidden md:flex w-1/2 h-screen items-center justify-center bg-[#1a2340]">
         <div className="relative w-[80%] h-[90%] rounded-2xl overflow-hidden shadow-2xl">

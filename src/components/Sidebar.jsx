@@ -9,7 +9,7 @@
 //   AJUSTADOR mobile → top bar mínimo + bottom nav fija
 //   TODOS LOS DEMÁS mobile → top bar + drawer hamburguesa
 // ============================================================
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { logout } from "../auth.js";
 import { NAV_POR_ROL } from "../config/navConfig";
@@ -84,7 +84,8 @@ const LogoSVG = ({ size = 18 }) => (
 // Sólo se renderiza cuando desktopOnly=true (dentro del flex row desktop)
 // ============================================================
 function DesktopSidebar({ usuario, rolNombre, navItems }) {
-  const location = useLocation();
+  const location  = useLocation();
+  const navigate  = useNavigate();
   const [collapsed, setCollapsed] = useState(true);
   const asideRef = useRef(null);
 
@@ -196,17 +197,19 @@ function DesktopSidebar({ usuario, rolNombre, navItems }) {
           )}
         </div>
         <button
-          onClick={() => logout()}
-          title="Cerrar sesión"
+          onClick={() => navigate("/accesos")}
+          title="Ir al inicio"
           className={[
             "flex items-center w-full rounded-xl text-white/50 hover:bg-white/8 hover:text-white transition-all text-sm cursor-pointer py-2.5",
             collapsed ? "justify-center px-0" : "gap-3 px-3",
           ].join(" ")}
         >
           <span className="w-[18px] h-[18px] shrink-0">
-            {getIcon("log-out")}
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="w-full h-full">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+            </svg>
           </span>
-          {!collapsed && <span>Cerrar sesión</span>}
+          {!collapsed && <span>Ir al inicio</span>}
         </button>
       </div>
     </aside>
@@ -219,6 +222,7 @@ function DesktopSidebar({ usuario, rolNombre, navItems }) {
 // ============================================================
 function MobileDrawer({ usuario, rolNombre, navItems }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   const iniciales =
@@ -329,19 +333,18 @@ function MobileDrawer({ usuario, rolNombre, navItems }) {
           })}
         </nav>
 
-        {/* Cerrar sesión */}
+        {/* Ir al inicio */}
         <div className="border-t border-white/10 p-4 shrink-0">
           <button
-            onClick={() => {
-              logout();
-              setOpen(false);
-            }}
+            onClick={() => { navigate("/accesos"); setOpen(false); }}
             className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-white/50 hover:bg-white/8 hover:text-white transition-all text-sm"
           >
             <span className="w-[18px] h-[18px] shrink-0">
-              {getIcon("log-out")}
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="w-full h-full">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+              </svg>
             </span>
-            <span>Cerrar sesión</span>
+            <span>Ir al inicio</span>
           </button>
         </div>
       </div>

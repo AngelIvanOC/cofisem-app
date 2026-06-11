@@ -8,9 +8,11 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getState, subscribe } from "./auth.js";
 
 // ── Páginas públicas ──────────────────────────────────────────
-import PaginaInicio   from "./pages/PaginaInicio";
-import Login          from "./pages/Login";
-import AppLayout      from "./layouts/AppLayout";
+import PaginaLanding    from "./pages/PaginaLanding";
+import PaginaInicio     from "./pages/PaginaInicio";
+import Login            from "./pages/Login";
+import AppLayout        from "./layouts/AppLayout";
+import CofisemLayout    from "./layouts/CofisemLayout";
 import PaginaEnConstruccion from "./pages/PaginaEnConstruccion";
 
 // ── DEV — eliminar antes de producción ────────────────────────
@@ -25,14 +27,15 @@ import OperadorDashboard  from "./pages/operador/OperadorDashboard";
 import OperadorClientes   from "./pages/operador/Clientes";
 import OperadorPolizas    from "./pages/operador/Polizas";
 import { Vendedores as OperadorVendedores } from "./pages/operador/Vendedores";
-import CorteDiario        from "./pages/operador/CorteDiario";
+import CorteOperador      from "./features/corte/CorteOperador";
+import CorteAnalista      from "./features/corte/CorteAnalista";
+import PoliciasDia        from "./features/cofisem/PoliciasDia";
 
 // ── ANALISTA ──────────────────────────────────────────────────
 import AnalistaDashboard from "./pages/analista/AnalistaDashboard";
 import AnalistaPolizas   from "./pages/analista/AnalistaPolizas";
 import AnalistaPagos     from "./pages/analista/AnalistaPagos";
 import AnalistaReportes  from "./pages/analista/AnalistaReportes";
-import AnalistaCorte     from "./pages/analista/AnalistaCorte";
 import OperadorPagos     from "./pages/operador/Pagos";
 
 // ── ADMINISTRACIÓN ────────────────────────────────────────────
@@ -73,14 +76,12 @@ const RUTAS_POR_ROL = {
     "/gaman/cotizaciones/nueva",
     "/gaman/vendedores",
     "/gaman/pagos",
-    "/gaman/corte-diario",
   ],
   ANALISTA: [
     "/gaman/dashboard",
     "/gaman/polizas",
     "/gaman/pagos",
     "/gaman/reportes",
-    "/gaman/corte-diario",
   ],
   ADMINISTRACION: [
     "/gaman/dashboard",
@@ -91,7 +92,6 @@ const RUTAS_POR_ROL = {
     "/gaman/reportes",
     "/gaman/clientes",
     "/gaman/vendedores",
-    "/gaman/corte-diario",
   ],
   CABINERO_SINIESTROS: [
     "/gaman/dashboard",
@@ -217,11 +217,6 @@ function ReportesRoute() {
   return <PaginaEnConstruccion titulo="Reportes" icono="reportes" />;
 }
 
-function CorteRoute({ rolNombre, usuario }) {
-  if (rolNombre === "OPERADOR") return <CorteDiario usuario={usuario} />;
-  return <PaginaEnConstruccion titulo="Corte diario" icono="reportes" />;
-}
-
 function SiniestrosRoute({ rolNombre }) {
   switch (rolNombre) {
     case "CABINERO_SINIESTROS": return <Siniestros />;
@@ -241,8 +236,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* ── Página de inicio (selector de aseguradoras) ── */}
-        <Route path="/" element={<PaginaInicio />} />
+        {/* ── Landing corporativa COFISEM ── */}
+        <Route path="/" element={<PaginaLanding />} />
+
 
         {/* ── DEV ── */}
         <Route path="/gaman/pdf-preview"    element={<PDFPreview />} />
@@ -251,15 +247,25 @@ export default function App() {
         {/* ── Verificación pública de pólizas ── */}
         <Route path="/gaman/verificar/:constancia" element={<VerificarPoliza />} />
 
-        {/* ── Login ── */}
+        {/* ── Área COFISEM con sidebar (accesos + pólizas + cortes) ── */}
+        <Route element={<CofisemLayout />}>
+          <Route path="/accesos"         element={<PaginaInicio />} />
+          <Route path="/polizas"         element={<PoliciasDia   usuario={usuario} />} />
+          <Route path="/corte/operador"  element={<CorteOperador usuario={usuario} />} />
+          <Route path="/corte/analista"  element={<CorteAnalista />} />
+        </Route>
+
+        {/* ── Login unificado ── */}
         <Route
-          path="/gaman/login"
+          path="/login"
           element={
             session && rolNombre
-              ? <Navigate to="/gaman/dashboard" replace />
+              ? <Navigate to="/accesos" replace />
               : <Login />
           }
         />
+        {/* Compatibilidad con ruta antigua */}
+        <Route path="/gaman/login" element={<Navigate to="/login" replace />} />
 
         {/* ── App autenticada (todas bajo /gaman/) ── */}
         {session && rolNombre ? (
@@ -331,16 +337,6 @@ export default function App() {
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/gaman/reportes">
                   <ReportesRoute rolNombre={rolNombre} />
-                </RutaProtegida>
-              }
-            />
-
-            {/* Corte diario */}
-            <Route
-              path="/gaman/corte-diario"
-              element={
-                <RutaProtegida rolNombre={rolNombre} path="/gaman/corte-diario">
-                  <CorteRoute rolNombre={rolNombre} usuario={usuario} />
                 </RutaProtegida>
               }
             />
@@ -441,7 +437,7 @@ export default function App() {
         ) : (
           <>
             {/* Si no autenticado y va a /gaman/ → login */}
-            <Route path="/gaman/*" element={<Navigate to="/gaman/login" replace />} />
+            <Route path="/gaman/*" element={<Navigate to="/login" replace />} />
           </>
         )}
 

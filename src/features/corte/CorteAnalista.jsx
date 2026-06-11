@@ -1,22 +1,15 @@
-// ============================================================
-// src/pages/analista/AnalistaCorte.jsx
-// Analista: Visualización de corte diario por oficina
-// SOLO datos de pólizas — NO muestra sección de pagos/cobros
-// El analista NO puede editar ni cerrar cortes, solo consultar
-// ============================================================
 import { useState } from "react";
 
 const OFICINAS = ["COFISEM AV. E.ZAPATA", "OFICINA CIVAC", "COFISEM TEMIXCO", "COFISEM CUAUTLA"];
 
-// Cortes por oficina — solo hoja de pólizas
 const CORTES_MOCK = {
   "COFISEM AV. E.ZAPATA": {
     fecha: "17/03/2026",
     generadoPor: "Laura Rosher",
     cerrado: true,
     polizas: [
-      { no:1, aseguradora:"QUALITAS", poliza:"3413198", fechaEmision:"17/03/2026", folio:"T0312", vendedor:"MARCO A. CRUZ",  asegurado:"María García López",  vale:0,   primaAnual:5500.00, primaNeta:4200.00, primerPago:2200.00, cobertura:"TAXI BÁSICA 2500",         placas:"VRM-123A", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"CONTADO",    observaciones:"" },
-      { no:2, aseguradora:"GNP",      poliza:"3413167", fechaEmision:"17/03/2026", folio:"T0455", vendedor:"LAURA ROSHER",   asegurado:"Roberto Díaz Ramos",  vale:220, primaAnual:6200.00, primaNeta:4900.00, primerPago:637.00,  cobertura:"SERV. PÚB. 50/50 GAMAN 2",  placas:"CHM-456B", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"4 PARCIALES",observaciones:"" },
+      { no:1, aseguradora:"QUALITAS", poliza:"3413198", fechaEmision:"17/03/2026", vigenciaInicio:"17/03/2026", vigenciaFin:"17/03/2027", folio:"T0312", vendedor:"MARCO A. CRUZ",  asegurado:"María García López",  vale:0,   primaAnual:5500.00, primaNeta:4200.00, primerPago:2200.00, cobertura:"TAXI BÁSICA 2500",         placas:"VRM-123A", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"CONTADO",    observaciones:"" },
+      { no:2, aseguradora:"GNP",      poliza:"3413167", fechaEmision:"17/03/2026", vigenciaInicio:"17/03/2026", vigenciaFin:"17/03/2027", folio:"T0455", vendedor:"LAURA ROSHER",   asegurado:"Roberto Díaz Ramos",  vale:220, primaAnual:6200.00, primaNeta:4900.00, primerPago:637.00,  cobertura:"SERV. PÚB. 50/50 GAMAN 2",  placas:"CHM-456B", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"4 PARCIALES",observaciones:"" },
     ],
   },
   "OFICINA CIVAC": {
@@ -24,8 +17,8 @@ const CORTES_MOCK = {
     generadoPor: "Marco Antonio",
     cerrado: true,
     polizas: [
-      { no:1, aseguradora:"QUALITAS", poliza:"3413241", fechaEmision:"13/03/2026", folio:"T0455", vendedor:"LAURA ROSHER",   asegurado:"Angel Ivan Ortega",  vale:400, primaAnual:8385.69, primaNeta:6318.92, primerPago:2679.33, cobertura:"COBERTURA APP (UBER, DIDI)", placas:"TRAMITE",  uso:"DIDI", tipo:"COCHE", noPago:1, formaPago:"TRIMESTRAL", observaciones:"COMISION PAGADA POLIZA 960972454" },
-      { no:2, aseguradora:"QUALITAS", poliza:"3414002", fechaEmision:"17/03/2026", folio:"T0312", vendedor:"MARCO A. CRUZ",  asegurado:"Rosa Mendoza Lima",   vale:0,   primaAnual:5500.00, primaNeta:4200.00, primerPago:2200.00, cobertura:"TAXI BÁSICA 2500",         placas:"EFG-222H", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"CONTADO",    observaciones:"" },
+      { no:1, aseguradora:"QUALITAS", poliza:"3413241", fechaEmision:"13/03/2026", vigenciaInicio:"13/03/2026", vigenciaFin:"13/03/2027", folio:"T0455", vendedor:"LAURA ROSHER",   asegurado:"Angel Ivan Ortega",  vale:400, primaAnual:8385.69, primaNeta:6318.92, primerPago:2679.33, cobertura:"COBERTURA APP (UBER, DIDI)", placas:"TRAMITE",  uso:"DIDI", tipo:"COCHE", noPago:1, formaPago:"TRIMESTRAL", observaciones:"COMISION PAGADA POLIZA 960972454" },
+      { no:2, aseguradora:"QUALITAS", poliza:"3414002", fechaEmision:"17/03/2026", vigenciaInicio:"17/03/2026", vigenciaFin:"17/03/2027", folio:"T0312", vendedor:"MARCO A. CRUZ",  asegurado:"Rosa Mendoza Lima",   vale:0,   primaAnual:5500.00, primaNeta:4200.00, primerPago:2200.00, cobertura:"TAXI BÁSICA 2500",         placas:"EFG-222H", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"CONTADO",    observaciones:"" },
     ],
   },
   "COFISEM TEMIXCO": {
@@ -33,7 +26,7 @@ const CORTES_MOCK = {
     generadoPor: "Carlos Soto",
     cerrado: false,
     polizas: [
-      { no:1, aseguradora:"QUALITAS", poliza:"3414001", fechaEmision:"17/03/2026", folio:"T0455", vendedor:"LAURA ROSHER",   asegurado:"Pedro Ramos Salinas", vale:0,   primaAnual:6200.00, primaNeta:4900.00, primerPago:2548.00, cobertura:"SERV. PÚB. 50/50 GAMAN 2",  placas:"BCD-111G", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"CONTADO",    observaciones:"Enviada por operadora CIVAC" },
+      { no:1, aseguradora:"QUALITAS", poliza:"3414001", fechaEmision:"17/03/2026", vigenciaInicio:"17/03/2026", vigenciaFin:"17/03/2027", folio:"T0455", vendedor:"LAURA ROSHER",   asegurado:"Pedro Ramos Salinas", vale:0,   primaAnual:6200.00, primaNeta:4900.00, primerPago:2548.00, cobertura:"SERV. PÚB. 50/50 GAMAN 2",  placas:"BCD-111G", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"CONTADO",    observaciones:"Enviada por operadora CIVAC" },
     ],
   },
   "COFISEM CUAUTLA": {
@@ -44,11 +37,8 @@ const CORTES_MOCK = {
   },
 };
 
-const hoy = new Date().toLocaleDateString("es-MX", { weekday:"long", day:"2-digit", month:"long", year:"numeric" });
-
-export default function AnalistaCorte() {
+export default function CorteAnalista() {
   const [oficinaSel, setOficinaSel] = useState(OFICINAS[0]);
-  const [fechaSel,   setFechaSel]   = useState("17/03/2026");
 
   const corte = CORTES_MOCK[oficinaSel];
 
@@ -134,7 +124,7 @@ export default function AnalistaCorte() {
         </div>
       </div>
 
-      {/* Tabla de pólizas — igual que el corte del operador pero readonly */}
+      {/* Tabla de pólizas */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#13193a]">
           <p className="text-sm font-bold text-white">Pólizas emitidas</p>
@@ -158,12 +148,20 @@ export default function AnalistaCorte() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="text-xs" style={{ minWidth:"1100px", width:"100%" }}>
+            <table className="text-xs" style={{ minWidth:"1300px", width:"100%" }}>
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-100">
-                  {["No.","Aseguradora","Póliza","F. Emisión","Folio","Vendedor","Asegurado","Vale $","Prima T. Anual","Prima Neta Anual","Prima 1er Pago","Cobertura","Placas","Uso","Tipo","No. Pago","Forma Pago","Observaciones"].map(h => (
-                    <th key={h} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-3 py-2.5 border-r border-gray-100 last:border-r-0 whitespace-nowrap">{h}</th>
+                  {["No.","Aseguradora","Póliza","F. Emisión"].map(h => (
+                    <th key={h} rowSpan={2} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-3 py-2 border-r border-gray-100 whitespace-nowrap align-bottom">{h}</th>
                   ))}
+                  <th colSpan={2} className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-wide px-3 py-1.5 border-r border-gray-100 border-b border-gray-200 whitespace-nowrap bg-blue-50/40">Vigencia</th>
+                  {["Folio","Vendedor","Asegurado","Vale $","Prima T. Anual","Prima Neta Anual","Prima 1er Pago","Cobertura","Placas","Uso","Tipo","No. Pago","Forma Pago","Observaciones"].map(h => (
+                    <th key={h} rowSpan={2} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-3 py-2 border-r border-gray-100 last:border-r-0 whitespace-nowrap align-bottom">{h}</th>
+                  ))}
+                </tr>
+                <tr className="bg-gray-50/80 border-b border-gray-100">
+                  <th className="text-left text-[10px] font-bold text-blue-500 uppercase tracking-wide px-3 py-1.5 border-r border-gray-100 whitespace-nowrap bg-blue-50/40">Inicio</th>
+                  <th className="text-left text-[10px] font-bold text-blue-500 uppercase tracking-wide px-3 py-1.5 border-r border-gray-100 whitespace-nowrap bg-blue-50/40">Fin</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -173,6 +171,8 @@ export default function AnalistaCorte() {
                     <td className="px-3 py-2.5 font-semibold text-gray-700">{p.aseguradora}</td>
                     <td className="px-3 py-2.5 font-mono font-bold text-[#13193a]">{p.poliza}</td>
                     <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{p.fechaEmision}</td>
+                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap bg-blue-50/30">{p.vigenciaInicio}</td>
+                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap bg-blue-50/30">{p.vigenciaFin}</td>
                     <td className="px-3 py-2.5 font-mono text-gray-600">{p.folio}</td>
                     <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{p.vendedor}</td>
                     <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{p.asegurado}</td>
@@ -192,7 +192,7 @@ export default function AnalistaCorte() {
 
                 {/* Totales */}
                 <tr className="bg-[#13193a]/5 font-bold border-t-2 border-[#13193a]/20">
-                  <td colSpan={7} className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">TOTALES</td>
+                  <td colSpan={9} className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">TOTALES</td>
                   <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">${totalVales.toFixed(2)}</td>
                   <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">${totalAnual.toFixed(2)}</td>
                   <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">${totalNeta.toFixed(2)}</td>

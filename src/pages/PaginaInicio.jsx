@@ -1,9 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import logoQualitas from "../assets/logo_qualitas.png";
-import logoAna from "../assets/logo_ana.png";
-import logoGaman from "../assets/GamanLogo.png";
-import logoHDI from "../assets/logo_hdi.png";
-import logoBanorte from "../assets/logo_banorte.png";
+import logoAna      from "../assets/logo_ana.png";
+import logoGaman    from "../assets/GamanLogo.png";
+import logoHDI      from "../assets/logo_hdi.png";
+import logoBanorte  from "../assets/logo_banorte.png";
 
 const aseguradoras = [
   {
@@ -47,9 +47,10 @@ export default function PaginaInicio() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-[#0d1128] flex flex-col items-center justify-center px-6">
+    <div className="min-h-full bg-[#0d1128] flex flex-col items-center justify-center px-6 py-12">
+
       {/* Encabezado */}
-      <div className="text-center mb-12">
+      <div className="text-center mb-8">
         <p className="text-xs font-semibold uppercase tracking-widest text-blue-400/70 mb-3">
           Sistema de gestión
         </p>
@@ -93,8 +94,7 @@ export default function PaginaInicio() {
         })}
       </div>
 
-      {/* Footer */}
-      <p className="text-[11px] text-white/20 mt-16 text-center">
+      <p className="text-[11px] text-white/15 mt-12 text-center">
         COFISEM · Sistema interno de gestión de pólizas
       </p>
     </div>

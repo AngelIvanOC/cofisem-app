@@ -15,7 +15,6 @@ export const NAV_POR_ROL = {
     { label: "Pólizas",      path: "/gaman/polizas",      icon: "file-text"  },
     { label: "Pagos",        path: "/gaman/pagos",        icon: "credit-card"},
     { label: "Reportes",     path: "/gaman/reportes",     icon: "bar-chart"  },
-    { label: "Corte diario", path: "/gaman/corte-diario", icon: "calendar"   },
   ],
 
   // ── ADMINISTRACIÓN ────────────────────────────────────────
@@ -28,7 +27,6 @@ export const NAV_POR_ROL = {
     { label: "Reportes",      path: "/gaman/reportes",        icon: "bar-chart"  },
     { label: "Clientes",      path: "/gaman/clientes",        icon: "users"      },
     { label: "Vendedores",    path: "/gaman/vendedores",      icon: "hard-hat"   },
-    { label: "Corte diario",  path: "/gaman/corte-diario",   icon: "calendar"   },
   ],
 
   // ── CABINERO SINIESTROS ───────────────────────────────────
