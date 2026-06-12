@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import SelectTypeahead from "../../../components/SelectTypeahead";
 import {
   COBERTURA_BASICA,
   PRECIO_MATRIZ,
@@ -426,7 +427,8 @@ export default function FormCotizacion({
       form.clienteId &&
       fechaInicioValida &&
       !numManualChecking &&
-      !numManualError
+      !numManualError &&
+      (!(permitirNumManual && !esSubsecuente) || numeroManual.trim())
     ),
     4: true,
   };
@@ -896,7 +898,7 @@ export default function FormCotizacion({
                 />
               ) : (
                 <div className="flex gap-2">
-                  <select
+                  <SelectTypeahead
                     value={form.vendedorId ?? ""}
                     onChange={(e) =>
                       setF(
@@ -918,7 +920,7 @@ export default function FormCotizacion({
                           {v.codigo ? ` (${v.codigo})` : ""}
                         </option>
                       ))}
-                  </select>
+                  </SelectTypeahead>
                   <button
                     type="button"
                     onClick={() => setModalVend(true)}
@@ -934,7 +936,7 @@ export default function FormCotizacion({
               <div>
                 <label className={lblCls}>Asegurado {req}</label>
                 <div className="flex gap-2">
-                  <select
+                  <SelectTypeahead
                     value={form.clienteId ?? ""}
                     onChange={(e) => {
                       setF(
@@ -954,7 +956,7 @@ export default function FormCotizacion({
                         {c.nombre} {c.apellido || ""} — {c.rfc}
                       </option>
                     ))}
-                  </select>
+                  </SelectTypeahead>
                   <button
                     type="button"
                     onClick={() => setModalAseg(true)}
@@ -968,7 +970,7 @@ export default function FormCotizacion({
               <div>
                 <label className={lblCls}>Concesionario</label>
                 <div className="flex gap-2">
-                  <select
+                  <SelectTypeahead
                     value={form.concesionario ?? ""}
                     onChange={(e) =>
                       setF(
@@ -999,7 +1001,7 @@ export default function FormCotizacion({
                         {c.label}
                       </option>
                     ))}
-                  </select>
+                  </SelectTypeahead>
                   <button
                     type="button"
                     onClick={() => setModalConc(true)}
@@ -1088,9 +1090,7 @@ export default function FormCotizacion({
               <div>
                 <label className={lblCls}>
                   Número de póliza / constancia manual
-                  <span className="ml-1 normal-case font-normal text-gray-300 tracking-normal">
-                    (opcional — si se deja vacío el sistema lo asigna)
-                  </span>
+                  <span className="text-red-400 ml-1">*</span>
                 </label>
                 <input
                   value={numeroManual}

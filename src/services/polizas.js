@@ -388,7 +388,7 @@ export async function emitirPoliza({
 
   const SELECT_FULL = `
     *,
-    clientes(id, nombre, apellido, rfc, curp, telefono, email, direccion, colonia, ciudad, estado, cp),
+    clientes(id, nombre, apellido, rfc, curp, telefono, email, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
     vendedores(id, nombre, apellido, codigo),
     concesionarios(id, nombre, apellido1, apellido2),
     oficinas(id, nombre),
@@ -498,7 +498,7 @@ export async function fetchPolizaById(id) {
     .from('polizas')
     .select(`
       *,
-      clientes(id, nombre, apellido, rfc, curp, telefono, direccion, colonia, ciudad, estado, cp),
+      clientes(id, nombre, apellido, rfc, curp, telefono, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
       vendedores(id, nombre, apellido, codigo),
       concesionarios(id, nombre, apellido1, apellido2),
       oficinas(id, nombre),
@@ -630,11 +630,17 @@ export function buildPolizaPDF(poliza, oficina, config = {}) {
       constancia:       poliza.constancia || '—',
       usoTarifario:     poliza.uso_tarifario || '15',
       direccion: {
-        calle:    cliente.direccion || '',
-        colonia:  cliente.colonia   || '',
-        municipio:cliente.ciudad    || '',
-        estado:   cliente.estado    || '',
-        cp:       cliente.cp        || '',
+        calle: cliente.direccion
+          || [
+               cliente.calle,
+               cliente.numero_ext,
+               cliente.numero_int ? `Int. ${cliente.numero_int}` : null,
+             ].filter(Boolean).join(' ')
+          || '',
+        colonia:   cliente.colonia || '',
+        municipio: cliente.ciudad  || '',
+        estado:    cliente.estado  || '',
+        cp:        cliente.cp      || '',
       },
     },
 
