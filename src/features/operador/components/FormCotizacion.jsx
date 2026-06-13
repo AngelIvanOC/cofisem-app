@@ -55,6 +55,10 @@ const lblCls =
 const req = <span className="text-red-400 ml-0.5">*</span>;
 
 const ANIOS = getAnios();
+const ANIOS_MANUAL = Array.from(
+  { length: new Date().getFullYear() - 1989 },
+  (_, i) => new Date().getFullYear() - i,
+);
 
 export default function FormCotizacion({
   cotizacionInicial,
@@ -120,6 +124,14 @@ export default function FormCotizacion({
   const [amisError, setAmisError] = useState(false);
   const [serieError, setSerieError] = useState(null);
   const [serieChecking, setSerieChecking] = useState(false);
+  const [modoManual, setModoManual] = useState(false);
+  const [todasMarcas, setTodasMarcas] = useState([]);
+  const [tiposManualDisp, setTiposManualDisp] = useState([]);
+  const [versionesManualDisp, setVersionesManualDisp] = useState([]);
+  const [mrMarca, setMrMarca] = useState("");
+  const [guardandoVehiculo, setGuardandoVehiculo] = useState(false);
+  // null = campos incompletos | 0 = nuevo vehículo | number = CVE existente a reutilizar
+  const [cvePreview, setCvePreview] = useState(null);
 
   // "auto"    → el código lo genera el sistema al completar los campos
   // "busqueda" → el usuario escribió el código primero
@@ -217,6 +229,57 @@ export default function FormCotizacion({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.modelo, form.marca, form.tipoVehiculo, form.version]);
 
+  useEffect(() => {
+    supabase
+      .rpc("get_todas_marcas")
+      .then(({ data }) => {
+        if (data) setTodasMarcas(data);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!form.marca) {
+      setTiposManualDisp([]);
+      return;
+    }
+    supabase
+      .rpc("get_tipos_por_marca", { p_marca: form.marca })
+      .then(({ data }) => setTiposManualDisp(data?.map((r) => r.tipo) ?? []));
+  }, [form.marca]);
+
+  useEffect(() => {
+    if (!form.marca || !form.tipoVehiculo) {
+      setVersionesManualDisp([]);
+      return;
+    }
+    supabase
+      .rpc("get_versiones_por_marca_tipo", {
+        p_marca: form.marca,
+        p_tipo: form.tipoVehiculo,
+      })
+      .then(({ data }) =>
+        setVersionesManualDisp(data?.map((r) => r.dc) ?? []),
+      );
+  }, [form.marca, form.tipoVehiculo]);
+
+  useEffect(() => {
+    if (!modoManual || !form.marca || !form.tipoVehiculo || !form.version.trim()) {
+      setCvePreview(null);
+      return;
+    }
+    supabase
+      .from("vehiculos_amis")
+      .select("cve")
+      .eq("marca", form.marca)
+      .eq("tipo", form.tipoVehiculo)
+      .eq("dc", form.version)
+      .order("anio", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        setCvePreview(data && data.length > 0 ? data[0].cve : 0);
+      });
+  }, [modoManual, form.marca, form.tipoVehiculo, form.version]);
+
   const handleAnio = (e) => {
     amisFuente.current = "auto";
     setForm((f) => ({
@@ -230,13 +293,18 @@ export default function FormCotizacion({
   };
 
   const handleMarca = (e) => {
+    const selectedMarca = e.target.value;
+    const found = todasMarcas.find((m) => m.marca === selectedMarca);
+    setMrMarca(found?.mr ?? "");
     amisFuente.current = "auto";
     setForm((f) => ({
       ...f,
-      marca: e.target.value,
+      marca: selectedMarca,
       tipoVehiculo: "",
       version: "",
       descripcion: "",
+      vehiculoAmisId: null,
+      codAMIS: "",
     }));
   };
 
@@ -253,6 +321,23 @@ export default function FormCotizacion({
   const handleVersion = (e) => {
     amisFuente.current = "auto";
     setF("version", e.target.value);
+  };
+
+  const toggleModoManual = () => {
+    const next = !modoManual;
+    setModoManual(next);
+    amisFuente.current = "auto";
+    setAmisError(false);
+    setMrMarca("");
+    setForm((f) => ({
+      ...f,
+      vehiculoAmisId: null,
+      codAMIS: "",
+      marca: "",
+      tipoVehiculo: "",
+      version: "",
+      descripcion: "",
+    }));
   };
 
   // AMIS como buscador: si se escriben 4 dígitos válidos, rellena los demás campos
@@ -412,17 +497,28 @@ export default function FormCotizacion({
 
   const canNext = {
     1: !!form.coberturaId,
-    2: !!(
-      form.vehiculoAmisId &&
-      form.marca &&
-      form.tipoVehiculo &&
-      form.version.trim() &&
-      form.modelo &&
-      form.serie.trim() &&
-      form.motor.trim() &&
-      form.placas.trim() &&
-      !serieChecking
-    ),
+    2: modoManual
+      ? !!(
+          form.marca &&
+          form.tipoVehiculo &&
+          form.version.trim() &&
+          form.modelo &&
+          form.serie.trim() &&
+          form.motor.trim() &&
+          form.placas.trim() &&
+          !serieChecking
+        )
+      : !!(
+          form.vehiculoAmisId &&
+          form.marca &&
+          form.tipoVehiculo &&
+          form.version.trim() &&
+          form.modelo &&
+          form.serie.trim() &&
+          form.motor.trim() &&
+          form.placas.trim() &&
+          !serieChecking
+        ),
     3: !!(
       form.clienteId &&
       fechaInicioValida &&
@@ -658,41 +754,92 @@ export default function FormCotizacion({
         {/* ── PASO 2: Vehículo ── */}
         {paso === 2 && (
           <div className="space-y-5">
-            <div>
-              <h3 className="text-base font-bold text-[#13193a]">
-                2. Datos del vehículo
-              </h3>
-              <p className="text-sm text-gray-400 mt-0.5">
-                Información del vehículo a asegurar
-              </p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-bold text-[#13193a]">
+                  2. Datos del vehículo
+                </h3>
+                <p className="text-sm text-gray-400 mt-0.5">
+                  Información del vehículo a asegurar
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-1 pt-0.5">
+                <span className="text-[11px] text-gray-400">
+                  ¿No encuentras el vehículo?
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleModoManual}
+                    className={[
+                      "relative w-11 h-6 rounded-full transition-colors focus:outline-none",
+                      modoManual ? "bg-[#13193a]" : "bg-gray-200",
+                    ].join(" ")}
+                  >
+                    <span
+                      className={[
+                        "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
+                        modoManual ? "translate-x-5" : "translate-x-0",
+                      ].join(" ")}
+                    />
+                  </button>
+                  <span className="text-sm font-semibold text-gray-700">
+                    {modoManual ? "Registro manual" : "Catálogo AMIS"}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            {/* Fila 1: Cód. AMIS | Año | Marca
-                Fila 2: Modelo   | Versión | No. Serie
-                Fila 3: No. Motor | Placas | Color
-                Fila 4: Capacidad | Uso */}
             <div className="grid grid-cols-3 gap-4">
               {/* Cód. AMIS */}
               <div>
                 <label className={lblCls}>
-                  Cód. AMIS {req}
-                  {amisError && (
+                  Cód. AMIS {!modoManual && req}
+                  {!modoManual && amisError && (
                     <span className="ml-1 normal-case font-normal text-red-400 text-[10px]">
                       Código no encontrado
                     </span>
                   )}
+                  {modoManual && cvePreview === 0 && (
+                    <span className="ml-1 normal-case font-normal text-blue-500 text-[10px]">
+                      Nuevo — se generará al continuar
+                    </span>
+                  )}
+                  {modoManual && cvePreview > 0 && (
+                    <span className="ml-1 normal-case font-normal text-green-600 text-[10px]">
+                      CVE existente — se reutilizará
+                    </span>
+                  )}
+                  {modoManual && cvePreview === null && (
+                    <span className="ml-1 normal-case font-normal text-gray-400 text-[10px]">
+                      Completa los campos
+                    </span>
+                  )}
                 </label>
                 <input
-                  value={form.codAMIS}
+                  value={
+                    modoManual
+                      ? form.codAMIS || (cvePreview > 0 ? String(cvePreview) : "")
+                      : form.codAMIS
+                  }
                   onChange={handleAmis}
-                  placeholder="Auto o busca por código"
-                  maxLength={4}
+                  placeholder={
+                    modoManual
+                      ? cvePreview === 0
+                        ? "Nuevo (aleatorio)"
+                        : "—"
+                      : "Auto o busca por código"
+                  }
+                  maxLength={modoManual ? undefined : 4}
                   inputMode="numeric"
+                  disabled={modoManual}
                   className={
                     inpCls +
-                    (amisError
-                      ? " border-red-300 focus:border-red-400 focus:ring-red-200"
-                      : "")
+                    (modoManual
+                      ? disCls
+                      : amisError
+                        ? " border-red-300 focus:border-red-400 focus:ring-red-200"
+                        : "")
                   }
                 />
               </div>
@@ -706,7 +853,7 @@ export default function FormCotizacion({
                   className={inpCls}
                 >
                   <option value="">Selecciona año</option>
-                  {ANIOS.map((y) => (
+                  {(modoManual ? ANIOS_MANUAL : ANIOS).map((y) => (
                     <option key={y}>{y}</option>
                   ))}
                 </select>
@@ -718,14 +865,13 @@ export default function FormCotizacion({
                 <select
                   value={form.marca}
                   onChange={handleMarca}
-                  disabled={!form.modelo}
-                  className={inpCls + (!form.modelo ? disCls : "")}
+                  className={inpCls}
                 >
-                  <option value="">
-                    {!form.modelo ? "Elige año primero" : "Selecciona marca"}
-                  </option>
-                  {marcasDisp.map((m) => (
-                    <option key={m}>{m}</option>
+                  <option value="">Selecciona marca</option>
+                  {todasMarcas.map((m) => (
+                    <option key={m.marca} value={m.marca}>
+                      {m.marca}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -733,25 +879,75 @@ export default function FormCotizacion({
               {/* Modelo */}
               <div>
                 <label className={lblCls}>Modelo {req}</label>
-                <select
-                  value={form.tipoVehiculo}
-                  onChange={handleModeloVeh}
-                  disabled={!form.marca}
-                  className={inpCls + (!form.marca ? disCls : "")}
-                >
-                  <option value="">
-                    {!form.marca ? "Elige marca primero" : "Selecciona modelo"}
-                  </option>
-                  {modelosDisp.map((m) => (
-                    <option key={m}>{m}</option>
-                  ))}
-                </select>
+                {modoManual ? (
+                  <>
+                    <input
+                      list="tipos-manual-list"
+                      value={form.tipoVehiculo}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          tipoVehiculo: e.target.value.toUpperCase(),
+                          version: "",
+                          descripcion: "",
+                        }))
+                      }
+                      disabled={!form.marca}
+                      placeholder={
+                        form.marca ? "Escribe o selecciona" : "Elige marca primero"
+                      }
+                      className={inpCls + (!form.marca ? disCls : "")}
+                    />
+                    <datalist id="tipos-manual-list">
+                      {tiposManualDisp.map((t) => (
+                        <option key={t} value={t} />
+                      ))}
+                    </datalist>
+                  </>
+                ) : (
+                  <select
+                    value={form.tipoVehiculo}
+                    onChange={handleModeloVeh}
+                    disabled={!form.marca}
+                    className={inpCls + (!form.marca ? disCls : "")}
+                  >
+                    <option value="">
+                      {!form.marca ? "Elige marca primero" : "Selecciona modelo"}
+                    </option>
+                    {tiposManualDisp.map((t) => (
+                      <option key={t}>{t}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Versión */}
               <div>
                 <label className={lblCls}>Versión {req}</label>
-                {versionesDisp.length > 0 ? (
+                {modoManual ? (
+                  <>
+                    <input
+                      list="versiones-manual-list"
+                      value={form.version}
+                      onChange={(e) => {
+                        amisFuente.current = "auto";
+                        setF("version", e.target.value.toUpperCase());
+                      }}
+                      disabled={!form.tipoVehiculo}
+                      placeholder={
+                        form.tipoVehiculo
+                          ? "Escribe o selecciona"
+                          : "Elige modelo primero"
+                      }
+                      className={inpCls + (!form.tipoVehiculo ? disCls : "")}
+                    />
+                    <datalist id="versiones-manual-list">
+                      {versionesManualDisp.map((v) => (
+                        <option key={v} value={v} />
+                      ))}
+                    </datalist>
+                  </>
+                ) : versionesManualDisp.length > 0 ? (
                   <select
                     value={form.version}
                     onChange={handleVersion}
@@ -763,7 +959,7 @@ export default function FormCotizacion({
                         ? "Elige modelo primero"
                         : "Selecciona versión"}
                     </option>
-                    {versionesDisp.map((v) => (
+                    {versionesManualDisp.map((v) => (
                       <option key={v}>{v}</option>
                     ))}
                   </select>
@@ -1517,13 +1713,72 @@ export default function FormCotizacion({
                   });
                   return;
                 }
+                if (paso === 2 && modoManual) {
+                  setGuardandoVehiculo(true);
+                  try {
+                    const { data, error } = await supabase.rpc(
+                      "insertar_vehiculo_custom",
+                      {
+                        p_mr: mrMarca,
+                        p_marca: form.marca,
+                        p_tipo: form.tipoVehiculo,
+                        p_dc: form.version,
+                        p_anio: parseInt(form.modelo),
+                      },
+                    );
+                    if (error) throw error;
+                    setForm((f) => ({
+                      ...f,
+                      vehiculoAmisId: data.id,
+                      codAMIS: String(data.cve),
+                      descripcion: data.dl || "",
+                    }));
+                  } catch (e) {
+                    await Swal.fire({
+                      icon: "error",
+                      title: "Error al registrar vehículo",
+                      text: e.message,
+                      confirmButtonColor: "#13193a",
+                    });
+                    setGuardandoVehiculo(false);
+                    return;
+                  }
+                  setGuardandoVehiculo(false);
+                }
                 setPaso((p) => p + 1);
               }}
-              disabled={!canNext[paso]}
+              disabled={!canNext[paso] || guardandoVehiculo}
               className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-sm shadow-[#13193a]/15"
             >
-              Siguiente
-              <ChevronRight className="w-4 h-4" />
+              {guardandoVehiculo ? (
+                <>
+                  <svg
+                    className="w-4 h-4 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v8H4z"
+                    />
+                  </svg>
+                  Registrando...
+                </>
+              ) : (
+                <>
+                  Siguiente
+                  <ChevronRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
         )}
