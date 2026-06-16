@@ -868,11 +868,17 @@ export default function FormCotizacion({
                   className={inpCls}
                 >
                   <option value="">Selecciona marca</option>
-                  {todasMarcas.map((m) => (
-                    <option key={m.marca} value={m.marca}>
-                      {m.marca}
-                    </option>
-                  ))}
+                  {modoManual
+                    ? todasMarcas.map((m) => (
+                        <option key={m.marca} value={m.marca}>
+                          {m.marca}
+                        </option>
+                      ))
+                    : marcasDisp.map((marca) => (
+                        <option key={marca} value={marca}>
+                          {marca}
+                        </option>
+                      ))}
                 </select>
               </div>
 
@@ -914,7 +920,7 @@ export default function FormCotizacion({
                     <option value="">
                       {!form.marca ? "Elige marca primero" : "Selecciona modelo"}
                     </option>
-                    {tiposManualDisp.map((t) => (
+                    {modelosDisp.map((t) => (
                       <option key={t}>{t}</option>
                     ))}
                   </select>
@@ -947,7 +953,7 @@ export default function FormCotizacion({
                       ))}
                     </datalist>
                   </>
-                ) : versionesManualDisp.length > 0 ? (
+                ) : versionesDisp.length > 0 ? (
                   <select
                     value={form.version}
                     onChange={handleVersion}
@@ -959,7 +965,7 @@ export default function FormCotizacion({
                         ? "Elige modelo primero"
                         : "Selecciona versión"}
                     </option>
-                    {versionesManualDisp.map((v) => (
+                    {versionesDisp.map((v) => (
                       <option key={v}>{v}</option>
                     ))}
                   </select>
