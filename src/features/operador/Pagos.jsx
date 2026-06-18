@@ -842,7 +842,7 @@ export default function OperadorPagos({ usuario }) {
   const montoVencidas = vencidasList.reduce((s, c) => s + c.monto, 0);
 
   return (
-    <div className="p-6 min-h-full bg-gray-50 space-y-5">
+    <div className="p-6 py-3 min-h-full bg-gray-50 space-y-3">
       <div>
         <h1 className="text-2xl font-bold text-[#13193a]">Pagos</h1>
         <p className="text-gray-400 text-sm mt-0.5">
@@ -852,20 +852,24 @@ export default function OperadorPagos({ usuario }) {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: "Total cobrado", count: cuotasCobradas, money: totalCobrado  },
-          { label: "En adeudo",     count: cuotasAdeudo,   money: totalAdeudo   },
-          { label: "Por recibir",   count: cuotasPend,     money: montoPendiente },
-          { label: "Vencidas",      count: cuotasVencidas, money: montoVencidas },
+          {
+            label: "Total cobrado",
+            count: cuotasCobradas,
+            money: totalCobrado,
+          },
+          { label: "En adeudo", count: cuotasAdeudo, money: totalAdeudo },
+          { label: "Por recibir", count: cuotasPend, money: montoPendiente },
+          { label: "Vencidas", count: cuotasVencidas, money: montoVencidas },
         ].map((m) => (
           <div
             key={m.label}
-            className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm flex flex-col gap-4"
+            className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm flex flex-col gap-2"
           >
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest leading-none">
               {m.label}
             </p>
             <div className="flex items-end justify-between gap-2">
-              <p className="text-4xl font-bold text-[#13193a] tabular-nums leading-none">
+              <p className="text-3xl font-bold text-[#13193a] tabular-nums leading-none">
                 {m.count}
               </p>
               <span className="shrink-0 px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-500 tabular-nums">
