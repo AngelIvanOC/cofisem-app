@@ -1,15 +1,23 @@
-import { useState, useMemo } from "react";
-import { SINIESTROS_INIT } from "./data/siniestrosMock";
+import { useState, useMemo, useEffect } from "react";
 import { STATUS_CLS } from "./constants/estilos";
+import { fetchSiniestros, asignarAjustador } from "../../services/siniestros";
 import ModalDetalle from "./components/ModalDetalle";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 
 export default function Siniestros() {
-  const [siniestros, setSiniestros] = useState(SINIESTROS_INIT);
+  const [siniestros,    setSiniestros]    = useState([]);
+  const [cargando,      setCargando]      = useState(true);
   const [filtroEstatus, setFiltroEstatus] = useState("Todos");
-  const [busqueda, setBusqueda] = useState("");
+  const [busqueda,      setBusqueda]      = useState("");
   const [modalSiniestro, setModalSiniestro] = useState(null);
+
+  useEffect(() => {
+    fetchSiniestros()
+      .then(setSiniestros)
+      .catch(() => {})
+      .finally(() => setCargando(false));
+  }, []);
 
   const sinAsignar = siniestros.filter((s) => !s.ajustador).length;
 
@@ -24,19 +32,21 @@ export default function Siniestros() {
 
   const { paginated: siniestrosPag, page: pageS, setPage: setPageS, totalPages: totalPagesS, total: totalS } = usePagination(filtrados);
 
-  const asignar = (folio, nombreAjustador) => {
+  const asignar = async (folio, aj) => {
+    // aj = { id: uuid, nombre: string }
+    const nombre = aj?.nombre ?? aj;
     setSiniestros((prev) =>
       prev.map((s) =>
-        s.folio === folio
-          ? { ...s, ajustador: nombreAjustador, estatus: "Asignado" }
-          : s,
+        s.folio === folio ? { ...s, ajustador: nombre, estatus: "Asignado" } : s,
       ),
     );
     setModalSiniestro((prev) =>
-      prev?.folio === folio
-        ? { ...prev, ajustador: nombreAjustador, estatus: "Asignado" }
-        : prev,
+      prev?.folio === folio ? { ...prev, ajustador: nombre, estatus: "Asignado" } : prev,
     );
+    const sin = siniestros.find((s) => s.folio === folio);
+    if (sin?.id && aj?.id) {
+      asignarAjustador(sin.id, aj).catch(() => {});
+    }
   };
 
   return (
@@ -120,7 +130,13 @@ export default function Siniestros() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtrados.length === 0 ? (
+              {cargando ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-12 text-sm text-gray-400">
+                    Cargando siniestros...
+                  </td>
+                </tr>
+              ) : filtrados.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}

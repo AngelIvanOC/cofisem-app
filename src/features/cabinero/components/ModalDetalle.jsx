@@ -176,8 +176,8 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
               {modoAsignar && (
                 <PanelAsignar
                   s={s}
-                  onConfirmar={(nombre) => {
-                    onAsignar(s.folio, nombre);
+                  onConfirmar={(aj) => {
+                    onAsignar(s.folio, aj);
                     setModoAsignar(false);
                   }}
                   onCancelar={() => setModoAsignar(false)}

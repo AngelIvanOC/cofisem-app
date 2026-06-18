@@ -217,9 +217,9 @@ function ReportesRoute() {
   return <PaginaEnConstruccion titulo="Reportes" icono="reportes" />;
 }
 
-function SiniestrosRoute({ rolNombre }) {
+function SiniestrosRoute({ rolNombre, usuario }) {
   switch (rolNombre) {
-    case "CABINERO_SINIESTROS": return <Siniestros />;
+    case "CABINERO_SINIESTROS": return <Siniestros usuario={usuario} />;
     case "AJUSTADOR":           return <AjustadorSiniestros />;
     case "SUPERVISOR_SINIESTROS": return <SupervisorSiniestros />;
     default:                    return <Navigate to="/gaman/dashboard" replace />;
@@ -260,7 +260,7 @@ export default function App() {
           path="/login"
           element={
             session && rolNombre
-              ? <Navigate to="/accesos" replace />
+              ? <Navigate to={rolNombre === "CABINERO_SINIESTROS" ? "/gaman/dashboard" : "/accesos"} replace />
               : <Login />
           }
         />
@@ -366,7 +366,7 @@ export default function App() {
               path="/gaman/siniestros"
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/gaman/siniestros">
-                  <SiniestrosRoute rolNombre={rolNombre} />
+                  <SiniestrosRoute rolNombre={rolNombre} usuario={usuario} />
                 </RutaProtegida>
               }
             />
@@ -374,7 +374,7 @@ export default function App() {
               path="/gaman/siniestros/nuevo"
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/gaman/siniestros/nuevo">
-                  <SiniestroNuevo />
+                  <SiniestroNuevo usuario={usuario} />
                 </RutaProtegida>
               }
             />

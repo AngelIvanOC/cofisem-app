@@ -1,15 +1,31 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { detectarTipo, buscarPoliza, TIPO_ICON, TIPO_LABEL } from "./utils/buscarPoliza";
+import { crearSiniestro } from "../../services/siniestros";
 import PolizaCard from "./components/PolizaCard";
 import FormSiniestro from "./components/FormSiniestro";
 import {
   AlertTriangle, Check, ChevronLeft, Loader2, Search,
 } from "lucide-react";
 
-export default function SiniestroNuevo() {
+const MAX_RECIENTES = 5;
+const busqKey = (uid) => `cofisem_sn_busq_${uid}`;
+
+function getRecientes(uid) {
+  try { return JSON.parse(localStorage.getItem(busqKey(uid)) ?? "[]"); } catch { return []; }
+}
+function saveReciente(uid, valor, tipo) {
+  const prev = getRecientes(uid).filter((r) => r.valor !== valor);
+  localStorage.setItem(
+    busqKey(uid),
+    JSON.stringify([{ valor, tipo: tipo ?? "poliza", ts: Date.now() }, ...prev].slice(0, MAX_RECIENTES)),
+  );
+}
+
+export default function SiniestroNuevo({ usuario }) {
   const navigate  = useNavigate();
   const inputRef  = useRef(null);
+  const uid       = usuario?.id ?? "anon";
 
   const [paso,         setPaso]         = useState("buscar");
   const [query,        setQuery]        = useState("");
@@ -18,6 +34,9 @@ export default function SiniestroNuevo() {
   const [poliza,       setPoliza]       = useState(null);
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [loading,      setLoading]      = useState(false);
+  const [recientes,    setRecientes]    = useState([]);
+
+  useEffect(() => { setRecientes(getRecientes(uid)); }, [uid]);
 
   const handleQueryChange = (e) => {
     const v = e.target.value;
@@ -33,6 +52,9 @@ export default function SiniestroNuevo() {
     const result = await buscarPoliza(query);
     setBuscando(false);
     if (result) {
+      const tipo = detectarTipo(query.trim()) ?? "poliza";
+      saveReciente(uid, query.trim(), tipo);
+      setRecientes(getRecientes(uid));
       setPoliza(result);
       setPaso("confirmar");
     } else {
@@ -43,10 +65,20 @@ export default function SiniestroNuevo() {
 
   const handleSubmit = async (form) => {
     setLoading(true);
-    // TODO: supabase.from("siniestros").insert({ poliza_id: poliza.id, ...form })
-    await new Promise((r) => setTimeout(r, 1000));
-    setLoading(false);
-    navigate("/gaman/siniestros");
+    try {
+      await crearSiniestro({
+        polizaId:     poliza.id,
+        clienteId:    poliza.clienteId,
+        folio:        form.nroReporte,
+        form,
+        reportadoPor: usuario?.id ?? null,
+      });
+      navigate("/gaman/siniestros");
+    } catch (e) {
+      alert("Error al guardar el siniestro: " + e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetBusqueda = () => {
@@ -177,26 +209,31 @@ export default function SiniestroNuevo() {
             </p>
           )}
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            {[
-              { label: "🔑 Póliza",    ejemplo: "01250100001024-01"  },
-              { label: "🚗 Placas",    ejemplo: "A757LTS"             },
-              { label: "🔢 No. Serie", ejemplo: "3N1EB31S09K323748"   },
-              { label: "📋 Reporte",   ejemplo: "250423"              },
-            ].map((h) => (
-              <button
-                key={h.label}
-                onClick={() => {
-                  setQuery(h.ejemplo);
-                  setTipoDetect(detectarTipo(h.ejemplo));
-                  setNoEncontrado(false);
-                }}
-                className="text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 hover:border-[#13193a]/30 hover:text-[#13193a] transition-all"
-              >
-                {h.label} — <span className="font-mono">{h.ejemplo}</span>
-              </button>
-            ))}
-          </div>
+          {recientes.length > 0 && (
+            <div className="mt-5">
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+                Búsquedas recientes
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {recientes.map((r) => (
+                  <button
+                    key={r.valor}
+                    onClick={() => {
+                      setQuery(r.valor);
+                      setTipoDetect(r.tipo);
+                      setNoEncontrado(false);
+                    }}
+                    className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 hover:border-[#13193a]/30 hover:text-[#13193a] transition-all flex items-center gap-1.5"
+                  >
+                    <span>{TIPO_ICON[r.tipo]}</span>
+                    <span className="font-medium text-gray-400">{TIPO_LABEL[r.tipo]}</span>
+                    <span className="text-gray-300">—</span>
+                    <span className="font-mono">{r.valor}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

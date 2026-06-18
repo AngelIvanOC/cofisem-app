@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { INP, INP_RO, LBL } from "../constants/estilos";
-import { CAUSAS, CIRCUNSTANCIAS, AJUSTADORES_FORM, TERCERO_VACIO } from "../constants/catalogos";
+import { CAUSAS, CIRCUNSTANCIAS, TERCERO_VACIO } from "../constants/catalogos";
+import { fetchAjustadores } from "../../../services/siniestros";
 import Seccion from "./Seccion";
 import DatoCard from "./DatoCard";
 import TerceroCard from "./TerceroCard";
@@ -10,8 +11,17 @@ import {
   Check, CheckCircle2, ChevronLeft, Loader2, Plus,
 } from "lucide-react";
 
+function generarFolio() {
+  const n   = new Date();
+  const yy  = String(n.getFullYear()).slice(-2);
+  const mm  = String(n.getMonth() + 1).padStart(2, "0");
+  const dd  = String(n.getDate()).padStart(2, "0");
+  const rnd = String(Math.floor(100 + Math.random() * 900));
+  return `${yy}${mm}${dd}${rnd}`;
+}
+
 export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
-  const nroReporteRef = useRef(String(Math.floor(200000 + Math.random() * 99999)));
+  const nroReporteRef = useRef(generarFolio());
   const nroReporte   = nroReporteRef.current;
 
   const fechaHoy = new Date().toLocaleDateString("es-MX", {
@@ -21,8 +31,17 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
     hour: "2-digit", minute: "2-digit", hour12: true,
   });
 
-  const [siniestro, setSiniestro] = useState({ causa: "", circunstancia: "", detalles: "", ajustador: "" });
+  const [siniestro, setSiniestro] = useState({ causa: "", circunstancia: "", detalles: "", ajustador: "", ajustadorId: null });
   const setS = (k, v) => setSiniestro((s) => ({ ...s, [k]: v }));
+
+  const [ajustadores,    setAjustadores]    = useState([]);
+  const [ajustadoresCargando, setAjustadoresCargando] = useState(true);
+  useEffect(() => {
+    fetchAjustadores()
+      .then(setAjustadores)
+      .catch(() => {})
+      .finally(() => setAjustadoresCargando(false));
+  }, []);
 
   const [conductorNA, setConductorNA] = useState({
     nombre: "", telefono: "", esTercero: false,
@@ -193,9 +212,23 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
       <Seccion titulo="Ajustador Asignado">
         <div className="max-w-xs">
           <label className={LBL}>Selecciona el ajustador</label>
-          <select value={siniestro.ajustador} onChange={(e) => setS("ajustador", e.target.value)} className={INP}>
-            <option value="">Selecciona un ajustador</option>
-            {AJUSTADORES_FORM.map((a) => <option key={a}>{a}</option>)}
+          <select
+            value={siniestro.ajustadorId ?? ""}
+            onChange={(e) => {
+              const aj = ajustadores.find((a) => a.id === e.target.value);
+              setSiniestro((s) => ({
+                ...s,
+                ajustadorId: aj?.id ?? null,
+                ajustador:   aj?.nombre ?? "",
+              }));
+            }}
+            disabled={ajustadoresCargando}
+            className={INP}
+          >
+            <option value="">{ajustadoresCargando ? "Cargando..." : "Selecciona un ajustador"}</option>
+            {ajustadores.map((a) => (
+              <option key={a.id} value={a.id}>{a.nombre}</option>
+            ))}
           </select>
         </div>
       </Seccion>

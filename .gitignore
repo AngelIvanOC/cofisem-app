@@ -23,3 +23,4 @@ dist-ssr
 *.sln
 *.sw?
 datos_a_migrar_de_viejo_sistema/
+siniestros/
