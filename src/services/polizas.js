@@ -135,6 +135,7 @@ export async function generarCuotasPoliza(polizaId, formaPago, primaTotal, fecha
     d.setDate(d.getDate() + i * 7);
     cuotas.push({
       poliza_id:         polizaId,
+      num_cuota:         i + 1,
       monto:             i === 0 ? primerPago : pagoSubs,
       fecha_vencimiento: d.toISOString().split('T')[0],
     });

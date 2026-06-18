@@ -33,7 +33,7 @@ export default function AnalistaPagos({ usuario }) {
       const { data: pagosDB, error: e1 } = await supabase
         .from('pagos')
         .select(`
-          id, poliza_id, monto, fecha_pago, estatus,
+          id, poliza_id, monto, fecha_pago, estatus, num_cuota,
           operador:usuarios!pagos_recibido_por_fkey(nombre, apellido, id_muestra),
           polizas(
             constancia, numero_poliza, forma_pago, estatus,
@@ -46,22 +46,7 @@ export default function AnalistaPagos({ usuario }) {
 
       if (e1) throw e1;
 
-      const polizaIds = [...new Set((pagosDB ?? []).map(p => p.poliza_id))];
-      let indexMap = {};
-      if (polizaIds.length > 0) {
-        const { data: todosDB } = await supabase
-          .from('pagos')
-          .select('id, poliza_id, fecha_vencimiento')
-          .in('poliza_id', polizaIds)
-          .order('fecha_vencimiento', { ascending: true });
-        for (const p of (todosDB ?? [])) {
-          if (!indexMap[p.poliza_id]) indexMap[p.poliza_id] = [];
-          indexMap[p.poliza_id].push(p.id);
-        }
-      }
-
       const rowsBuilt = (pagosDB ?? []).map(a => {
-        const siblings    = indexMap[a.poliza_id] ?? [a.id];
         const pol         = a.polizas;
         const op          = a.operador;
         const totalCuotas = pol?.forma_pago === 'CONTADO' ? 1 : 4;
@@ -71,7 +56,7 @@ export default function AnalistaPagos({ usuario }) {
           asegurado:     [pol?.clientes?.nombre, pol?.clientes?.apellido].filter(Boolean).join(' '),
           oficina:       pol?.oficinas?.nombre ?? '',
           formaPago:     pol?.forma_pago ?? '',
-          cuota:         `${siblings.indexOf(a.id) + 1}/${totalCuotas}`,
+          cuota:         `${a.num_cuota ?? '?'}/${totalCuotas}`,
           monto:         Number(a.monto),
           fecha:         a.fecha_pago ? isoAMX(a.fecha_pago) : '—',
           solicitadoPor: op ? `${op.nombre ?? ''} ${op.apellido ?? ''}`.trim() || `OP-${op.id_muestra}` : '—',

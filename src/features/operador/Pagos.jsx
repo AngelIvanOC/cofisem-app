@@ -575,7 +575,7 @@ export default function OperadorPagos({ usuario }) {
       : null;
     return {
       id: c.id,
-      num: idx + 1,
+      num: c.num_cuota ?? (idx + 1),
       vto: isoAMX(vtoISO), // emisión — usado en cálculos de vencimiento
       vigencia: vigencia, // vigencia = emisión + 7d — mostrada al usuario
       monto: Number(c.monto),
@@ -598,7 +598,7 @@ export default function OperadorPagos({ usuario }) {
       const { data, error } = await supabase
         .from("pagos")
         .select(
-          "id, poliza_id, monto, fecha_pago, fecha_vencimiento, estatus, forma_pago, referencia",
+          "id, poliza_id, num_cuota, monto, fecha_pago, fecha_vencimiento, estatus, forma_pago, referencia",
         )
         .range(desde, desde + PAGE - 1)
         .order("fecha_vencimiento", { ascending: true });
