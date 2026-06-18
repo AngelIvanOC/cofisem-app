@@ -400,10 +400,17 @@ export async function emitirPoliza({
   let newId;
 
   if (polizaId) {
-    // Detectar si es SUBSECUENTE (constancia pre-asignada — no regenerar)
+    // Detectar si es SUBSECUENTE o RENOVACION (constancia pre-asignada — no regenerar)
     const { data: existente } = await supabase
-      .from('polizas').select('estatus').eq('id', polizaId).single();
+      .from('polizas').select('estatus, notas').eq('id', polizaId).single();
     const esSubsecuente = existente?.estatus === 'SUBSECUENTE';
+    const esRenovacion  = existente?.estatus === 'RENOVACION';
+
+    // Leer renovacionDeId ANTES de que el update limpie notas
+    let renovacionDeId = null;
+    if (esRenovacion) {
+      try { renovacionDeId = JSON.parse(existente.notas ?? '{}').renovacionDeId ?? null; } catch {}
+    }
 
     const { error: eu } = await supabase
       .from('polizas')
@@ -417,13 +424,17 @@ export async function emitirPoliza({
     if (eu) throw eu;
     newId = polizaId;
 
-    if (esSubsecuente) {
+    if (esSubsecuente || esRenovacion) {
       // Constancia ya está asignada — solo actualizar datos y generar cuotas
       const { data: final, error: ef } = await supabase
         .from('polizas').update({ estatus: 'VIGENTE' }).eq('id', newId)
         .select(SELECT_FULL).single();
       if (ef) throw ef;
       await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
+      // Si es renovación: cancelar la póliza anterior
+      if (esRenovacion && renovacionDeId) {
+        await supabase.from('polizas').update({ estatus: 'CANCELADA' }).eq('id', renovacionDeId);
+      }
       return final;
     }
   } else {
@@ -490,6 +501,93 @@ export async function emitirPoliza({
   await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
 
   return final;
+}
+
+// ── Renovar póliza (incrementa el sufijo de la constancia) ───────────────
+// Ejemplo: 01261100000159-01 → 01261100000159-02
+export async function renovarPoliza(polizaId, creadoPor) {
+  // 1. Obtener póliza original
+  const { data: original, error: e0 } = await supabase
+    .from('polizas')
+    .select('*')
+    .eq('id', polizaId)
+    .single();
+  if (e0) throw e0;
+
+  // 2. Parsear constancia y calcular siguiente sufijo
+  const constanciaOrig = original.constancia ?? original.numero_poliza ?? '';
+  const match = constanciaOrig.match(/^(.+)-(\d+)$/);
+  if (!match) throw new Error('Formato de constancia inválido para renovación');
+  const base           = match[1];
+  const siguienteSufijo = String(parseInt(match[2], 10) + 1).padStart(2, '0');
+  const nuevaConstancia = `${base}-${siguienteSufijo}`;
+
+  // 3. Verificar que la nueva constancia no exista
+  const { data: duplicado } = await supabase
+    .from('polizas')
+    .select('id')
+    .eq('constancia', nuevaConstancia)
+    .maybeSingle();
+  if (duplicado) throw new Error(`La póliza ${nuevaConstancia} ya existe`);
+
+  // 4. Calcular nuevas fechas (inicio = día siguiente al vencimiento original)
+  const fechaInicioNueva = (() => {
+    const d = new Date((original.fecha_fin ?? new Date().toISOString().split('T')[0]) + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  })();
+  const fechaFinNueva = (() => {
+    const d = new Date(fechaInicioNueva + 'T12:00:00');
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().split('T')[0];
+  })();
+
+  // 5. Insertar nueva póliza copiando los datos del original
+  const notasOrig = (() => {
+    try { return JSON.parse(original.notas ?? '{}'); } catch { return {}; }
+  })();
+  const { data: nueva, error: e1 } = await supabase
+    .from('polizas')
+    .insert({
+      constancia:         nuevaConstancia,
+      numero_poliza:      nuevaConstancia,
+      cliente_id:         original.cliente_id,
+      vendedor_id:        original.vendedor_id,
+      vehiculo_amis_id:   original.vehiculo_amis_id,
+      concesionario_id:   original.concesionario_id ?? null,
+      anio:               original.anio,
+      placas:             original.placas,
+      num_serie:          original.num_serie,
+      num_motor:          original.num_motor,
+      capacidad:          original.capacidad,
+      uso:                original.uso,
+      tipo_servicio:      original.tipo_servicio,
+      aseguradora:        original.aseguradora,
+      tipo_poliza:        original.tipo_poliza,
+      cobertura_id:       original.cobertura_id,
+      forma_pago:         original.forma_pago,
+      fecha_inicio:       fechaInicioNueva,
+      fecha_fin:          fechaFinNueva,
+      hora_inicio:        '00:00:00 hrs.',
+      hora_fin:           '23:59:59 hrs.',
+      en_letras:          original.en_letras,
+      cp_asegurado:       original.cp_asegurado,
+      uso_tarifario:      original.uso_tarifario,
+      conductor_habitual: original.conductor_habitual,
+      conductor_sexo:     original.conductor_sexo,
+      conductor_edad:     original.conductor_edad,
+      descuento:          0,
+      recargo:            0,
+      estatus:            'RENOVACION',
+      oficina_id:         original.oficina_id,
+      creado_por:         creadoPor || null,
+      notas:              JSON.stringify({ ...notasOrig, renovacionDeId: polizaId }),
+    })
+    .select('id')
+    .single();
+  if (e1) throw e1;
+
+  return { id: nueva.id, constancia: nuevaConstancia };
 }
 
 // ── Cargar póliza completa por ID (para generar PDF) ──────────────────────

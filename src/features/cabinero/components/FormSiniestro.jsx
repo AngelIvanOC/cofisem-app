@@ -1,15 +1,12 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { INP, INP_RO, LBL } from "../constants/estilos";
-import { CAUSAS, CIRCUNSTANCIAS, TERCERO_VACIO } from "../constants/catalogos";
+import { CAUSAS, CIRCUNSTANCIAS } from "../constants/catalogos";
 import { fetchAjustadores } from "../../../services/siniestros";
 import Seccion from "./Seccion";
 import DatoCard from "./DatoCard";
-import TerceroCard from "./TerceroCard";
 import SeccionConductorNA from "./SeccionConductorNA";
 import SeccionLocalizacion from "./SeccionLocalizacion";
-import {
-  Check, CheckCircle2, ChevronLeft, Loader2, Plus,
-} from "lucide-react";
+import { Check, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
 
 function generarFolio() {
   const n   = new Date();
@@ -22,7 +19,7 @@ function generarFolio() {
 
 export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
   const nroReporteRef = useRef(generarFolio());
-  const nroReporte   = nroReporteRef.current;
+  const nroReporte    = nroReporteRef.current;
 
   const fechaHoy = new Date().toLocaleDateString("es-MX", {
     day: "2-digit", month: "2-digit", year: "numeric",
@@ -31,10 +28,12 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
     hour: "2-digit", minute: "2-digit", hour12: true,
   });
 
-  const [siniestro, setSiniestro] = useState({ causa: "", circunstancia: "", detalles: "", ajustador: "", ajustadorId: null });
+  const [siniestro, setSiniestro] = useState({
+    causa: "", circunstancia: "", detalles: "", ajustador: "", ajustadorId: null,
+  });
   const setS = (k, v) => setSiniestro((s) => ({ ...s, [k]: v }));
 
-  const [ajustadores,    setAjustadores]    = useState([]);
+  const [ajustadores,         setAjustadores]         = useState([]);
   const [ajustadoresCargando, setAjustadoresCargando] = useState(true);
   useEffect(() => {
     fetchAjustadores()
@@ -51,17 +50,6 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
   const [localizacion, setLocalizacion] = useState({
     estado: "", municipio: "", cp: "", colonia: "", calle: "", numero: "", referencia: "",
   });
-
-  const [terceros, setTerceros] = useState([TERCERO_VACIO()]);
-  const agregarTercero  = () => setTerceros((t) => [...t, TERCERO_VACIO()]);
-  const eliminarTercero = (id) => {
-    if (terceros.length > 1) setTerceros((t) => t.filter((x) => x.id !== id));
-  };
-  const actualizarTercero = useCallback((id, campo, valor) => {
-    setTerceros((t) => t.map((x) => (x.id === id ? { ...x, [campo]: valor } : x)));
-  }, []);
-
-  const terceroVacio = terceros.length === 1 && !terceros[0].vehiculoPlacas && !terceros[0].vehiculoDesc;
 
   return (
     <div className="space-y-4 pb-10">
@@ -130,49 +118,6 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
       {/* Conductor del asegurado */}
       <SeccionConductorNA data={conductorNA} onChange={setConductorNA} />
 
-      {/* Vehículos terceros */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="bg-[#13193a] px-5 py-3.5 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-white tracking-wide">Vehículos Terceros / Afectados</h3>
-            <p className="text-white/40 text-xs mt-0.5">
-              {terceroVacio
-                ? "Sin vehículos terceros registrados"
-                : `${terceros.length} ${terceros.length === 1 ? "vehículo" : "vehículos"}`}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={agregarTercero}
-            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all border border-white/20"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Agregar tercero
-          </button>
-        </div>
-        <div className="p-5 space-y-4">
-          {terceros.map((t, i) => (
-            <TerceroCard
-              key={t.id}
-              tercero={t}
-              index={i}
-              onChange={actualizarTercero}
-              onRemove={eliminarTercero}
-            />
-          ))}
-          {terceros.length >= 2 && (
-            <button
-              type="button"
-              onClick={agregarTercero}
-              className="w-full py-3 border-2 border-dashed border-gray-200 rounded-2xl text-sm text-gray-400 hover:border-[#13193a]/25 hover:text-[#13193a] hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Agregar otro vehículo tercero
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Información del siniestro */}
       <Seccion titulo="Información del Siniestro">
         <div className="space-y-4">
@@ -218,7 +163,7 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
               const aj = ajustadores.find((a) => a.id === e.target.value);
               setSiniestro((s) => ({
                 ...s,
-                ajustadorId: aj?.id ?? null,
+                ajustadorId: aj?.id   ?? null,
                 ajustador:   aj?.nombre ?? "",
               }));
             }}
@@ -246,7 +191,7 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
         </button>
         <button
           type="button"
-          onClick={() => onSubmit({ ...siniestro, nroReporte, conductorNA, localizacion, terceros })}
+          onClick={() => onSubmit({ ...siniestro, nroReporte, conductorNA, localizacion })}
           disabled={loading}
           className="flex items-center gap-2 px-8 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all disabled:opacity-60 shadow-lg shadow-[#13193a]/15"
         >

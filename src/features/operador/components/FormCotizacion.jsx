@@ -230,11 +230,9 @@ export default function FormCotizacion({
   }, [form.modelo, form.marca, form.tipoVehiculo, form.version]);
 
   useEffect(() => {
-    supabase
-      .rpc("get_todas_marcas")
-      .then(({ data }) => {
-        if (data) setTodasMarcas(data);
-      });
+    supabase.rpc("get_todas_marcas").then(({ data }) => {
+      if (data) setTodasMarcas(data);
+    });
   }, []);
 
   useEffect(() => {
@@ -257,13 +255,16 @@ export default function FormCotizacion({
         p_marca: form.marca,
         p_tipo: form.tipoVehiculo,
       })
-      .then(({ data }) =>
-        setVersionesManualDisp(data?.map((r) => r.dc) ?? []),
-      );
+      .then(({ data }) => setVersionesManualDisp(data?.map((r) => r.dc) ?? []));
   }, [form.marca, form.tipoVehiculo]);
 
   useEffect(() => {
-    if (!modoManual || !form.marca || !form.tipoVehiculo || !form.version.trim()) {
+    if (
+      !modoManual ||
+      !form.marca ||
+      !form.tipoVehiculo ||
+      !form.version.trim()
+    ) {
       setCvePreview(null);
       return;
     }
@@ -494,6 +495,7 @@ export default function FormCotizacion({
   };
 
   const esSubsecuente = cotizacionInicial?.esSubsecuente === true;
+  const esRenovacion = cotizacionInicial?.esRenovacion === true;
 
   const canNext = {
     1: !!form.coberturaId,
@@ -819,7 +821,8 @@ export default function FormCotizacion({
                 <input
                   value={
                     modoManual
-                      ? form.codAMIS || (cvePreview > 0 ? String(cvePreview) : "")
+                      ? form.codAMIS ||
+                        (cvePreview > 0 ? String(cvePreview) : "")
                       : form.codAMIS
                   }
                   onChange={handleAmis}
@@ -900,7 +903,9 @@ export default function FormCotizacion({
                       }
                       disabled={!form.marca}
                       placeholder={
-                        form.marca ? "Escribe o selecciona" : "Elige marca primero"
+                        form.marca
+                          ? "Escribe o selecciona"
+                          : "Elige marca primero"
                       }
                       className={inpCls + (!form.marca ? disCls : "")}
                     />
@@ -918,7 +923,9 @@ export default function FormCotizacion({
                     className={inpCls + (!form.marca ? disCls : "")}
                   >
                     <option value="">
-                      {!form.marca ? "Elige marca primero" : "Selecciona modelo"}
+                      {!form.marca
+                        ? "Elige marca primero"
+                        : "Selecciona modelo"}
                     </option>
                     {modelosDisp.map((t) => (
                       <option key={t}>{t}</option>
@@ -1255,7 +1262,7 @@ export default function FormCotizacion({
                 </select>
               </div>
               <div className="flex flex-col justify-end">
-                <label className={lblCls}>Tipo de cliente</label>
+                <label className={lblCls}>Tipo de cuota</label>
                 <div className="flex items-center gap-3 h-[38px]">
                   <button
                     type="button"
@@ -1443,12 +1450,17 @@ export default function FormCotizacion({
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
                 {[
-                  { l: "No. cotización", v: nroCot },
+                  {
+                    l: esRenovacion
+                      ? "No. póliza (renovación)"
+                      : "No. cotización",
+                    v: nroCot,
+                  },
                   { l: "Vendedor", v: vendedorLabel },
                   { l: "Asegurado", v: clienteLabel },
                   { l: "Concesionario", v: concLabel },
                   {
-                    l: "Tipo de cliente",
+                    l: "Tipo de cuota",
                     v: form.esGestor ? "Gestor" : "Normal",
                   },
                   {
@@ -1660,14 +1672,16 @@ export default function FormCotizacion({
 
             {/* Acciones */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <button
-                onClick={handleGuardar}
-                disabled={isGuardando}
-                className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl border-2 border-[#13193a] text-sm font-bold text-[#13193a] hover:bg-[#13193a]/5 transition-all disabled:opacity-50"
-              >
-                <Download className="w-4 h-4 shrink-0" />
-                {isGuardando ? "Guardando..." : "Guardar cotización"}
-              </button>
+              {!esRenovacion && (
+                <button
+                  onClick={handleGuardar}
+                  disabled={isGuardando}
+                  className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl border-2 border-[#13193a] text-sm font-bold text-[#13193a] hover:bg-[#13193a]/5 transition-all disabled:opacity-50"
+                >
+                  <Download className="w-4 h-4 shrink-0" />
+                  {isGuardando ? "Guardando..." : "Guardar cotización"}
+                </button>
+              )}
 
               <button
                 onClick={handleEmitir}

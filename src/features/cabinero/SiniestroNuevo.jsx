@@ -2,11 +2,10 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { detectarTipo, buscarPoliza, TIPO_ICON, TIPO_LABEL } from "./utils/buscarPoliza";
 import { crearSiniestro } from "../../services/siniestros";
-import PolizaCard from "./components/PolizaCard";
+import PolizaCard    from "./components/PolizaCard";
 import FormSiniestro from "./components/FormSiniestro";
-import {
-  AlertTriangle, Check, ChevronLeft, Loader2, Search,
-} from "lucide-react";
+import ReporteExito  from "./components/ReporteExito";
+import { AlertTriangle, Check, ChevronLeft, Loader2, Search } from "lucide-react";
 
 const MAX_RECIENTES = 5;
 const busqKey = (uid) => `cofisem_sn_busq_${uid}`;
@@ -21,11 +20,17 @@ function saveReciente(uid, valor, tipo) {
     JSON.stringify([{ valor, tipo: tipo ?? "poliza", ts: Date.now() }, ...prev].slice(0, MAX_RECIENTES)),
   );
 }
+function fmtTime(d) {
+  return d.toLocaleTimeString("es-MX", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  });
+}
 
 export default function SiniestroNuevo({ usuario }) {
-  const navigate  = useNavigate();
-  const inputRef  = useRef(null);
-  const uid       = usuario?.id ?? "anon";
+  const navigate      = useNavigate();
+  const inputRef      = useRef(null);
+  const horaInicioRef = useRef(null);
+  const uid           = usuario?.id ?? "anon";
 
   const [paso,         setPaso]         = useState("buscar");
   const [query,        setQuery]        = useState("");
@@ -35,8 +40,14 @@ export default function SiniestroNuevo({ usuario }) {
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [loading,      setLoading]      = useState(false);
   const [recientes,    setRecientes]    = useState([]);
+  const [resultado,    setResultado]    = useState(null);
 
   useEffect(() => { setRecientes(getRecientes(uid)); }, [uid]);
+
+  // Captura la hora exacta en que el cabinero empieza a llenar el formulario
+  useEffect(() => {
+    if (paso === "formulario") horaInicioRef.current = new Date();
+  }, [paso]);
 
   const handleQueryChange = (e) => {
     const v = e.target.value;
@@ -66,14 +77,27 @@ export default function SiniestroNuevo({ usuario }) {
   const handleSubmit = async (form) => {
     setLoading(true);
     try {
+      const horaFin    = new Date();
+      const horaInicio = horaInicioRef.current ?? horaFin;
+      const minutos    = ((horaFin - horaInicio) / 60000).toFixed(2);
+
       await crearSiniestro({
-        polizaId:     poliza.id,
-        clienteId:    poliza.clienteId,
-        folio:        form.nroReporte,
+        polizaId:          poliza.id,
+        clienteId:         poliza.clienteId,
+        folio:             form.nroReporte,
         form,
-        reportadoPor: usuario?.id ?? null,
+        reportadoPor:      usuario?.id ?? null,
+        horaInicioReporte: horaInicio.toISOString(), // timestamptz completo para calcular intervalo con created_at
       });
-      navigate("/gaman/siniestros");
+
+      setResultado({
+        folio:      form.nroReporte,
+        ajustador:  form.ajustador || null,
+        horaInicio: fmtTime(horaInicio),
+        horaFin:    fmtTime(horaFin),
+        minutos,
+      });
+      setPaso("exito");
     } catch (e) {
       alert("Error al guardar el siniestro: " + e.message);
     } finally {
@@ -88,6 +112,15 @@ export default function SiniestroNuevo({ usuario }) {
     setNoEncontrado(false);
     setPaso("buscar");
   };
+
+  // Pantalla de éxito — sin header de pasos
+  if (paso === "exito" && resultado) {
+    return (
+      <div className="p-6 min-h-full bg-gray-50">
+        <ReporteExito {...resultado} />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 min-h-full bg-gray-50">
@@ -132,9 +165,7 @@ export default function SiniestroNuevo({ usuario }) {
                           : "bg-gray-100 text-gray-400"
                     }`}
                   >
-                    {s.done ? (
-                      <Check className="w-3.5 h-3.5" />
-                    ) : s.n}
+                    {s.done ? <Check className="w-3.5 h-3.5" /> : s.n}
                   </div>
                   <span className={`text-xs font-medium ${isActive ? "text-[#13193a]" : "text-gray-400"}`}>
                     {s.label}
@@ -189,15 +220,9 @@ export default function SiniestroNuevo({ usuario }) {
               className="h-11 px-6 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-semibold transition-all disabled:opacity-40 flex items-center gap-2 shrink-0"
             >
               {buscando ? (
-                <>
-                  <Loader2 className="animate-spin w-4 h-4" />
-                  Buscando...
-                </>
+                <><Loader2 className="animate-spin w-4 h-4" />Buscando...</>
               ) : (
-                <>
-                  <Search className="w-4 h-4" />
-                  Buscar
-                </>
+                <><Search className="w-4 h-4" />Buscar</>
               )}
             </button>
           </div>

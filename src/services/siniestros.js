@@ -173,10 +173,10 @@ export async function buscarPolizaParaSiniestro(valor) {
 }
 
 // ── Insertar nuevo siniestro ───────────────────────────────────
-export async function crearSiniestro({ polizaId, clienteId, folio, form, reportadoPor }) {
-  const { causa, circunstancia, detalles, ajustadorId, conductorNA, localizacion, terceros } = form;
+export async function crearSiniestro({ polizaId, clienteId, folio, form, reportadoPor, horaInicioReporte }) {
+  const { causa, circunstancia, detalles, ajustadorId, conductorNA, localizacion } = form;
 
-  // Cadena condensada para búsqueda/display rápido
+  // Cadena condensada para display rápido
   const ubicacion = [
     localizacion?.calle
       ? `${localizacion.calle}${localizacion.numero ? ` #${localizacion.numero}` : ""}`
@@ -186,9 +186,6 @@ export async function crearSiniestro({ polizaId, clienteId, folio, form, reporta
     localizacion?.estado,
     localizacion?.cp ? `C.P. ${localizacion.cp}` : null,
   ].filter(Boolean).join(", ") || null;
-
-  // Primer tercero para columnas legacy (búsqueda rápida)
-  const primerTercero = (terceros ?? []).find((t) => t.vehiculoPlacas || t.vehiculoDesc);
 
   const now     = new Date();
   const horaStr = now.toLocaleTimeString("es-MX", {
@@ -207,57 +204,30 @@ export async function crearSiniestro({ polizaId, clienteId, folio, form, reporta
       tipo_siniestro: causa         || null,
       circunstancia:  circunstancia || null,
       descripcion:    detalles      || null,
-      // Localización (columnas individuales + cadena condensada)
+      // Localización
       ubicacion,
-      estado:     localizacion?.estado    || null,
-      municipio:  localizacion?.municipio || null,
-      cp:         localizacion?.cp        || null,
-      colonia:    localizacion?.colonia   || null,
-      calle:      localizacion?.calle     || null,
-      numero_ext: localizacion?.numero    || null,
+      estado:     localizacion?.estado     || null,
+      municipio:  localizacion?.municipio  || null,
+      cp:         localizacion?.cp         || null,
+      colonia:    localizacion?.colonia    || null,
+      calle:      localizacion?.calle      || null,
+      numero_ext: localizacion?.numero     || null,
       referencia: localizacion?.referencia || null,
       // Conductor del asegurado
-      conductor_nombre:            conductorNA?.nombre              || null,
-      conductor_telefono:          conductorNA?.telefono            || null,
-      conductor_es_tercero:        conductorNA?.esTercero           ?? false,
+      conductor_nombre:            conductorNA?.nombre               || null,
+      conductor_telefono:          conductorNA?.telefono             || null,
+      conductor_es_tercero:        conductorNA?.esTercero            ?? false,
       conductor_contacto_nombre:   conductorNA?.contactoExtraNombre  || null,
       conductor_contacto_telefono: conductorNA?.contactoExtraTelefono || null,
-      // Primer tercero (legacy — para búsqueda rápida)
-      tercero_nombre:   primerTercero?.vehiculoDesc   || null,
-      tercero_telefono: null,
-      tercero_vehiculo: primerTercero
-        ? [primerTercero.vehiculoDesc, primerTercero.vehiculoTipo, primerTercero.vehiculoColor]
-            .filter(Boolean).join(" ") || null
-        : null,
-      tercero_placas: primerTercero?.vehiculoPlacas || null,
-      // Ajustador y estatus
-      ajustador_id:  ajustadorId || null,
-      estatus:       ajustadorId ? "Asignado" : "Reportado",
-      reportado_por: reportadoPor || null,
+      // Ajustador, estatus y tiempos del reporte
+      ajustador_id:        ajustadorId      || null,
+      estatus:             ajustadorId ? "Asignado" : "Reportado",
+      reportado_por:       reportadoPor     || null,
+      hora_inicio_reporte: horaInicioReporte || null,  // timestamptz — hora_fin = created_at
     })
     .select("id, numero_siniestro")
     .single();
   if (error) throw error;
-
-  // Insertar todos los terceros en su tabla dedicada
-  const tercerosConDatos = (terceros ?? []).filter(
-    (t) => t.vehiculoPlacas || t.vehiculoDesc || t.vehiculoSerie,
-  );
-  if (tercerosConDatos.length > 0) {
-    const { error: errT } = await supabase.from("siniestros_terceros").insert(
-      tercerosConDatos.map((t) => ({
-        siniestro_id:    data.id,
-        vehiculo_desc:   t.vehiculoDesc   || null,
-        vehiculo_tipo:   t.vehiculoTipo   || null,
-        vehiculo_color:  t.vehiculoColor  || null,
-        vehiculo_modelo: t.vehiculoModelo || null,
-        vehiculo_placas: t.vehiculoPlacas || null,
-        vehiculo_serie:  t.vehiculoSerie  || null,
-        vehiculo_motor:  t.vehiculoMotor  || null,
-      })),
-    );
-    if (errT) throw errT;
-  }
 
   return data;
 }
