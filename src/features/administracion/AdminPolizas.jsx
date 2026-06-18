@@ -16,6 +16,8 @@ import { actualizarNombreConcesionario } from "../../services/concesionarios";
 import { pdf, PDFViewer } from "@react-pdf/renderer";
 import EndosoCancelacionPDF from "../../components/pdf/EndosoCancelacionPDF";
 import CancelacionProrrataPDF from "../../components/pdf/CancelacionProrrataPDF";
+import PolizaPDF from "../../components/pdf/PolizaPDF";
+import { generateQR } from "../../utils/generateQR";
 import Swal from "sweetalert2";
 import StatusBadge from "../operador/components/StatusBadge";
 import { usePagination } from "../../hooks/usePagination";
@@ -23,6 +25,7 @@ import Paginator from "../../components/Paginator";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
   Eye,
   Loader2,
   Pencil,
@@ -1157,6 +1160,272 @@ function ModalCancelarProrrata({ poliza, onClose, onDone }) {
   );
 }
 
+// ── Detalle de póliza ─────────────────────────────────────────
+const fmtMXNAdmin = (n) =>
+  `$${Number(n || 0).toLocaleString("es-MX", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+function CuotaEstatusAdmin({ estatus }) {
+  const e = (estatus ?? "").toUpperCase();
+  if (e === "PAGADO" || e === "PAGADA")
+    return (
+      <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
+        Pagado
+      </span>
+    );
+  if (e === "VENCIDO" || e === "VENCIDA")
+    return (
+      <span className="text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">
+        Vencido
+      </span>
+    );
+  return (
+    <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
+      Pendiente
+    </span>
+  );
+}
+
+function DetallePolizaAdmin({ poliza, pagos, config, onVolver }) {
+  const cliente = poliza.clientes ?? {};
+  const vendedor = poliza.vendedores ?? {};
+  const concesionario = poliza.concesionarios ?? null;
+  const oficina = poliza.oficinas ?? {};
+
+  const clienteLabel =
+    [cliente.nombre, cliente.apellido].filter(Boolean).join(" ") || "—";
+  const vendedorLabel =
+    [vendedor.nombre, vendedor.apellido].filter(Boolean).join(" ") || "—";
+  const concLabel = concesionario
+    ? [concesionario.nombre, concesionario.apellido1, concesionario.apellido2]
+        .filter(Boolean)
+        .join(" ")
+    : "—";
+
+  const emision = poliza.created_at
+    ? new Date(poliza.created_at).toLocaleDateString("es-MX", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    : "—";
+
+  const primaNeta = poliza.coberturas?.prima_neta ?? 0;
+  const derechos  = config?.derechos_emision ?? 400;
+  const ivaPct    = config?.iva_pct ?? 16;
+  const subtotal  = +(primaNeta + derechos).toFixed(2);
+  const iva       = +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);
+  const total     = +(primaNeta + derechos + iva).toFixed(2);
+
+  const cuotas = [...(pagos ?? [])]
+    .sort((a, b) => new Date(a.fecha_vencimiento) - new Date(b.fecha_vencimiento))
+    .map((q, i) => ({
+      num: i + 1,
+      vto: fmtFecha(q.fecha_vencimiento),
+      monto: fmtMXNAdmin(q.monto),
+      estatus: q.estatus ?? "PENDIENTE",
+    }));
+
+  const vAmis = poliza.vehiculos_amis ?? {};
+
+  const caracteristicas = [
+    { l: "No. póliza",        v: poliza.constancia || poliza.numero_poliza || "—" },
+    { l: "Vendedor",          v: vendedorLabel },
+    { l: "Asegurado",         v: clienteLabel },
+    { l: "Concesionario",     v: concLabel },
+    { l: "Cobertura",         v: poliza.coberturas?.nombre || "—" },
+    { l: "Modalidad de pago", v: poliza.forma_pago || "—" },
+    { l: "Inicio de vigencia",v: fmtFecha(poliza.fecha_inicio) },
+    { l: "Fin de vigencia",   v: fmtFecha(poliza.fecha_fin) },
+    { l: "Oficina",           v: oficina.nombre || "—" },
+  ];
+
+  const datosVehiculo = [
+    { l: "Marca",     v: vAmis.marca             || "—" },
+    { l: "Modelo",    v: vAmis.tipo              || "—" },
+    { l: "Versión",   v: vAmis.dc                || "—" },
+    { l: "Año",       v: poliza.anio?.toString() || "—" },
+    { l: "No. Serie", v: poliza.num_serie        || "—" },
+    { l: "No. Motor", v: poliza.num_motor        || "—" },
+    { l: "Placas",    v: poliza.placas           || "—" },
+    { l: "Capacidad", v: poliza.capacidad        || "4 OCUPANTES" },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <button
+        onClick={onVolver}
+        className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-[#13193a] transition-colors"
+      >
+        <ChevronLeft className="w-4 h-4" />
+        Volver a pólizas
+      </button>
+
+      {/* Banner */}
+      <div className="bg-[#13193a] rounded-2xl px-5 py-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+          <div>
+            <p className="text-white/40 mb-0.5">No. Póliza</p>
+            <p className="text-white font-mono font-bold">
+              {poliza.constancia || poliza.numero_poliza}
+            </p>
+          </div>
+          <div>
+            <p className="text-white/40 mb-0.5">Fecha emisión</p>
+            <p className="text-white font-semibold">{emision}</p>
+          </div>
+          <div>
+            <p className="text-white/40 mb-0.5">Hora</p>
+            <p className="text-white font-semibold">{poliza.emision_hora || "—"}</p>
+          </div>
+          <div>
+            <p className="text-white/40 mb-0.5">Punto de venta</p>
+            <p className="text-white font-semibold truncate">{oficina.nombre || "—"}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+        {/* Características */}
+        <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+              Características de la póliza
+            </p>
+            <StatusBadge estatus={poliza.estatus} />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
+            {caracteristicas.map(({ l, v }) => (
+              <div key={l}>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">
+                  {l}
+                </p>
+                <p className="font-semibold text-[#13193a] text-xs leading-snug">{v}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 pt-4 border-t border-gray-200 flex items-center justify-between">
+            <p className="text-sm font-bold text-gray-500">Prima total</p>
+            <p className="text-3xl font-black text-[#13193a] tabular-nums">
+              {fmtMXNAdmin(total)}
+            </p>
+          </div>
+        </div>
+
+        {/* Cuotas de pago */}
+        {cuotas.length > 0 && (
+          <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+              Cuotas de Pago
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {cuotas.map((c) => (
+                <div
+                  key={c.num}
+                  className="bg-white rounded-xl border border-gray-100 p-2.5 text-center"
+                >
+                  <p className="text-[10px] text-gray-400 mb-1">Cuota {c.num}</p>
+                  <p className="text-sm font-bold text-[#13193a]">{c.monto}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5 mb-1.5">{c.vto}</p>
+                  <CuotaEstatusAdmin estatus={c.estatus} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Datos del vehículo */}
+        <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">
+            Datos del vehículo
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3">
+            {datosVehiculo.map(({ l, v }) => (
+              <div key={l}>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">
+                  {l}
+                </p>
+                <p className="font-semibold text-[#13193a] text-xs">{v}</p>
+              </div>
+            ))}
+          </div>
+          {(poliza.conductor_habitual ||
+            poliza.conductor_sexo ||
+            poliza.conductor_edad) && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-2">
+                Conductor habitual
+              </p>
+              <div className="grid grid-cols-3 gap-x-6 gap-y-2">
+                {[
+                  { l: "Nombre", v: poliza.conductor_habitual || "—" },
+                  { l: "Sexo",   v: poliza.conductor_sexo     || "—" },
+                  {
+                    l: "Edad",
+                    v: poliza.conductor_edad
+                      ? `${poliza.conductor_edad} años`
+                      : "—",
+                  },
+                ].map(({ l, v }) => (
+                  <div key={l}>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">
+                      {l}
+                    </p>
+                    <p className="font-semibold text-[#13193a] text-xs">{v}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Desglose de prima */}
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+              Desglose de prima total
+            </p>
+          </div>
+          <div className="p-5 space-y-5">
+            <div className="divide-y divide-gray-100 text-sm border border-gray-100 rounded-xl overflow-hidden">
+              {[
+                { l: "Prima neta",            v: primaNeta, bold: false },
+                { l: "Derechos / Expedición", v: derechos,  bold: false },
+                { l: "Subtotal",              v: subtotal,  bold: true  },
+                { l: "I.V.A. (16%)",          v: iva,       bold: false },
+              ].map(({ l, v, bold }) => (
+                <div
+                  key={l}
+                  className={`flex justify-between items-center px-4 py-3 ${
+                    bold ? "bg-gray-50 font-bold" : "bg-white"
+                  }`}
+                >
+                  <span className={bold ? "text-[#13193a]" : "text-gray-500"}>{l}</span>
+                  <span
+                    className={`tabular-nums ${
+                      bold ? "text-[#13193a]" : "text-gray-700"
+                    }`}
+                  >
+                    {fmtMXNAdmin(v)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between bg-[#13193a] rounded-xl px-5 py-4">
+              <p className="text-white font-bold">Prima total</p>
+              <p className="text-white font-black text-2xl tabular-nums">
+                {fmtMXNAdmin(total)}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ──────────────────────────────────────────
 export default function AdminPolizas() {
   const [polizas, setPolizas] = useState([]);
@@ -1171,6 +1440,10 @@ export default function AdminPolizas() {
   const [tab, setTab] = useState("polizas");
   const [modal, setModal] = useState(null);
   const [polSel, setPolSel] = useState(null);
+  const [polizaViewer, setPolizaViewer] = useState(null);
+  const [loadingViewerId, setLoadingViewerId] = useState(null);
+  const [detalleData, setDetalleData] = useState(null);
+  const [loadingDetalleId, setLoadingDetalleId] = useState(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -1293,8 +1566,58 @@ export default function AdminPolizas() {
     setPolSel(null);
   };
 
+  const verPDF = async (p) => {
+    setLoadingViewerId(p.id);
+    try {
+      const [full, config] = await Promise.all([
+        fetchPolizaById(p.id),
+        fetchConfigCostos(p.fecha_inicio),
+      ]);
+      const base = buildPolizaPDF(full, full.oficinas, config);
+      const qrDataUrl = await generateQR(base.codigoQR);
+      setPolizaViewer({ ...base, qrDataUrl });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingViewerId(null);
+    }
+  };
+
+  const abrirDetalle = async (p) => {
+    setLoadingDetalleId(p.id);
+    try {
+      const [full, config, pagosRes] = await Promise.all([
+        fetchPolizaById(p.id),
+        fetchConfigCostos(p.fecha_inicio),
+        supabase
+          .from("pagos")
+          .select("id, monto, fecha_vencimiento, estatus")
+          .eq("poliza_id", p.id)
+          .order("fecha_vencimiento", { ascending: true }),
+      ]);
+      setDetalleData({ poliza: full, pagos: pagosRes.data ?? [], config });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingDetalleId(null);
+    }
+  };
+
   const selCls =
     "px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15";
+
+  if (detalleData) {
+    return (
+      <div className="p-6 min-h-full bg-gray-50">
+        <DetallePolizaAdmin
+          poliza={detalleData.poliza}
+          pagos={detalleData.pagos}
+          config={detalleData.config}
+          onVolver={() => setDetalleData(null)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 min-h-full bg-gray-50 space-y-5">
@@ -1419,7 +1742,7 @@ export default function AdminPolizas() {
                   ].map((h) => (
                     <th
                       key={h}
-                      className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-1 whitespace-nowrap"
+                      className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-2 py-1 whitespace-nowrap"
                     >
                       {h}
                     </th>
@@ -1440,67 +1763,87 @@ export default function AdminPolizas() {
                   paginadas.map((p) => (
                     <tr
                       key={p.id}
-                      className="hover:bg-gray-50/60 transition-colors"
+                      onClick={() => abrirDetalle(p)}
+                      className={`hover:bg-gray-50/60 transition-colors cursor-pointer ${
+                        loadingDetalleId === p.id ? "opacity-60" : ""
+                      }`}
                     >
-                      <td className="px-4 py-1 font-mono text-xs font-bold text-[#13193a]">
+                      <td className="px-2 py-1 font-mono text-xs font-bold text-[#13193a] whitespace-nowrap">
                         {p.constancia || p.numero_poliza}
                       </td>
-                      <td className="px-4 py-1 text-xs font-semibold text-gray-700 whitespace-nowrap">
+                      <td className="px-2 py-1 text-xs font-semibold text-gray-700 max-w-[9rem] truncate">
                         {p.clientes?.nombre} {p.clientes?.apellido}
                       </td>
-                      <td className="px-4 py-1 text-xs text-gray-500 max-w-28 truncate">
+                      <td className="px-2 py-1 text-xs text-gray-500 max-w-[6rem] truncate">
                         {p.oficinas?.nombre || "—"}
                       </td>
-                      <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">
+                      <td className="px-2 py-1 text-xs text-gray-500 max-w-[8rem] truncate">
                         {p.vendedores?.nombre} {p.vendedores?.apellido}
                       </td>
-                      <td className="px-4 py-1 text-xs text-gray-500 max-w-36 truncate">
+                      <td className="px-2 py-1 text-xs text-gray-500 max-w-[9rem] truncate">
                         {p.coberturas?.nombre}
                       </td>
-                      <td className="px-4 py-1 font-mono text-xs text-gray-600">
+                      <td className="px-2 py-1 font-mono text-xs text-gray-600 whitespace-nowrap">
                         {p.placas || "—"}
                       </td>
-                      <td className="px-4 py-1 text-xs font-bold text-emerald-700">
+                      <td className="px-2 py-1 text-xs font-bold text-emerald-700 whitespace-nowrap">
                         ${(p.coberturas?.prima_total ?? 0).toFixed(2)}
                       </td>
-                      <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">
+                      <td className="px-2 py-1 text-xs text-gray-500 whitespace-nowrap">
                         {fmtFecha(p.fecha_fin)}
                       </td>
-                      <td className="px-4 py-1">
+                      <td className="px-2 py-1">
                         <StatusBadge estatus={p.estatus} />
                       </td>
-                      <td className="px-4 py-1">
-                        {p.estatus !== "CANCELADA" && (
-                          <div className="flex gap-1.5">
-                            <button
-                              onClick={() => {
-                                setPolSel(p);
-                                setModal("endoso");
-                              }}
-                              className="px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold hover:bg-amber-100 transition-colors whitespace-nowrap"
-                            >
-                              Endoso
-                            </button>
-                            <button
-                              onClick={() => {
-                                setPolSel(p);
-                                setModal("cancelar");
-                              }}
-                              className="px-2.5 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[11px] font-bold hover:bg-red-100 transition-colors whitespace-nowrap"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              onClick={() => {
-                                setPolSel(p);
-                                setModal("devengar");
-                              }}
-                              className="px-2.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 text-[11px] font-bold hover:bg-blue-100 transition-colors whitespace-nowrap flex items-center gap-1"
-                            >
-                              Devengar
-                            </button>
-                          </div>
-                        )}
+                      <td
+                        className="px-2 py-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex gap-1 items-center">
+                          <button
+                            onClick={() => verPDF(p)}
+                            disabled={loadingViewerId === p.id}
+                            className="flex items-center gap-0.5 text-[11px] font-semibold text-[#13193a] border border-[#13193a]/20 px-1.5 py-1 rounded-lg hover:bg-[#13193a]/5 transition-all disabled:opacity-40 whitespace-nowrap"
+                          >
+                            {loadingViewerId === p.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Eye className="w-3 h-3" />
+                            )}
+                            PDF
+                          </button>
+                          {p.estatus !== "CANCELADA" && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setPolSel(p);
+                                  setModal("endoso");
+                                }}
+                                className="px-1.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold hover:bg-amber-100 transition-colors whitespace-nowrap"
+                              >
+                                Endoso
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setPolSel(p);
+                                  setModal("cancelar");
+                                }}
+                                className="px-1.5 py-1 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[11px] font-bold hover:bg-red-100 transition-colors whitespace-nowrap"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setPolSel(p);
+                                  setModal("devengar");
+                                }}
+                                className="px-1.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 text-[11px] font-bold hover:bg-blue-100 transition-colors whitespace-nowrap"
+                              >
+                                Devengar
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1548,6 +1891,29 @@ export default function AdminPolizas() {
             cargar();
           }}
         />
+      )}
+
+      {polizaViewer && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-5xl h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+              <span className="text-sm font-bold text-[#13193a]">
+                Vista previa de póliza
+              </span>
+              <button
+                onClick={() => setPolizaViewer(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <PDFViewer width="100%" height="100%" style={{ border: "none" }}>
+                <PolizaPDF poliza={polizaViewer} />
+              </PDFViewer>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

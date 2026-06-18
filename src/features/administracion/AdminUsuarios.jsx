@@ -167,6 +167,7 @@ function ModalEditarUsuario({ usuario, onClose, onGuardar, roles, oficinas }) {
   const [form, setForm] = useState({
     nombre: usuario.nombre ?? "",
     apellido: usuario.apellido ?? "",
+    email: usuario.email ?? "",
     rol_id: String(usuario.rol_id ?? ""),
     oficina_id: String(usuario.oficina_id ?? ""),
     password: "",
@@ -179,9 +180,13 @@ function ModalEditarUsuario({ usuario, onClose, onGuardar, roles, oficinas }) {
 
   const rolSel = roles.find((r) => r.id === Number(form.rol_id));
   const esOper = rolSel?.nombre === "OPERADOR";
+  const emailCambiado = form.email.trim() !== (usuario.email ?? "").trim();
+  const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
   const valido =
     form.nombre.trim() &&
     form.apellido.trim() &&
+    form.email.trim() &&
+    (!emailCambiado || emailValido) &&
     form.rol_id &&
     (!esOper || form.oficina_id) &&
     (form.password === "" || form.password.length >= 6);
@@ -258,6 +263,32 @@ function ModalEditarUsuario({ usuario, onClose, onGuardar, roles, oficinas }) {
                 className={inpCls}
               />
             </div>
+          </div>
+
+          {/* Correo electrónico */}
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+              Correo electrónico{" "}
+              <span className="text-red-400">*</span>
+              {emailCambiado && (
+                <span className="ml-2 text-amber-500 normal-case font-normal">
+                  · se actualizará
+                </span>
+              )}
+            </label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => set("email", e.target.value)}
+              placeholder="usuario@cofisem.mx"
+              className={inpCls}
+            />
+            {emailCambiado && (
+              <p className="text-[11px] text-amber-600 mt-1.5">
+                Correo actual:{" "}
+                <span className="font-mono">{usuario.email}</span>
+              </p>
+            )}
           </div>
 
           {/* Nueva contraseña (opcional) */}
@@ -693,17 +724,24 @@ export default function AdminUsuarios() {
   const editarUsuario = async (id, form) => {
     const rolSel = roles.find((r) => r.id === Number(form.rol_id));
     const esOper = rolSel?.nombre === "OPERADOR";
+    const usuarioOriginal = usuarios.find((u) => u.id === id);
+    const emailCambiado =
+      form.email.trim() !== (usuarioOriginal?.email ?? "").trim();
 
-    // 1. Cambiar contraseña en auth.users vía Edge Function (si se proporcionó)
-    if (form.password) {
+    // 1. Cambiar contraseña y/o correo en auth.users vía Edge Function
+    if (form.password || emailCambiado) {
+      const body = { user_id: id };
+      if (form.password) body.password = form.password;
+      if (emailCambiado) body.email = form.email.trim();
+
       const { error: fnError } = await supabase.functions.invoke(
         "actualizar-password",
-        {
-          body: { user_id: id, password: form.password },
-        },
+        { body },
       );
       if (fnError)
-        throw new Error("No se pudo cambiar la contraseña: " + fnError.message);
+        throw new Error(
+          "No se pudo actualizar el usuario en Auth: " + fnError.message,
+        );
     }
 
     // 2. Actualizar perfil en public.usuarios
@@ -714,6 +752,7 @@ export default function AdminUsuarios() {
       oficina_id: esOper && form.oficina_id ? Number(form.oficina_id) : null,
     };
     if (form.password) payload.contrasena = form.password;
+    if (emailCambiado) payload.email = form.email.trim();
 
     const { error } = await supabase
       .from("usuarios")

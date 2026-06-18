@@ -11,11 +11,25 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { user_id, password } = await req.json();
+    const { user_id, password, email } = await req.json();
 
-    if (!user_id || !password || password.length < 6) {
+    if (!user_id) {
       return new Response(
-        JSON.stringify({ error: "Se requiere user_id y contraseña de al menos 6 caracteres." }),
+        JSON.stringify({ error: "Se requiere user_id." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!password && !email) {
+      return new Response(
+        JSON.stringify({ error: "Se requiere al menos password o email." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (password && password.length < 6) {
+      return new Response(
+        JSON.stringify({ error: "La contraseña debe tener al menos 6 caracteres." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -26,7 +40,11 @@ Deno.serve(async (req) => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    const { error } = await adminClient.auth.admin.updateUserById(user_id, { password });
+    const updates: Record<string, string> = {};
+    if (password) updates.password = password;
+    if (email)    updates.email    = email;
+
+    const { error } = await adminClient.auth.admin.updateUserById(user_id, updates);
 
     if (error) {
       return new Response(
