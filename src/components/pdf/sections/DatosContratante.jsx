@@ -45,7 +45,7 @@ export default function DatosContratante({
             },
           ]}
         >
-          <Text style={t9}>{blank ? "" : nombre || "—"}</Text>
+          <Text style={t9}>{nombre || "—"}</Text>
           <View style={[{ flex: 1, paddingTop: 5 }]}>
             <Text style={t9}>{blank ? "" : dir1}</Text>
             <Text style={t9}>{blank ? "" : dir2}</Text>
