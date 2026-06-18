@@ -651,6 +651,7 @@ export default function AdminUsuarios() {
   const [filtroRol, setFiltroRol] = useState("Todos");
   const [filtroOficina, setFiltroOficina] = useState("Todas");
   const [filtroActivo, setFiltroActivo] = useState("Todos");
+  const [sesionId, setSesionId] = useState(null);
   const [modalNuevo, setModalNuevo] = useState(false);
   const [usuarioVer, setUsuarioVer] = useState(null);
   const [usuarioEditar, setUsuarioEditar] = useState(null);
@@ -680,6 +681,7 @@ export default function AdminUsuarios() {
 
   useEffect(() => {
     cargarDatos();
+    supabase.auth.getUser().then(({ data }) => setSesionId(data?.user?.id ?? null));
   }, [cargarDatos]);
 
   // Crea el usuario en auth.users con un cliente temporal (no afecta la sesión del admin)
@@ -776,6 +778,7 @@ export default function AdminUsuarios() {
   const filtrados = useMemo(() => {
     const b = busqueda.toLowerCase();
     return usuarios.filter((u) => {
+      if (u.id === sesionId) return false;
       const rolNombre    = u.roles?.nombre ?? "";
       const oficinaNombre = u.oficinas?.nombre ?? "";
       const hayBusqueda  =
@@ -788,7 +791,7 @@ export default function AdminUsuarios() {
         (filtroActivo === "Activos" ? u.activo : !u.activo);
       return hayBusqueda && hayRol && hayOfic && hayActivo;
     });
-  }, [usuarios, busqueda, filtroRol, filtroOficina, filtroActivo]);
+  }, [usuarios, busqueda, filtroRol, filtroOficina, filtroActivo, sesionId]);
 
   const { paginated: paginadosU, page: pageU, setPage: setPageU, totalPages: totalPagesU, total: totalU } = usePagination(filtrados);
 
