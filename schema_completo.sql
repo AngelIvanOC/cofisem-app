@@ -89,8 +89,8 @@ CREATE TABLE public.polizas (
   descuento numeric DEFAULT 0,
   recargo numeric DEFAULT 0,
   en_letras text,
-  hora_inicio text DEFAULT '00:00:00 hrs.'::text,
-  hora_fin text DEFAULT '23:59:59 hrs.'::text,
+  hora_inicio text DEFAULT '12:00:00 hrs.'::text,
+  hora_fin text DEFAULT '12:00:00 hrs.'::text,
   emision_hora text,
   conductor_habitual text,
   conductor_sexo text,
@@ -138,12 +138,13 @@ CREATE TABLE public.pagos (
   created_at timestamp with time zone DEFAULT now(),
   recibido_por uuid,
   aplicado_por uuid,
+  num_cuota integer,
   CONSTRAINT pagos_pkey PRIMARY KEY (id),
-  CONSTRAINT pagos_poliza_id_fkey FOREIGN KEY (poliza_id) REFERENCES public.polizas(id),
   CONSTRAINT pagos_creado_por_fkey FOREIGN KEY (creado_por) REFERENCES public.usuarios(id),
   CONSTRAINT pagos_autorizado_por_fkey FOREIGN KEY (autorizado_por) REFERENCES public.usuarios(id),
   CONSTRAINT pagos_recibido_por_fkey FOREIGN KEY (recibido_por) REFERENCES public.usuarios(id),
-  CONSTRAINT pagos_aplicado_por_fkey FOREIGN KEY (aplicado_por) REFERENCES public.usuarios(id)
+  CONSTRAINT pagos_aplicado_por_fkey FOREIGN KEY (aplicado_por) REFERENCES public.usuarios(id),
+  CONSTRAINT pagos_poliza_id_fkey FOREIGN KEY (poliza_id) REFERENCES public.polizas(id)
 );
 CREATE TABLE public.siniestros (
   id integer NOT NULL DEFAULT nextval('siniestros_id_seq'::regclass),
@@ -166,6 +167,20 @@ CREATE TABLE public.siniestros (
   notas text,
   created_at timestamp with time zone DEFAULT now(),
   reportado_por uuid,
+  circunstancia text,
+  conductor_nombre text,
+  conductor_telefono text,
+  conductor_es_tercero boolean DEFAULT false,
+  conductor_contacto_nombre text,
+  conductor_contacto_telefono text,
+  estado text,
+  municipio text,
+  cp text,
+  colonia text,
+  calle text,
+  numero_ext text,
+  referencia text,
+  hora_inicio_reporte timestamp with time zone,
   CONSTRAINT siniestros_pkey PRIMARY KEY (id),
   CONSTRAINT siniestros_poliza_id_fkey FOREIGN KEY (poliza_id) REFERENCES public.polizas(id),
   CONSTRAINT siniestros_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
@@ -251,9 +266,14 @@ CREATE TABLE public.coberturas (
   grupo_id bigint NOT NULL,
   vigente_desde date NOT NULL DEFAULT CURRENT_DATE,
   activa_hasta date,
+  variante text,
+  id_par uuid,
+  prima_base numeric,
+  regla_pago text DEFAULT 'ESTANDAR'::text,
   CONSTRAINT coberturas_pkey PRIMARY KEY (id),
   CONSTRAINT coberturas_oficina_id_fkey FOREIGN KEY (oficina_id) REFERENCES public.oficinas(id),
-  CONSTRAINT coberturas_grupo_id_fkey FOREIGN KEY (grupo_id) REFERENCES public.grupos_coberturas(id)
+  CONSTRAINT coberturas_grupo_id_fkey FOREIGN KEY (grupo_id) REFERENCES public.grupos_coberturas(id),
+  CONSTRAINT coberturas_id_par_fkey FOREIGN KEY (id_par) REFERENCES public.coberturas(id)
 );
 CREATE TABLE public.cobertura_rubros (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -339,4 +359,18 @@ CREATE TABLE public.aseguradoras (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   nombre text,
   CONSTRAINT aseguradoras_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.siniestros_terceros (
+  id integer NOT NULL DEFAULT nextval('siniestros_terceros_id_seq'::regclass),
+  siniestro_id integer NOT NULL,
+  vehiculo_desc text,
+  vehiculo_tipo text,
+  vehiculo_color text,
+  vehiculo_modelo text,
+  vehiculo_placas text,
+  vehiculo_serie text,
+  vehiculo_motor text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT siniestros_terceros_pkey PRIMARY KEY (id),
+  CONSTRAINT siniestros_terceros_siniestro_id_fkey FOREIGN KEY (siniestro_id) REFERENCES public.siniestros(id)
 );

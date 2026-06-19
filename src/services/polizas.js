@@ -381,8 +381,8 @@ export async function emitirPoliza({
     forma_pago:         formaPago,
     fecha_inicio:       fechaInicio,
     fecha_fin:          fechaFin,
-    hora_inicio:        '00:00:00 hrs.',
-    hora_fin:           '23:59:59 hrs.',
+    hora_inicio:        '12:00:00 hrs.',
+    hora_fin:           '12:00:00 hrs.',
     emision_hora:       horaStr,
     descuento:          0,
     recargo:            0,
@@ -579,8 +579,8 @@ export async function renovarPoliza(polizaId, creadoPor) {
       forma_pago:         original.forma_pago,
       fecha_inicio:       fechaInicioNueva,
       fecha_fin:          fechaFinNueva,
-      hora_inicio:        '00:00:00 hrs.',
-      hora_fin:           '23:59:59 hrs.',
+      hora_inicio:        '12:00:00 hrs.',
+      hora_fin:           '12:00:00 hrs.',
       en_letras:          original.en_letras,
       cp_asegurado:       original.cp_asegurado,
       uso_tarifario:      original.uso_tarifario,
@@ -771,9 +771,9 @@ export function buildPolizaPDF(poliza, oficina, config = {}) {
 
     vigencia: {
       inicio:     fmtFecha(poliza.fecha_inicio),
-      inicioHora: poliza.hora_inicio || '00:00:00 hrs.',
+      inicioHora: poliza.hora_inicio || '12:00:00 hrs.',
       fin:        fmtFecha(poliza.fecha_fin),
-      finHora:    poliza.hora_fin    || '23:59:59 hrs.',
+      finHora:    poliza.hora_fin    || '12:00:00 hrs.',
     },
 
     prima: {

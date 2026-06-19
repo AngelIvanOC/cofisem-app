@@ -29,8 +29,8 @@ const MOCK = {
   pagoTotal: 1,
   formaPago: "CONTADO",
   fechaRecibo: "27/05/2026",
-  vigenciaDesde: "08/06/2024 00:00:00 hrs.",
-  vigenciaHasta: "08/06/25 23:59:59 hrs.",
+  vigenciaDesde: "08/06/2024 12:00:00 hrs.",
+  vigenciaHasta: "08/06/25 12:00:00 hrs.",
   conducto: "25",
   operador: "24",
 };

@@ -103,9 +103,9 @@ export const mockVehiculo = {
 // `polizaAnterior`     = número de póliza a renovar (cuando renovacion=true).
 export const mockVigencia = {
   inicio:                '18/07/2025',
-  inicioHora:            '00:00:00 hrs.',
+  inicioHora:            '12:00:00 hrs.',
   fin:                   '18/07/2026',
-  finHora:               '23:59:59 hrs.',
+  finHora:               '12:00:00 hrs.',
   tipoVigencia:          'ANUAL',           // ANUAL | POR MESES
   duracionMeses:         12,
   periodoGracia:         '14 DÍAS',
