@@ -590,7 +590,8 @@ export default function FormCotizacion({
       const poliza = await emitirPoliza({
         polizaId: cotizacionInicial?.polizaId ?? null,
         coberturaId: form.coberturaId ?? null,
-        pagos: nSubs > 0 ? { primerPago, pagoSubs, nSubs } : null,
+        coberturaNombre: form.coberturaData?.nombre ?? null,
+        pagos: { primerPago, pagoSubs, nSubs },
         numeroManual:
           permitirNumManual && !esSubsecuente && numeroManual.trim()
             ? numeroManual.trim().toUpperCase()

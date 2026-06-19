@@ -149,9 +149,14 @@ export async function guardarCotizacion({ form, total, enLetras, usuario }) {
   // Usar coberturaId del form si existe (nuevo flujo con selección de cobertura)
   // Fallback: lookup por prima_total (flujo legacy)
   let coberturaId = form.coberturaId ?? null;
+  let coberturaNombre = form.coberturaData?.nombre ?? null;
   if (!coberturaId) {
-    const { data: cob } = await supabase.from('coberturas').select('id').eq('prima_total', total).eq('activa', true).maybeSingle();
+    const { data: cob } = await supabase.from('coberturas').select('id, nombre').eq('prima_total', total).eq('activa', true).maybeSingle();
     coberturaId = cob?.id ?? null;
+    coberturaNombre = coberturaNombre ?? cob?.nombre ?? null;
+  } else if (!coberturaNombre) {
+    const { data: cob } = await supabase.from('coberturas').select('nombre').eq('id', coberturaId).maybeSingle();
+    coberturaNombre = cob?.nombre ?? null;
   }
 
   const { data, error } = await supabase
@@ -169,7 +174,7 @@ export async function guardarCotizacion({ form, total, enLetras, usuario }) {
       uso:                'SERVICIO PUBLICO',
       tipo_servicio:      'TAXI',
       aseguradora:        'GAMAN S.A. DE C.V.',
-      tipo_poliza:        'TAXI BÁSICA 2500',
+      tipo_poliza:        coberturaNombre ?? 'TAXI BÁSICA 2500',
       cobertura_id:       coberturaId,
       forma_pago:         form.formaPago,
       fecha_inicio:       form.fechaInicio || null,
@@ -332,7 +337,7 @@ export async function emitirPoliza({
   capacidad, uso, tipoServicio, primaNeta, primaTotal,
   formaPago, fechaInicio, enLetras, cpAsegurado, creadoPor,
   conductorHabitual, conductorSexo, conductorEdad, concesionarioId, oficinaId,
-  esGestor, coberturaId, pagos = null, numeroManual = null,
+  esGestor, coberturaId, coberturaNombre = null, pagos = null, numeroManual = null,
 }) {
   const ahora   = new Date();
   const horaStr = ahora.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }) + ' hrs.';
@@ -344,14 +349,19 @@ export async function emitirPoliza({
 
   // Resolver coberturaId por prima_total si no se pasó explícitamente
   let resolvedCoberturaId = coberturaId ?? null;
+  let resolvedCoberturaNombre = coberturaNombre;
   if (!resolvedCoberturaId && primaTotal) {
     const { data: cob } = await supabase
       .from('coberturas')
-      .select('id')
+      .select('id, nombre')
       .eq('prima_total', primaTotal)
       .eq('activa', true)
       .single();
     resolvedCoberturaId = cob?.id ?? null;
+    resolvedCoberturaNombre = resolvedCoberturaNombre ?? cob?.nombre ?? null;
+  } else if (!resolvedCoberturaNombre && resolvedCoberturaId) {
+    const { data: cob } = await supabase.from('coberturas').select('nombre').eq('id', resolvedCoberturaId).maybeSingle();
+    resolvedCoberturaNombre = cob?.nombre ?? null;
   }
 
   const camposBase = {
@@ -366,7 +376,7 @@ export async function emitirPoliza({
     uso:                uso || 'SERVICIO PUBLICO',
     tipo_servicio:      tipoServicio || 'TAXI',
     aseguradora:        'GAMAN S.A. DE C.V.',
-    tipo_poliza:        'TAXI BÁSICA 2500',
+    tipo_poliza:        resolvedCoberturaNombre ?? 'TAXI BÁSICA 2500',
     cobertura_id:       resolvedCoberturaId,
     forma_pago:         formaPago,
     fecha_inicio:       fechaInicio,
