@@ -83,6 +83,8 @@ function SeccionRecibo({
   saldo,
   vtoActual,
   vigenciaSiguiente,
+  periodoDesde,
+  periodoHasta,
   total,
   importe,
   vencimiento,
@@ -294,10 +296,12 @@ function SeccionRecibo({
               Forma de Pago: {formaPago === "CONTADO" ? "Contado" : "Cont.4 Parcial."}
             </Text>
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Text style={{ ...T, lineHeight: 1 }}>Vto.: {vtoActual}</Text>
-              {vigenciaSiguiente ? (
-                <Text style={{ ...T, lineHeight: 1 }}>Vigencia: Hasta {vigenciaSiguiente}</Text>
-              ) : null}
+              <Text style={{ ...T, lineHeight: 1 }}>
+                Vto.: {periodoDesde || vtoActual}
+              </Text>
+              <Text style={{ ...T, lineHeight: 1 }}>
+                Vigencia: {periodoHasta || vigenciaSiguiente}
+              </Text>
             </View>
           </View>
         </View>

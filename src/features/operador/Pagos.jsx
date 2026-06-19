@@ -96,6 +96,18 @@ function abrirRecibo(poliza, cuota, operador) {
     .reduce((s, c) => s + c.monto, 0);
   const siguienteCuota = (poliza.cuotas ?? []).find((c) => c.num === cuota.num + 1);
   const vigenciaSiguiente = siguienteCuota?.vigencia ?? siguienteCuota?.vto ?? "";
+
+  const cuotasOrdenadas = [...(poliza.cuotas ?? [])].sort((a, b) => a.num - b.num);
+  const idxActual = cuotasOrdenadas.findIndex((c) => c.num === cuota.num);
+  const esUltimaCuota = idxActual === cuotasOrdenadas.length - 1;
+  const periodoDesde =
+    idxActual === 0
+      ? isoAMX(poliza.fechaInicio)
+      : (cuotasOrdenadas[idxActual - 1].vigencia ?? cuotasOrdenadas[idxActual - 1].vto ?? "");
+  const periodoHasta = esUltimaCuota
+    ? isoAMX(poliza.fechaFin)
+    : (cuota.vigencia ?? cuota.vto ?? "");
+
   const datos = {
     constancia: poliza.id,
     oficina: poliza.oficina,
@@ -116,6 +128,8 @@ function abrirRecibo(poliza, cuota, operador) {
     saldo,
     vtoActual: cuota.vigencia ?? cuota.vto,
     vigenciaSiguiente,
+    periodoDesde,
+    periodoHasta,
     pagoDe: cuota.num,
     pagoTotal: poliza.formaPago === "CONTADO" ? 1 : 4,
     formaPago: poliza.formaPago,
