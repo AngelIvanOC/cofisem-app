@@ -102,7 +102,8 @@ export default function FormCotizacion({
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   // ── Datos DB ──
-  const [coberturas, setCoberturas] = useState([]);
+  const [coberturas,      setCoberturas]      = useState([]);
+  const [todasCoberturas, setTodasCoberturas] = useState([]);
   const [loadingCoberturas, setLoadingCoberturas] = useState(true);
   const [permitirFechasPas, setPermitirFechasPas] = useState(false);
   const [permitirNumManual, setPermitirNumManual] = useState(false);
@@ -139,7 +140,10 @@ export default function FormCotizacion({
 
   useEffect(() => {
     fetchCoberturasActivas()
-      .then(setCoberturas)
+      .then((data) => {
+        setTodasCoberturas(data);
+        setCoberturas(data.filter((c) => c.variante !== "PARCIALES"));
+      })
       .catch(console.error)
       .finally(() => setLoadingCoberturas(false));
     fetchPermitirFechasPasadas()
@@ -1253,7 +1257,19 @@ export default function FormCotizacion({
                 <label className={lblCls}>Modalidad de pago</label>
                 <select
                   value={form.formaPago}
-                  onChange={(e) => setF("formaPago", e.target.value)}
+                  onChange={(e) => {
+                    const newFp = e.target.value;
+                    const cob   = form.coberturaData;
+                    if (cob?.id_par && newFp === "4 PARCIALES") {
+                      const par = todasCoberturas.find((c) => c.id === cob.id_par);
+                      if (par) { setForm((f) => ({ ...f, formaPago: newFp, coberturaId: par.id, coberturaData: par })); return; }
+                    }
+                    if (cob?.variante === "PARCIALES" && newFp === "CONTADO") {
+                      const cont = todasCoberturas.find((c) => c.id_par === cob.id);
+                      if (cont) { setForm((f) => ({ ...f, formaPago: newFp, coberturaId: cont.id, coberturaData: cont })); return; }
+                    }
+                    setF("formaPago", newFp);
+                  }}
                   className={inpCls}
                 >
                   {["CONTADO", "4 PARCIALES"].map((f) => (

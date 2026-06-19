@@ -18,6 +18,10 @@ const MOCK = {
   primaNeta: 1496.55,
   gastosExpedicion: 400.0,
   iva: 303.45,
+  primaTotal: 2200.0,
+  saldo: 0,
+  vtoActual: "08/06/2024",
+  vigenciaSiguiente: "",
   total: 2200.0,
   importe: 2200.0,
   vencimiento: "08/06/2024",
@@ -75,6 +79,10 @@ function SeccionRecibo({
   primaNeta,
   gastosExpedicion,
   iva,
+  primaTotal,
+  saldo,
+  vtoActual,
+  vigenciaSiguiente,
   total,
   importe,
   vencimiento,
@@ -160,7 +168,7 @@ function SeccionRecibo({
                 letterSpacing: 1,
               }}
             >
-              No.: {pad8(noRecibo)}
+              No.: {formaPago === "CONTADO" ? pad8(noRecibo) : `${pagoDe} de ${pagoTotal}`}
             </Text>
           </View>
           <View style={{ marginTop: 4, alignItems: "flex-end" }}>
@@ -270,25 +278,27 @@ function SeccionRecibo({
           {/* Detalle de cuota */}
           <View style={{ paddingHorizontal: 0, paddingTop: 0 }}>
             <Text style={{ ...T, lineHeight: 1 }}>
-              Vencimiento: {vencimiento}
+              Vto. P.Gracia: {vencimiento}
             </Text>
             <View
               style={{ flexDirection: "row", justifyContent: "space-between" }}
             >
               <Text style={{ ...T, lineHeight: 1 }}>
-                Pago {pagoDe} de {pagoTotal}
+                P.Total: {fmt$(primaTotal)}
               </Text>
               <Text style={{ ...T, lineHeight: 1 }}>
-                Forma de Pago:{" "}
-                <Text style={{ ...TB, lineHeight: 1 }}>
-                  {(formaPago ?? "").toUpperCase()}
-                </Text>
+                Saldo: {fmt$(saldo)}
               </Text>
             </View>
             <Text style={{ ...T, lineHeight: 1 }}>
-              Importe: {fmt$(importe)}
+              Forma de Pago: {formaPago === "CONTADO" ? "Contado" : "Cont.4 Parcial."}
             </Text>
-            <Text style={{ ...T, lineHeight: 1 }}>Fecha: {fechaRecibo}</Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <Text style={{ ...T, lineHeight: 1 }}>Vto.: {vtoActual}</Text>
+              {vigenciaSiguiente ? (
+                <Text style={{ ...T, lineHeight: 1 }}>Vigencia: Hasta {vigenciaSiguiente}</Text>
+              ) : null}
+            </View>
           </View>
         </View>
       </View>

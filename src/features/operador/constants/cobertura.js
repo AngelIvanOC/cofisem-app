@@ -40,11 +40,18 @@ export function calcularPrecioData(cobertura, formaPago, esGestor) {
   if (formaPago !== "4 PARCIALES") {
     return { total: primaTotal, primerPago: primaTotal, pagoSubs: 0, nSubs: 0 };
   }
-  if (esGestor) {
+  // COSTOS_DIVIDIDOS (incluye gestor): dividir igual en 4
+  if (esGestor || cobertura.regla_pago === "COSTOS_DIVIDIDOS") {
     const pago = +(primaTotal / 4).toFixed(2);
     return { total: primaTotal, primerPago: pago, pagoSubs: pago, nSubs: 3 };
   }
-  // Normal 4 parciales: mismas proporciones que PRECIO_MATRIZ (799/2500, 625/2500)
+  // PROGRESIVO: base = prima_base/4; primer pago = primaTotal − 3×base
+  if (cobertura.regla_pago === "PROGRESIVO" && cobertura.prima_base) {
+    const pagoSubs   = +(parseFloat(cobertura.prima_base) / 4).toFixed(2);
+    const primerPago = +(primaTotal - 3 * pagoSubs).toFixed(2);
+    return { total: primaTotal, primerPago, pagoSubs, nSubs: 3 };
+  }
+  // ESTANDAR: proporciones fijas de PRECIO_MATRIZ (799/2500, 625/2500)
   const primerPago = +(primaTotal * (799 / 2500)).toFixed(2);
   const pagoSubs   = +(primaTotal * (625 / 2500)).toFixed(2);
   const total      = +(primerPago + pagoSubs * 3).toFixed(2);

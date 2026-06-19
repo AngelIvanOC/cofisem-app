@@ -31,33 +31,51 @@ function isoAMXCorto(str) {
   return `${d}/${m}/${y.slice(-2)}`;
 }
 
+function nCuotasDeFormaPago(formaPago) {
+  if (formaPago === "CONTADO") return 1;
+  const m = (formaPago ?? "").match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 1;
+}
+
 function calcularImportesRecibo(poliza, cuota) {
   if (poliza.formaPago === "CONTADO") {
     return {
-      primaNeta: poliza.primaNeta,
+      primaNeta:        poliza.primaNeta,
       gastosExpedicion: poliza.derechos,
-      iva: poliza.iva,
-      total: poliza.primaTotal,
-      importe: cuota.monto,
+      iva:              poliza.iva,
+      total:            poliza.primaTotal,
+      importe:          cuota.monto,
     };
   }
+
+  const n   = nCuotasDeFormaPago(poliza.formaPago);
+  const iva = poliza.ivaPct ?? 16;
+
+  // COSTOS_DIVIDIDOS: prima neta, derechos e IVA se dividen entre N cuotas
+  if (poliza.reglaPago === "COSTOS_DIVIDIDOS") {
+    const pnParcial  = +(poliza.primaNeta / n).toFixed(2);
+    const derParcial = +(poliza.derechos  / n).toFixed(2);
+    const ivaParcial = +((pnParcial + derParcial) * (iva / 100)).toFixed(2);
+    const total      = +(pnParcial + derParcial + ivaParcial).toFixed(2);
+    return { primaNeta: pnParcial, gastosExpedicion: derParcial, iva: ivaParcial, total, importe: total };
+  }
+
+  // PROGRESIVO: cuota.monto es el pago total (PT); se desglosa hacia atrás
+  if (poliza.reglaPago === "PROGRESIVO" && poliza.primaBase) {
+    const pt       = cuota.monto;
+    const subtot   = +(pt / (1 + iva / 100)).toFixed(2);
+    const emision  = +(poliza.derechos / n).toFixed(2);
+    const pn       = +(subtot - emision).toFixed(2);
+    const ivaCalc  = +(subtot * (iva / 100)).toFixed(2);
+    return { primaNeta: pn, gastosExpedicion: emision, iva: ivaCalc, total: pt, importe: pt };
+  }
+
+  // ESTANDAR: cuota 1 lleva todos los gastos de expedición e IVA
   if (cuota.num === 1) {
     const total = cuota.monto + poliza.derechos + poliza.iva;
-    return {
-      primaNeta: cuota.monto,
-      gastosExpedicion: poliza.derechos,
-      iva: poliza.iva,
-      total,
-      importe: total,
-    };
+    return { primaNeta: cuota.monto, gastosExpedicion: poliza.derechos, iva: poliza.iva, total, importe: total };
   }
-  return {
-    primaNeta: cuota.monto,
-    gastosExpedicion: 0,
-    iva: 0,
-    total: cuota.monto,
-    importe: cuota.monto,
-  };
+  return { primaNeta: cuota.monto, gastosExpedicion: 0, iva: 0, total: cuota.monto, importe: cuota.monto };
 }
 
 function abrirRecibo(poliza, cuota, operador) {
@@ -68,6 +86,16 @@ function abrirRecibo(poliza, cuota, operador) {
   });
   const importes = calcularImportesRecibo(poliza, cuota);
   const cl = poliza.clienteData ?? {};
+  const ultimaCuota = poliza.cuotas
+    ? [...poliza.cuotas].sort((a, b) => b.num - a.num)[0]
+    : null;
+  const vencPGracia =
+    ultimaCuota?.vigencia ?? ultimaCuota?.vto ?? isoAMX(poliza.fechaFin);
+  const saldo = (poliza.cuotas ?? [])
+    .filter((c) => c.num > cuota.num)
+    .reduce((s, c) => s + c.monto, 0);
+  const siguienteCuota = (poliza.cuotas ?? []).find((c) => c.num === cuota.num + 1);
+  const vigenciaSiguiente = siguienteCuota?.vigencia ?? siguienteCuota?.vto ?? "";
   const datos = {
     constancia: poliza.id,
     oficina: poliza.oficina,
@@ -83,7 +111,11 @@ function abrirRecibo(poliza, cuota, operador) {
     rfc: cl.rfc ?? "",
     curp: cl.curp ?? "",
     ...importes,
-    vencimiento: isoAMXCorto(poliza.fechaFin),
+    vencimiento: vencPGracia,
+    primaTotal: poliza.primaTotal,
+    saldo,
+    vtoActual: cuota.vigencia ?? cuota.vto,
+    vigenciaSiguiente,
     pagoDe: cuota.num,
     pagoTotal: poliza.formaPago === "CONTADO" ? 1 : 4,
     formaPago: poliza.formaPago,
@@ -434,6 +466,12 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
                   c.estatus === "ADEUDO" ||
                   c.id === primerPendienteId;
                 const esPendiente = c.estatus === "PENDIENTE";
+                // La cuota anterior debe estar en ADEUDO o PAGADO para poder recibir esta
+                const anteriorRecibido =
+                  c.num === 1 ||
+                  poliza.cuotas.some(
+                    (p) => p.num === c.num - 1 && p.estatus !== "PENDIENTE",
+                  );
                 // Sombrear fila si está bloqueada (por estatus o por 45 días) y aún no fue pagada
                 const filaBloqueada = (polizaBloq || bloqueada) && esPendiente;
                 return (
@@ -501,13 +539,13 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
                       <CuotaBadge cuota={c} />
                       {esPendiente && (
                         <button
-                          disabled={polizaBloq || bloqueada}
+                          disabled={polizaBloq || bloqueada || !anteriorRecibido}
                           onClick={() =>
-                            !polizaBloq && !bloqueada && setCuotaSel(c)
+                            !polizaBloq && !bloqueada && anteriorRecibido && setCuotaSel(c)
                           }
                           className={[
                             "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
-                            polizaBloq || bloqueada
+                            polizaBloq || bloqueada || !anteriorRecibido
                               ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                               : "bg-[#13193a] text-white hover:bg-[#1e2a50]",
                           ].join(" ")}
@@ -641,7 +679,7 @@ export default function OperadorPagos({ usuario }) {
           clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
           oficinas(id, nombre),
           vendedores(nombre, apellido, codigo),
-          coberturas(nombre, prima_neta, prima_total)
+          coberturas(id, nombre, prima_neta, prima_total, regla_pago, prima_base)
         `,
           )
           .neq("estatus", "COTIZACION")
@@ -669,11 +707,15 @@ export default function OperadorPagos({ usuario }) {
           asegurado: nombreCliente,
           oficina: pol.oficinas?.nombre ?? "",
           cobertura: pol.coberturas?.nombre || "",
+          coberturaId: pol.coberturas?.id ?? null,
+          reglaPago: pol.coberturas?.regla_pago ?? "ESTANDAR",
+          primaBase: pol.coberturas?.prima_base ?? null,
           vendedor: nombreVendedor,
           formaPago: pol.forma_pago,
           primaTotal: Number(pol.coberturas?.prima_total ?? 0),
           primaNeta,
           iva,
+          ivaPct,
           derechos,
           fechaInicio: pol.fecha_inicio ?? "",
           fechaFin: pol.fecha_fin ?? "",
