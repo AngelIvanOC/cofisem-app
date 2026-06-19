@@ -254,7 +254,6 @@ function SeccionRecibo({
               valor={fmt$(gastosExpedicion)}
             />
             <FilaPago label="Descuentos :" valor="$0.00" />
-            <FilaPago label="Pronto Pago :" valor="$0.00" />
             <FilaPago label="I.V.A. :" valor={fmt$(iva)} />
             <View
               style={{
