@@ -197,8 +197,9 @@ export default function Polizas({ usuario }) {
     return polizas.filter((p) => {
       const asegurado =
         `${p.clientes?.nombre || ""} ${p.clientes?.apellido || ""}`.toLowerCase();
-      const constancia = (p.constancia || p.numero_poliza || "").toLowerCase();
-      const matchBusq = asegurado.includes(b) || constancia.includes(b);
+      const constancia = (p.constancia || "").toLowerCase();
+      const numPoliza = (p.numero_poliza || "").toLowerCase();
+      const matchBusq = asegurado.includes(b) || constancia.includes(b) || numPoliza.includes(b);
       const matchEst = filtroEst === "Todos" || p.estatus === filtroEst;
       const matchFp =
         filtroFormaPago === "Todas" || p.forma_pago === filtroFormaPago;

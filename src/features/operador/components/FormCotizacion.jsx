@@ -102,7 +102,7 @@ export default function FormCotizacion({
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   // ── Datos DB ──
-  const [coberturas,      setCoberturas]      = useState([]);
+  const [coberturas, setCoberturas] = useState([]);
   const [todasCoberturas, setTodasCoberturas] = useState([]);
   const [loadingCoberturas, setLoadingCoberturas] = useState(true);
   const [permitirFechasPas, setPermitirFechasPas] = useState(false);
@@ -1260,14 +1260,34 @@ export default function FormCotizacion({
                   value={form.formaPago}
                   onChange={(e) => {
                     const newFp = e.target.value;
-                    const cob   = form.coberturaData;
+                    const cob = form.coberturaData;
                     if (cob?.id_par && newFp === "4 PARCIALES") {
-                      const par = todasCoberturas.find((c) => c.id === cob.id_par);
-                      if (par) { setForm((f) => ({ ...f, formaPago: newFp, coberturaId: par.id, coberturaData: par })); return; }
+                      const par = todasCoberturas.find(
+                        (c) => c.id === cob.id_par,
+                      );
+                      if (par) {
+                        setForm((f) => ({
+                          ...f,
+                          formaPago: newFp,
+                          coberturaId: par.id,
+                          coberturaData: par,
+                        }));
+                        return;
+                      }
                     }
                     if (cob?.variante === "PARCIALES" && newFp === "CONTADO") {
-                      const cont = todasCoberturas.find((c) => c.id_par === cob.id);
-                      if (cont) { setForm((f) => ({ ...f, formaPago: newFp, coberturaId: cont.id, coberturaData: cont })); return; }
+                      const cont = todasCoberturas.find(
+                        (c) => c.id_par === cob.id,
+                      );
+                      if (cont) {
+                        setForm((f) => ({
+                          ...f,
+                          formaPago: newFp,
+                          coberturaId: cont.id,
+                          coberturaData: cont,
+                        }));
+                        return;
+                      }
                     }
                     setF("formaPago", newFp);
                   }}
@@ -1277,32 +1297,6 @@ export default function FormCotizacion({
                     <option key={f}>{f}</option>
                   ))}
                 </select>
-              </div>
-              <div className="flex flex-col justify-end">
-                <label className={lblCls}>Tipo de cuota</label>
-                <div className="flex items-center gap-3 h-[38px]">
-                  <button
-                    type="button"
-                    onClick={() => setF("esGestor", !form.esGestor)}
-                    className={[
-                      "relative w-11 h-6 rounded-full transition-colors focus:outline-none",
-                      form.esGestor ? "bg-[#13193a]" : "bg-gray-200",
-                    ].join(" ")}
-                  >
-                    <span
-                      className={[
-                        "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
-                        form.esGestor ? "translate-x-5" : "translate-x-0",
-                      ].join(" ")}
-                    />
-                  </button>
-                  <span className="text-sm font-semibold text-gray-700">
-                    {form.esGestor ? "Gestor" : "Normal"}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    {form.esGestor ? "(volumen alto)" : "(póliza individual)"}
-                  </span>
-                </div>
               </div>
 
               <p className="text-xs text-gray-400">
