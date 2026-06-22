@@ -170,7 +170,10 @@ function SeccionRecibo({
                 letterSpacing: 1,
               }}
             >
-              No.: {formaPago === "CONTADO" ? pad8(noRecibo) : `${pagoDe} de ${pagoTotal}`}
+              No.:{" "}
+              {formaPago === "CONTADO"
+                ? pad8(noRecibo)
+                : `${pagoDe} de ${pagoTotal}`}
             </Text>
           </View>
           <View style={{ marginTop: 4, alignItems: "flex-end" }}>
@@ -288,14 +291,15 @@ function SeccionRecibo({
               <Text style={{ ...T, lineHeight: 1 }}>
                 P.Total: {fmt$(primaTotal)}
               </Text>
-              <Text style={{ ...T, lineHeight: 1 }}>
-                Saldo: {fmt$(saldo)}
-              </Text>
+              <Text style={{ ...T, lineHeight: 1 }}>Saldo: {fmt$(saldo)}</Text>
             </View>
             <Text style={{ ...T, lineHeight: 1 }}>
-              Forma de Pago: {formaPago === "CONTADO" ? "Contado" : "Cont.4 Parcial."}
+              Forma de Pago:{" "}
+              {formaPago === "CONTADO" ? "Contado" : "Cont.4 Parcial."}
             </Text>
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <View
+              style={{ flexDirection: "row", justifyContent: "space-between" }}
+            >
               <Text style={{ ...T, lineHeight: 1 }}>
                 Vto.: {periodoDesde || vtoActual}
               </Text>
@@ -322,19 +326,7 @@ function SeccionRecibo({
           >
             GAMAN, S.A. DE C.V. RFC: GGA1711102U0
           </Text>
-          <Text
-            style={{
-              fontFamily: "Helvetica-Bold",
-              fontSize: 6,
-              color: "#000000",
-              textAlign: "center",
-              lineHeight: 1.1,
-              marginBottom: 1,
-            }}
-          >
-            Av. EMILIANO ZAPATA 751, 2, Col: BELLAVISTA, CUERNAVACA, MORELOS,
-            C.P: 62130{"   "}Tel.: 777-2027 042
-          </Text>
+
           <Text
             style={{
               fontFamily: "Helvetica-Bold",
