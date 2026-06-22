@@ -1,12 +1,18 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Children, isValidElement } from "react";
 
+function flattenLabel(node) {
+  if (node == null) return "";
+  if (Array.isArray(node)) return node.map(flattenLabel).join("");
+  return String(node);
+}
+
 function parseOptions(children) {
   return Children.toArray(children)
     .filter((c) => isValidElement(c) && c.type === "option")
     .map((c) => ({
       value: String(c.props.value ?? ""),
-      label: String(c.props.children ?? ""),
+      label: flattenLabel(c.props.children),
     }));
 }
 
@@ -29,8 +35,11 @@ export default function SelectTypeahead({
   const filtered = useMemo(() => {
     const list = options.filter((o) => o.value !== "");
     if (!query.trim()) return list;
-    const q = query.toLowerCase();
-    return list.filter((o) => o.label.toLowerCase().includes(q));
+    const words = query.toLowerCase().trim().split(/\s+/);
+    return list.filter((o) => {
+      const label = o.label.toLowerCase();
+      return words.every((w) => label.includes(w));
+    });
   }, [options, query]);
 
   // Cerrar al hacer clic fuera
