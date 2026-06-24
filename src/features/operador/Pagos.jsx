@@ -78,16 +78,6 @@ function calcularImportesRecibo(poliza, cuota) {
   return { primaNeta: cuota.monto, gastosExpedicion: 0, iva: 0, total: cuota.monto, importe: cuota.monto };
 }
 
-function getRecibosDescargados() {
-  try { return new Set(JSON.parse(localStorage.getItem("cofisem_dl_recibos") ?? "[]")); }
-  catch { return new Set(); }
-}
-function marcarReciboDescargado(id) {
-  const s = getRecibosDescargados();
-  s.add(String(id));
-  localStorage.setItem("cofisem_dl_recibos", JSON.stringify([...s]));
-}
-
 function abrirRecibo(poliza, cuota, operador) {
   const hoy = new Date().toLocaleDateString("es-MX", {
     day: "2-digit",
@@ -153,7 +143,7 @@ function abrirRecibo(poliza, cuota, operador) {
     conducto: poliza.conducto,
     operador: operador ?? "",
   };
-  marcarReciboDescargado(cuota.id);
+  supabase.from("pagos").update({ descargado: true }).eq("id", cuota.id).then();
   localStorage.setItem("recibo_data", JSON.stringify(datos));
   window.open("/gaman/recibo-preview", "_blank");
 }
@@ -330,11 +320,11 @@ function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
 // ── Modal historial de póliza ─────────────────────────────────
 function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
   const [cuotaSel, setCuotaSel] = useState(null);
-  const [descargados, setDescargados] = useState(() => getRecibosDescargados());
+  const [descargadosLocal, setDescargadosLocal] = useState(() => new Set());
 
   const handleAbrirRecibo = (pol, c, op) => {
     abrirRecibo(pol, c, op);
-    setDescargados(getRecibosDescargados());
+    setDescargadosLocal((prev) => new Set([...prev, String(c.id)]));
   };
 
   // Póliza bloqueada: VENCIDA o ANULADA — no se pueden registrar ni aplicar pagos
@@ -586,7 +576,7 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
                         </button>
                       )}
                       {mostrarRecibo && !polizaBloq && (() => {
-                        const yaDescargado = descargados.has(String(c.id));
+                        const yaDescargado = c.descargado || descargadosLocal.has(String(c.id));
                         return (
                           <button
                             onClick={() => handleAbrirRecibo(poliza, c, operador)}
@@ -662,6 +652,7 @@ export default function OperadorPagos({ usuario }) {
       fechaPago: c.fecha_pago ? isoAMX(c.fecha_pago) : null,
       forma: c.forma_pago ?? null,
       referencia: c.referencia ?? null,
+      descargado: c.descargado ?? false,
     };
   }
 
@@ -676,7 +667,7 @@ export default function OperadorPagos({ usuario }) {
       const { data, error } = await supabase
         .from("pagos")
         .select(
-          "id, poliza_id, num_cuota, monto, fecha_pago, fecha_vencimiento, estatus, forma_pago, referencia",
+          "id, poliza_id, num_cuota, monto, fecha_pago, fecha_vencimiento, estatus, forma_pago, referencia, descargado",
         )
         .range(desde, desde + PAGE - 1)
         .order("fecha_vencimiento", { ascending: true });
