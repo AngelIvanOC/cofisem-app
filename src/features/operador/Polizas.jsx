@@ -60,7 +60,7 @@ export default function Polizas({ usuario }) {
   const cargar = async () => {
     try {
       setLoading(true);
-      setPolizas(await fetchPolizas());
+      setPolizas(await fetchPolizas(usuario?.oficinas?.id ?? null));
       setError(null);
     } catch (e) {
       setError("Error cargando pólizas: " + e.message);
@@ -167,7 +167,7 @@ export default function Polizas({ usuario }) {
     cargar();
     cargarCotizaciones();
     cargarSubsecuentes();
-  }, []);
+  }, [usuario?.oficinas?.id]);
 
   useEffect(() => {
     const t = setTimeout(() => setBusquedaFiltro(busqueda), 300);
@@ -191,6 +191,7 @@ export default function Polizas({ usuario }) {
       ].sort((a, b) => (a === "Todas" ? -1 : a.localeCompare(b))),
     [polizas],
   );
+
 
   const polizasFiltradas = useMemo(() => {
     const b = busquedaFiltro.toLowerCase();

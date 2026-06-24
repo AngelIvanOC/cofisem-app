@@ -78,6 +78,16 @@ function calcularImportesRecibo(poliza, cuota) {
   return { primaNeta: cuota.monto, gastosExpedicion: 0, iva: 0, total: cuota.monto, importe: cuota.monto };
 }
 
+function getRecibosDescargados() {
+  try { return new Set(JSON.parse(localStorage.getItem("cofisem_dl_recibos") ?? "[]")); }
+  catch { return new Set(); }
+}
+function marcarReciboDescargado(id) {
+  const s = getRecibosDescargados();
+  s.add(String(id));
+  localStorage.setItem("cofisem_dl_recibos", JSON.stringify([...s]));
+}
+
 function abrirRecibo(poliza, cuota, operador) {
   const hoy = new Date().toLocaleDateString("es-MX", {
     day: "2-digit",
@@ -143,6 +153,7 @@ function abrirRecibo(poliza, cuota, operador) {
     conducto: poliza.conducto,
     operador: operador ?? "",
   };
+  marcarReciboDescargado(cuota.id);
   localStorage.setItem("recibo_data", JSON.stringify(datos));
   window.open("/gaman/recibo-preview", "_blank");
 }
@@ -319,6 +330,12 @@ function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
 // ── Modal historial de póliza ─────────────────────────────────
 function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
   const [cuotaSel, setCuotaSel] = useState(null);
+  const [descargados, setDescargados] = useState(() => getRecibosDescargados());
+
+  const handleAbrirRecibo = (pol, c, op) => {
+    abrirRecibo(pol, c, op);
+    setDescargados(getRecibosDescargados());
+  };
 
   // Póliza bloqueada: VENCIDA o ANULADA — no se pueden registrar ni aplicar pagos
   const polizaBloq = ["VENCIDA", "ANULADA"].includes(poliza.estatusPoliza);
@@ -568,15 +585,24 @@ function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
                           Recibir
                         </button>
                       )}
-                      {mostrarRecibo && !polizaBloq && (
-                        <button
-                          onClick={() => abrirRecibo(poliza, c, operador)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-all"
-                        >
-                          <Receipt className="w-3.5 h-3.5" />
-                          Recibo
-                        </button>
-                      )}
+                      {mostrarRecibo && !polizaBloq && (() => {
+                        const yaDescargado = descargados.has(String(c.id));
+                        return (
+                          <button
+                            onClick={() => handleAbrirRecibo(poliza, c, operador)}
+                            className={[
+                              "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                              yaDescargado
+                                ? "text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+                                : "text-gray-600 border border-gray-200 hover:bg-gray-50",
+                            ].join(" ")}
+                          >
+                            <Receipt className="w-3.5 h-3.5" />
+                            Recibo
+                            {yaDescargado && <Check className="w-3 h-3" />}
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
@@ -680,14 +706,13 @@ export default function OperadorPagos({ usuario }) {
   // 1. Carga la lista de pólizas (rápido — aparecen de inmediato)
   // 2. Dispara la carga de pagos en segundo plano
   const cargar = useCallback(async () => {
+    const oid = usuario?.oficinas?.id;
     setLoading(true);
     try {
-      const [versionesConfig, { data: polizasDB, error }] = await Promise.all([
-        fetchTodasVersionesConfig(),
-        supabase
-          .from("polizas")
-          .select(
-            `
+      let polizasQuery = supabase
+        .from("polizas")
+        .select(
+          `
           id, constancia, numero_poliza, forma_pago,
           fecha_inicio, fecha_fin, hora_inicio, hora_fin, estatus,
           clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
@@ -695,9 +720,14 @@ export default function OperadorPagos({ usuario }) {
           vendedores(nombre, apellido, codigo),
           coberturas(id, nombre, prima_neta, prima_total, regla_pago, prima_base)
         `,
-          )
-          .neq("estatus", "COTIZACION")
-          .order("fecha_inicio", { ascending: false }),
+        )
+        .neq("estatus", "COTIZACION")
+        .order("fecha_inicio", { ascending: false });
+      if (oid) polizasQuery = polizasQuery.eq("oficina_id", oid);
+
+      const [versionesConfig, { data: polizasDB, error }] = await Promise.all([
+        fetchTodasVersionesConfig(),
+        polizasQuery,
       ]);
       if (error) throw error;
 
@@ -759,7 +789,7 @@ export default function OperadorPagos({ usuario }) {
     } finally {
       setLoading(false);
     }
-  }, [cargarPagosBackground]);
+  }, [cargarPagosBackground, usuario?.oficinas?.id]);
 
   // Carga las cuotas de una póliza específica y abre el modal
   const abrirCuotas = useCallback(async (pol) => {

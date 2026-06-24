@@ -271,6 +271,7 @@ export default function VerificarPoliza() {
                       <thead>
                         <tr className="bg-[#13193a] text-white">
                           <th className="text-left px-3 py-2 font-semibold text-[11px]">No. pago</th>
+                          <th className="text-left px-3 py-2 font-semibold text-[11px]">Fecha límite</th>
                           <th className="text-right px-3 py-2 font-semibold text-[11px]">Estado</th>
                         </tr>
                       </thead>
@@ -281,6 +282,9 @@ export default function VerificarPoliza() {
                           return (
                             <tr key={pago.id} className="bg-white">
                               <td className="px-3 py-2.5 text-gray-600 font-medium">Pago {idx + 1}</td>
+                              <td className="px-3 py-2.5 text-gray-500 text-[11px] font-mono">
+                                {fmtFecha(pago.fecha_vencimiento)}
+                              </td>
                               <td className="px-3 py-2.5 text-right">
                                 <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${badge.cls}`}>
                                   {badge.label}
