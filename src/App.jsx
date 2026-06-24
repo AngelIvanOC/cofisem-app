@@ -249,7 +249,14 @@ export default function App() {
 
         {/* ── Área COFISEM con sidebar (accesos + pólizas + cortes) ── */}
         <Route element={<CofisemLayout />}>
-          <Route path="/accesos"         element={<PaginaInicio />} />
+          <Route
+            path="/accesos"
+            element={
+              rolNombre === "AJUSTADOR"
+                ? <Navigate to="/gaman/dashboard" replace />
+                : <PaginaInicio />
+            }
+          />
           <Route path="/polizas"         element={<PoliciasDia   usuario={usuario} />} />
           <Route path="/corte/operador"  element={<CorteOperador usuario={usuario} />} />
           <Route path="/corte/analista"  element={<CorteAnalista />} />
@@ -260,7 +267,7 @@ export default function App() {
           path="/login"
           element={
             session && rolNombre
-              ? <Navigate to={rolNombre === "CABINERO_SINIESTROS" ? "/gaman/dashboard" : "/accesos"} replace />
+              ? <Navigate to={["CABINERO_SINIESTROS", "AJUSTADOR"].includes(rolNombre) ? "/gaman/dashboard" : "/accesos"} replace />
               : <Login />
           }
         />

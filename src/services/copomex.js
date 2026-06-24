@@ -3,20 +3,17 @@
 //
 // Búsqueda de C.P. mexicano — sin librerías externas, solo fetch().
 //
-// Lanza 3 APIs en PARALELO. La primera que devuelva datos válidos
-// gana (Promise.any). Si todas fallan, devuelve null y el componente
-// muestra el botón "Reintentar".
+// Estrategia en 3 etapas:
+//   1. Supabase propio (tabla codigos_postales) — siempre confiable.
+//   2. 3 APIs SEPOMEX externas en paralelo — para CPs no cargados aún.
+//   3. Zippopotam como último recurso — solo estado + municipio.
 //
-// APIs usadas (todas gratis, sin token, CORS abierto):
-//   1. mexico-api.devaleff.com    — open source 2025, formato d_estado/D_mnpio/d_asenta
-//   2. sepomex.nitrostudio.com.mx — formato d_estado/d_mnpio/d_asenta
-//   3. api-sepomex.hckdrk.mx      — formato array con response.{municipio,estado,asentamiento}
-//
-// Cada API tiene su propio parser que normaliza el resultado al formato:
-//   { estado, municipio, colonias[] }
+// Para cargar el catálogo SEPOMEX completo en Supabase, ver:
+//   src/supabase/README.md → sección "Catálogo de Códigos Postales"
 // ============================================================
+import { supabase } from "../supabaseClient";
 
-const TIMEOUT_MS = 5000;
+const TIMEOUT_MS = 6000;
 const REINTENTOS = 1;
 const BACKOFF_MS = 500;
 
@@ -48,14 +45,12 @@ const NORM_ESTADO = {
 // Convierte "MORELOS" a "Morelos", deja "Ciudad de México" como está, etc.
 function titleCase(s) {
   if (!s) return "";
-  // Si ya tiene mayúscula y minúscula mezcladas, lo dejamos tal cual
   if (s !== s.toUpperCase() && s !== s.toLowerCase()) return s;
   return s
     .toLowerCase()
     .split(/(\s+|-)/)
     .map((w) => {
       if (w.match(/^\s+$/) || w === "-") return w;
-      // Conectores en minúscula
       if (["de", "del", "la", "las", "los", "y", "el"].includes(w)) return w;
       return w.charAt(0).toUpperCase() + w.slice(1);
     })
@@ -66,7 +61,6 @@ const normEstado = (s) => {
   if (!s) return "";
   const trimmed = s.trim();
   if (NORM_ESTADO[trimmed]) return NORM_ESTADO[trimmed];
-  // Si viene en MAYÚSCULAS, lo title-caseamos y reintentamos lookup
   const tc = titleCase(trimmed);
   return NORM_ESTADO[tc] ?? tc;
 };
@@ -74,7 +68,6 @@ const normEstado = (s) => {
 const normTexto = (s) => {
   if (!s) return "";
   const trimmed = s.trim();
-  // Si viene en MAYÚSCULAS, convertir a Title Case
   return trimmed === trimmed.toUpperCase() ? titleCase(trimmed) : trimmed;
 };
 
@@ -105,9 +98,30 @@ async function fetchSafe(url, opts = {}) {
   throw ultimoError;
 }
 
-// ── API 1: mexico-api.devaleff.com ──────────────────────────────────────
-// GET /api/codigo-postal/{cp}
-// Respuesta: { data: [{ d_codigo, d_estado, d_ciudad, d_asenta, D_mnpio, d_tipo_asenta }] }
+// ── Fuente 1 (principal): Supabase — tabla codigos_postales ─────────────
+// Estructura: cp CHAR(5), colonia TEXT, municipio TEXT, estado TEXT
+// Si la tabla no existe o está vacía, retorna null y se cae a las APIs.
+async function desdeSupabase(cp) {
+  try {
+    const { data, error } = await supabase
+      .from("codigos_postales")
+      .select("colonia, municipio, estado")
+      .eq("cp", cp);
+
+    if (error || !data || data.length === 0) return null;
+
+    const estado    = normEstado(data[0].estado);
+    const municipio = normTexto(data[0].municipio);
+    const colonias  = limpiar(data.map((it) => it.colonia));
+
+    if (!estado || !municipio) return null;
+    return { estado, municipio, colonias };
+  } catch {
+    return null;
+  }
+}
+
+// ── Fuente 2: mexico-api.devaleff.com ───────────────────────────────────
 async function desdeDevaleff(cp) {
   const r = await fetchSafe(
     `https://mexico-api.devaleff.com/api/codigo-postal/${cp}`,
@@ -127,8 +141,7 @@ async function desdeDevaleff(cp) {
   return { estado, municipio, colonias };
 }
 
-// ── API 2: sepomex.nitrostudio.com.mx ───────────────────────────────────
-// GET /api/{VERSION}/cp/{cp}.json
+// ── Fuente 3: sepomex.nitrostudio.com.mx ────────────────────────────────
 async function desdeNitrostudio(cp) {
   const r = await fetchSafe(
     `https://sepomex.nitrostudio.com.mx/api/20241009/cp/${cp}.json`,
@@ -148,9 +161,7 @@ async function desdeNitrostudio(cp) {
   return { estado, municipio, colonias };
 }
 
-// ── API 3: api-sepomex.hckdrk.mx ────────────────────────────────────────
-// GET /query/info_cp/{cp}?type=simplified
-// Respuesta: [{ error, response: { cp, asentamiento, municipio, estado, ciudad } }, ...]
+// ── Fuente 4: api-sepomex.hckdrk.mx ────────────────────────────────────
 async function desdeHckdrk(cp) {
   const r = await fetchSafe(
     `https://api-sepomex.hckdrk.mx/query/info_cp/${cp}?type=simplified`,
@@ -174,6 +185,24 @@ async function desdeHckdrk(cp) {
   return { estado, municipio, colonias };
 }
 
+// ── Fuente 5 (último recurso): api.zippopotam.us ────────────────────────
+// No provee colonias — solo estado + municipio.
+async function desdeZippopotam(cp) {
+  const r = await fetchSafe(
+    `https://api.zippopotam.us/mx/${cp}`,
+    { signal: timeout(TIMEOUT_MS) },
+  );
+  if (!r) return null;
+  const json = await r.json();
+  if (!json?.places || json.places.length === 0) return null;
+
+  const estado    = normEstado(json.places[0].state);
+  const municipio = normTexto(json.places[0]["place name"]);
+
+  if (!estado) return null;
+  return { estado, municipio, colonias: [] };
+}
+
 // Caché en memoria por sesión
 const _cache = {};
 
@@ -185,7 +214,14 @@ export async function buscarCP(cp) {
   if (!cp || cp.length !== 5 || !/^\d{5}$/.test(cp)) return null;
   if (_cache[cp]) return _cache[cp];
 
-  // Lanza las 3 APIs en paralelo. La primera que devuelva datos válidos gana.
+  // Etapa 1: Supabase propio — siempre tiene prioridad
+  const deSupabase = await desdeSupabase(cp);
+  if (deSupabase) {
+    _cache[cp] = deSupabase;
+    return deSupabase;
+  }
+
+  // Etapa 2: 3 APIs SEPOMEX externas en paralelo
   try {
     const resultado = await Promise.any([
       requerir(desdeDevaleff(cp).catch(() => null)),
@@ -195,6 +231,14 @@ export async function buscarCP(cp) {
     _cache[cp] = resultado;
     return resultado;
   } catch {
+    // Etapa 3: Zippopotam — al menos rellena estado + municipio
+    try {
+      const res = await desdeZippopotam(cp);
+      if (res) {
+        _cache[cp] = res;
+        return res;
+      }
+    } catch { /* silencio */ }
     return null;
   }
 }

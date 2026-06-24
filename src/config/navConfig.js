@@ -3,7 +3,7 @@ export const NAV_POR_ROL = {
   // ── OPERADOR ──────────────────────────────────────────────
   OPERADOR: [
     { label: "Inicio",     path: "/gaman/dashboard",  icon: "home"        },
-    { label: "Clientes",   path: "/gaman/clientes",   icon: "users"       },
+    { label: "Clientes",   path: "/gaman/clientes",   icon: "briefcase"   },
     { label: "Pólizas",   path: "/gaman/polizas",    icon: "file-text"   },
     { label: "Vendedores", path: "/gaman/vendedores", icon: "hard-hat"    },
     { label: "Pagos",      path: "/gaman/pagos",      icon: "credit-card" },
@@ -22,11 +22,11 @@ export const NAV_POR_ROL = {
     { label: "Inicio",        path: "/gaman/dashboard",       icon: "home"       },
     { label: "Pólizas",       path: "/gaman/polizas",         icon: "file-text"  },
     { label: "Pagos",         path: "/gaman/pagos",           icon: "credit-card"},
-    { label: "Usuarios",      path: "/gaman/usuarios",        icon: "shield"     },
-    { label: "Precios",       path: "/gaman/configuracion",   icon: "sliders"    },
+    { label: "Usuarios",      path: "/gaman/usuarios",        icon: "users"      },
     { label: "Reportes",      path: "/gaman/reportes",        icon: "bar-chart"  },
-    { label: "Clientes",      path: "/gaman/clientes",        icon: "users"      },
+    { label: "Clientes",      path: "/gaman/clientes",        icon: "briefcase"  },
     { label: "Vendedores",    path: "/gaman/vendedores",      icon: "hard-hat"   },
+    { label: "Ajustes",       path: "/gaman/configuracion",   icon: "sliders"    },
   ],
 
   // ── CABINERO SINIESTROS ───────────────────────────────────
