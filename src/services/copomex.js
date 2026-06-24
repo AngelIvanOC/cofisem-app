@@ -4,7 +4,7 @@
 // Búsqueda de C.P. mexicano — sin librerías externas, solo fetch().
 //
 // Estrategia en 3 etapas:
-//   1. Supabase propio (tabla codigos_postales) — siempre confiable.
+//   1. Supabase propio (tabla direcciones) — siempre confiable.
 //   2. 3 APIs SEPOMEX externas en paralelo — para CPs no cargados aún.
 //   3. Zippopotam como último recurso — solo estado + municipio.
 //
@@ -98,13 +98,13 @@ async function fetchSafe(url, opts = {}) {
   throw ultimoError;
 }
 
-// ── Fuente 1 (principal): Supabase — tabla codigos_postales ─────────────
+// ── Fuente 1 (principal): Supabase — tabla direcciones ─────────────
 // Estructura: cp CHAR(5), colonia TEXT, municipio TEXT, estado TEXT
 // Si la tabla no existe o está vacía, retorna null y se cae a las APIs.
 async function desdeSupabase(cp) {
   try {
     const { data, error } = await supabase
-      .from("codigos_postales")
+      .from("direcciones")
       .select("colonia, municipio, estado")
       .eq("cp", cp);
 
