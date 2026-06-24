@@ -6,6 +6,12 @@ import {
   DERECHOS,
   calcularPrecioData,
 } from "../constants/cobertura";
+import {
+  FAMILIAS,
+  ID_A_FAMILIA,
+  IDS_OCULTOS,
+  resolverCobertura,
+} from "../constants/familiasCobertura";
 import { fetchCoberturasActivas } from "../../../services/coberturas";
 import {
   fetchPermitirFechasPasadas,
@@ -142,7 +148,7 @@ export default function FormCotizacion({
     fetchCoberturasActivas()
       .then((data) => {
         setTodasCoberturas(data);
-        setCoberturas(data.filter((c) => c.variante !== "PARCIALES"));
+        setCoberturas(data.filter((c) => !IDS_OCULTOS.has(c.id)));
       })
       .catch(console.error)
       .finally(() => setLoadingCoberturas(false));
@@ -705,49 +711,88 @@ export default function FormCotizacion({
             ) : (
               <div className="grid grid-cols-1 gap-3">
                 {coberturas.map((cob) => {
+                  const familia = ID_A_FAMILIA[cob.id];
+
+                  // ── Card especial para familias vinculadas ──
+                  if (familia && cob.id === familia.raiz) {
+                    const sel = !!ID_A_FAMILIA[form.coberturaId ?? ""];
+                    const cobContado   = todasCoberturas.find(c => c.id === familia.contado);
+                    const cobParciales = todasCoberturas.find(c => c.id === familia.parciales);
+                    const cobGestor    = todasCoberturas.find(c => c.id === familia.gestor);
+                    const fmt = (n) => n != null
+                      ? "$" + parseFloat(n).toLocaleString("es-MX", { minimumFractionDigits: 2 })
+                      : "—";
+                    return (
+                      <button
+                        key={cob.id}
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, coberturaId: familia.raiz, coberturaData: cobContado ?? cob }))}
+                        className={`w-full text-left rounded-2xl border-2 px-5 py-4 transition-all ${
+                          sel ? "border-[#13193a] bg-[#13193a]/5" : "border-gray-200 bg-white hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-4 mb-3">
+                          <div className="flex-1">
+                            <p className={`text-sm font-bold ${sel ? "text-[#13193a]" : "text-gray-700"}`}>
+                              {familia.nombre}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {cob.grupos_coberturas?.nombre ?? ""}{" · "}Duración: {cob.duracion_meses} meses
+                            </p>
+                          </div>
+                          {sel && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#13193a] text-white shrink-0">
+                              Seleccionado
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {[
+                            { label: "Normal · Contado",        precio: cobContado?.prima_total,   sub: null },
+                            { label: "Normal · 4 Parciales",    precio: cobParciales?.prima_total, sub: "Pago 1: $799 · 3×$625" },
+                            { label: "Gestor · Contado o Parc.", precio: cobGestor?.prima_total,   sub: "4×$550" },
+                          ].map(({ label, precio, sub }) => (
+                            <div
+                              key={label}
+                              className={`rounded-xl px-3 py-2 border ${sel ? "border-[#13193a]/20 bg-white" : "border-gray-100 bg-gray-50"}`}
+                            >
+                              <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">{label}</p>
+                              <p className={`text-base font-black tabular-nums mt-0.5 ${sel ? "text-[#13193a]" : "text-gray-700"}`}>
+                                {fmt(precio)}
+                              </p>
+                              {sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  }
+
+                  // ── Card normal para coberturas sin familia ──
                   const sel = form.coberturaId === cob.id;
                   return (
                     <button
                       key={cob.id}
                       type="button"
-                      onClick={() =>
-                        setForm((f) => ({
-                          ...f,
-                          coberturaId: cob.id,
-                          coberturaData: cob,
-                        }))
-                      }
+                      onClick={() => setForm((f) => ({ ...f, coberturaId: cob.id, coberturaData: cob }))}
                       className={`w-full text-left rounded-2xl border-2 px-5 py-4 transition-all ${
-                        sel
-                          ? "border-[#13193a] bg-[#13193a]/5"
-                          : "border-gray-200 bg-white hover:border-gray-300"
+                        sel ? "border-[#13193a] bg-[#13193a]/5" : "border-gray-200 bg-white hover:border-gray-300"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
-                          <p
-                            className={`text-sm font-bold ${sel ? "text-[#13193a]" : "text-gray-700"}`}
-                          >
+                          <p className={`text-sm font-bold ${sel ? "text-[#13193a]" : "text-gray-700"}`}>
                             {cob.nombre}
                           </p>
                           <p className="text-xs text-gray-400 mt-0.5">
-                            {cob.grupos_coberturas?.nombre ?? ""}
-                            {" · "}Duración: {cob.duracion_meses} meses
+                            {cob.grupos_coberturas?.nombre ?? ""}{" · "}Duración: {cob.duracion_meses} meses
                           </p>
                         </div>
                         <div className="text-right shrink-0">
-                          <p
-                            className={`text-xl font-black tabular-nums ${sel ? "text-[#13193a]" : "text-gray-700"}`}
-                          >
-                            $
-                            {parseFloat(cob.prima_total).toLocaleString(
-                              "es-MX",
-                              { minimumFractionDigits: 2 },
-                            )}
+                          <p className={`text-xl font-black tabular-nums ${sel ? "text-[#13193a]" : "text-gray-700"}`}>
+                            ${parseFloat(cob.prima_total).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                           </p>
-                          <p className="text-[10px] text-gray-400 uppercase tracking-wide">
-                            Prima total
-                          </p>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide">Prima total</p>
                         </div>
                       </div>
                     </button>
@@ -1259,37 +1304,14 @@ export default function FormCotizacion({
                 <select
                   value={form.formaPago}
                   onChange={(e) => {
-                    const newFp = e.target.value;
-                    const cob = form.coberturaData;
-                    if (cob?.id_par && newFp === "4 PARCIALES") {
-                      const par = todasCoberturas.find(
-                        (c) => c.id === cob.id_par,
-                      );
-                      if (par) {
-                        setForm((f) => ({
-                          ...f,
-                          formaPago: newFp,
-                          coberturaId: par.id,
-                          coberturaData: par,
-                        }));
-                        return;
-                      }
-                    }
-                    if (cob?.variante === "PARCIALES" && newFp === "CONTADO") {
-                      const cont = todasCoberturas.find(
-                        (c) => c.id_par === cob.id,
-                      );
-                      if (cont) {
-                        setForm((f) => ({
-                          ...f,
-                          formaPago: newFp,
-                          coberturaId: cont.id,
-                          coberturaData: cont,
-                        }));
-                        return;
-                      }
-                    }
-                    setF("formaPago", newFp);
+                    const newFp  = e.target.value;
+                    const nuevaCob = resolverCobertura(form.coberturaData, newFp, form.esGestor, todasCoberturas);
+                    setForm(f => ({
+                      ...f,
+                      formaPago:     newFp,
+                      coberturaId:   nuevaCob?.id   ?? f.coberturaId,
+                      coberturaData: nuevaCob        ?? f.coberturaData,
+                    }));
                   }}
                   className={inpCls}
                 >
@@ -1297,6 +1319,42 @@ export default function FormCotizacion({
                     <option key={f}>{f}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="flex flex-col justify-end">
+                <label className={lblCls}>Tipo de cuota</label>
+                <div className="flex items-center gap-3 h-[38px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextGestor = !form.esGestor;
+                      const nuevaCob   = resolverCobertura(form.coberturaData, form.formaPago, nextGestor, todasCoberturas);
+                      setForm(f => ({
+                        ...f,
+                        esGestor:      nextGestor,
+                        coberturaId:   nuevaCob?.id   ?? f.coberturaId,
+                        coberturaData: nuevaCob        ?? f.coberturaData,
+                      }));
+                    }}
+                    className={[
+                      "relative w-11 h-6 rounded-full transition-colors focus:outline-none",
+                      form.esGestor ? "bg-[#13193a]" : "bg-gray-200",
+                    ].join(" ")}
+                  >
+                    <span
+                      className={[
+                        "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
+                        form.esGestor ? "translate-x-5" : "translate-x-0",
+                      ].join(" ")}
+                    />
+                  </button>
+                  <span className="text-sm font-semibold text-gray-700">
+                    {form.esGestor ? "Gestor" : "Normal"}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {form.esGestor ? "(volumen alto)" : "(póliza individual)"}
+                  </span>
+                </div>
               </div>
 
               <p className="text-xs text-gray-400">
