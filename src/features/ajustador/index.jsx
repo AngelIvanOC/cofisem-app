@@ -14,13 +14,15 @@ import { useState, useCallback } from "react";
 import { StepBar } from "./shared";
 import ListaSiniestros from "./ListaSiniestros";
 import ConfirmarArribo from "./ConfirmarArribo";
+import DatosSiniestro from "./DatosSiniestro";
 import CapturaDatosEvidencia from "./CapturaEvidencia";
 import GenerarDocumentos from "./GenerarDocumentos";
 
 const NOMBRE_PASO = [
   "Confirmar Arribo",
-  "Datos, Evidencia y Daños",
-  "Generar Documentos",
+  "Datos del Siniestro",
+  "Partes y Evidencia",
+  "Documentos",
 ];
 
 // Altura del nav mobile del AppLayout (ajustar si cambia)
@@ -115,9 +117,12 @@ function PanelDetalle({ siniestro, paso, onVolver, onNext, onFinalizar }) {
           <ConfirmarArribo siniestro={siniestro} onConfirmar={onNext} />
         )}
         {paso === 1 && (
-          <CapturaDatosEvidencia siniestro={siniestro} onSiguiente={onNext} />
+          <DatosSiniestro siniestro={siniestro} onSiguiente={onNext} />
         )}
         {paso === 2 && (
+          <CapturaDatosEvidencia siniestro={siniestro} onSiguiente={onNext} />
+        )}
+        {paso === 3 && (
           <GenerarDocumentos siniestro={siniestro} onFinalizar={onFinalizar} />
         )}
       </div>

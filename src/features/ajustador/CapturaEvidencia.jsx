@@ -1,27 +1,30 @@
 // ============================================================
-// src/features/ajustador/CapturaDatosEvidencia.jsx
-// Bloque normal — fluye dentro del flex-1 overflow-y-auto del padre
-// Selector de participante en la parte superior (parte del flujo, no sticky)
-// Botón al final del contenido
+// src/features/ajustador/CapturaEvidencia.jsx
+// Paso 3: Partes involucradas + evidencia + modelo de daños
+//   Cada foto se comprime y sube a Supabase Storage en tiempo real
 // ============================================================
 import { useState, useRef, useCallback } from "react";
-import { Campo, AfectadoTag } from "./shared";
+import { Campo, CampoSistema, Sep, AfectadoTag } from "./shared";
+import { subirEvidencia, eliminarEvidencia } from "../../services/evidencias";
 import ModeloDanos3D from "./ModeloDanos";
 
-function Sep({ label }) {
-  return (
-    <div className="flex items-center gap-3 py-1">
-      <div className="flex-1 h-px bg-gray-100" />
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest shrink-0">
-        {label}
-      </p>
-      <div className="flex-1 h-px bg-gray-100" />
-    </div>
-  );
-}
-
-function BtnEvidencia({ label, evidencias, onAdd, onRemove, icon }) {
+// ── Botón de evidencia con upload real ───────────────────────
+// Cada item: { localUrl, storagePath, uploading, error }
+function BtnEvidencia({ label, icon, items, onAdd, onRemove }) {
   const ref = useRef();
+
+  const handleFiles = (e) => {
+    Array.from(e.target.files || []).forEach((file) => {
+      const localUrl = URL.createObjectURL(file);
+      onAdd({ localUrl, storagePath: null, uploading: true, error: null, file });
+    });
+    e.target.value = "";
+  };
+
+  const uploadCount  = items.filter((i) => i.uploading).length;
+  const doneCount    = items.filter((i) => !i.uploading && !i.error).length;
+  const errorCount   = items.filter((i) => i.error).length;
+
   return (
     <div>
       <input
@@ -31,71 +34,78 @@ function BtnEvidencia({ label, evidencias, onAdd, onRemove, icon }) {
         multiple
         capture="environment"
         className="hidden"
-        onChange={(e) => {
-          Array.from(e.target.files || [])
-            .map((f) => URL.createObjectURL(f))
-            .forEach((u) => onAdd(u));
-          e.target.value = "";
-        }}
+        onChange={handleFiles}
       />
       <button
         onClick={() => ref.current?.click()}
-        className="w-full py-10 border-2 border-dashed border-gray-200 rounded-2xl p-3 flex flex-col items-center gap-1.5 hover:border-[#13193a]/25 hover:bg-gray-50 transition-all active:scale-[0.98]"
+        className="w-full py-8 border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center gap-1.5 hover:border-[#13193a]/25 hover:bg-gray-50 transition-all active:scale-[0.98]"
       >
         <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
-          {icon ? (
-            <span className="text-lg">{icon}</span>
-          ) : (
-            <svg
-              className="w-4 h-4 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3 9l7.89 5.26a2 2 0 002.22 0L21 9M5 10a2 2 0 11-4 0 2 2 0 014 0zm7-1a2 2 0 11-4 0 2 2 0 014 0zm7-1a2 2 0 11-4 0 2 2 0 014 0z"
-              />
+          {icon ? <span className="text-lg">{icon}</span> : (
+            <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           )}
         </div>
-        <p className="text-xs font-semibold text-gray-500 text-center leading-snug">
-          {label}
-        </p>
-        {evidencias.length > 0 && (
+        <p className="text-xs font-semibold text-gray-500 text-center leading-snug px-2">{label}</p>
+        {doneCount > 0 && (
           <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 font-bold">
-            {evidencias.length} archivo{evidencias.length > 1 ? "s" : ""}
+            {doneCount} subida{doneCount > 1 ? "s" : ""}
+          </span>
+        )}
+        {uploadCount > 0 && (
+          <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 rounded-full px-2 py-0.5 font-bold">
+            {uploadCount} subiendo...
+          </span>
+        )}
+        {errorCount > 0 && (
+          <span className="text-[10px] bg-red-50 text-red-600 border border-red-200 rounded-full px-2 py-0.5 font-bold">
+            {errorCount} error
           </span>
         )}
       </button>
-      {evidencias.length > 0 && (
+
+      {items.length > 0 && (
         <div className="flex gap-1.5 mt-2 flex-wrap">
-          {evidencias.map((url, i) => (
-            <div
-              key={i}
-              className="relative w-14 h-14 rounded-xl overflow-hidden border border-gray-100"
-            >
-              <img src={url} alt="" className="w-full h-full object-cover" />
-              <button
-                onClick={() => onRemove(i)}
-                className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center"
-              >
-                <svg
-                  className="w-3 h-3 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="3"
+          {items.map((item, i) => (
+            <div key={i} className="relative w-14 h-14 rounded-xl overflow-hidden border border-gray-100">
+              <img src={item.localUrl} alt="" className="w-full h-full object-cover" />
+
+              {/* Spinner de subida */}
+              {item.uploading && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                </div>
+              )}
+              {/* Check de éxito */}
+              {!item.uploading && !item.error && (
+                <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+                  <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              )}
+              {/* Error */}
+              {item.error && (
+                <div className="absolute inset-0 bg-red-600/70 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
+                  </svg>
+                </div>
+              )}
+
+              {/* Botón eliminar */}
+              {!item.uploading && (
+                <button
+                  onClick={() => onRemove(i, item.storagePath)}
+                  className="absolute bottom-0.5 left-0.5 w-4 h-4 bg-black/60 rounded-full flex items-center justify-center"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+                  <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -104,332 +114,297 @@ function BtnEvidencia({ label, evidencias, onAdd, onRemove, icon }) {
   );
 }
 
-function PanelVehiculo({ esNA, datos, onDatos, modeloKey }) {
-  const [ev, setEv] = useState({
-    fotos: [],
-    licencia: [],
-    vehiculo: [],
-    poliza: [],
-  });
-  const addEv = (t, u) => setEv((e) => ({ ...e, [t]: [...e[t], u] }));
-  const remEv = (t, i) =>
-    setEv((e) => ({ ...e, [t]: e[t].filter((_, j) => j !== i) }));
+// ── Hook: gestiona la colección de items + upload de cada uno ─
+function useEvidencias(siniestroId, numeroSiniestro, participante, tipo) {
+  const [items, setItems] = useState([]);
+
+  const agregar = useCallback(({ localUrl, file }) => {
+    const idx = Date.now() + Math.random();
+    setItems((prev) => [...prev, { localUrl, storagePath: null, uploading: true, error: null, _idx: idx }]);
+
+    subirEvidencia({ siniestroId, numeroSiniestro, participante, tipo, file })
+      .then((path) => {
+        setItems((prev) =>
+          prev.map((it) => it._idx === idx ? { ...it, storagePath: path, uploading: false } : it)
+        );
+      })
+      .catch((err) => {
+        setItems((prev) =>
+          prev.map((it) => it._idx === idx ? { ...it, uploading: false, error: err.message ?? "Error" } : it)
+        );
+      });
+  }, [siniestroId, numeroSiniestro, participante, tipo]);
+
+  const eliminar = useCallback((i, storagePath) => {
+    setItems((prev) => prev.filter((_, j) => j !== i));
+    if (storagePath) eliminarEvidencia(storagePath).catch(() => {});
+  }, []);
+
+  return { items, agregar, eliminar };
+}
+
+// ── Panel Nuestro Asegurado ───────────────────────────────────
+function PanelNA({ siniestro }) {
+  const sid  = siniestro.id;
+  const num  = siniestro.numero_siniestro ?? siniestro.folio;
+  const a    = siniestro.aseguradoInfo ?? { nombre: siniestro.asegurado };
+  const v    = siniestro.vehiculoInfo  ?? {};
+
+  const fotos    = useEvidencias(sid, num, "NA", "fotos_siniestro");
+  const vehiculo = useEvidencias(sid, num, "NA", "vehiculo");
+  const poliza   = useEvidencias(sid, num, "NA", "documentos");
 
   return (
     <div className="border-2 border-gray-100 rounded-2xl overflow-hidden">
       <div className="bg-[#13193a] px-4 py-3">
-        <p className="text-sm font-bold text-white">
-          {esNA ? "NA" : "Afectado"}
-        </p>
-        <p className="text-white/50 text-xs mt-0.5">
-          {esNA ? "Vehículo asegurado" : "Tercero involucrado"}
-        </p>
+        <p className="text-sm font-bold text-white">Nuestro Asegurado (N.A.)</p>
+        <p className="text-white/50 text-xs mt-0.5">{a.nombre}</p>
       </div>
-
       <div className="p-4 space-y-4">
-        <Sep label="Datos personales" />
-        <div className="space-y-3">
-          <Campo
-            label="Nombre completo"
-            placeholder="Nombre del conductor"
-            value={datos.nombre}
-            onChange={(v) => onDatos("nombre", v)}
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <Campo
-              label="RFC"
-              placeholder="RFC con homoclave"
-              value={datos.rfc}
-              onChange={(v) => onDatos("rfc", v)}
-            />
-            <Campo
-              label="Teléfono"
-              type="tel"
-              placeholder="55 0000 0000"
-              value={datos.telefono}
-              onChange={(v) => onDatos("telefono", v)}
-            />
+
+        {/* Resumen del vehículo */}
+        <div className="bg-blue-50/60 rounded-xl p-3 border border-blue-100 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0 mt-0.5">
+            <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"/>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
+            </svg>
           </div>
-          <Campo
-            label="Dirección"
-            placeholder="Dirección completa"
-            value={datos.direccion}
-            onChange={(v) => onDatos("direccion", v)}
-          />
-          <Campo
-            label="CURP"
-            placeholder="CURP"
-            value={datos.curp}
-            onChange={(v) => onDatos("curp", v)}
-          />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-blue-800">{v.marca} {v.modelo} {v.anio}{v.color ? ` · ${v.color}` : ""}</p>
+            {v.placas && <p className="text-[11px] text-blue-600 mt-0.5">Placas: {v.placas}</p>}
+            {v.serie  && <p className="text-[11px] text-blue-500">Serie: {v.serie}</p>}
+          </div>
+          <span className="text-[9px] font-bold text-blue-500 bg-blue-100 px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0">Sistema</span>
         </div>
 
-        <Sep label="Datos del vehículo" />
-        {esNA ? (
-          <div className="grid grid-cols-2 gap-3">
-            <Campo label="No. Póliza" value={datos.poliza} readonly />
-            <Campo label="Vigencia" value={datos.vigencia} readonly />
-            <Campo label="Vehículo" value={datos.vehiculo} readonly />
-            <Campo label="Placas" value={datos.placas} readonly />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Campo
-                label="Marca / Modelo"
-                placeholder="Ej. Nissan Tsuru"
-                value={datos.vehiculo}
-                onChange={(v) => onDatos("vehiculo", v)}
-              />
-              <Campo
-                label="Placas"
-                placeholder="ABC-123X"
-                value={datos.placas}
-                onChange={(v) => onDatos("placas", v)}
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <Campo
-                label="Color"
-                placeholder="Color"
-                value={datos.color}
-                onChange={(v) => onDatos("color", v)}
-              />
-              <Campo
-                label="Año"
-                placeholder="2020"
-                value={datos.modelo}
-                onChange={(v) => onDatos("modelo", v)}
-              />
-              <Campo
-                label="Serie"
-                placeholder="17 dígitos"
-                value={datos.serie}
-                onChange={(v) => onDatos("serie", v)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Campo
-                label="Aseguradora"
-                placeholder="Si aplica"
-                value={datos.aseguradora}
-                onChange={(v) => onDatos("aseguradora", v)}
-              />
-              <Campo
-                label="Póliza tercero"
-                placeholder="Si aplica"
-                value={datos.polizaTercero}
-                onChange={(v) => onDatos("polizaTercero", v)}
-              />
-            </div>
-          </div>
-        )}
-
-        <Sep label="Declaración" />
-        <Campo
-          label={
-            esNA
-              ? "Versión de los hechos (asegurado)"
-              : "Versión de los hechos (afectado)"
-          }
-          placeholder="Describir lo ocurrido según esta parte..."
-          rows={3}
-          value={datos.declaracion}
-          onChange={(v) => onDatos("declaracion", v)}
-        />
-        {!esNA && (
-          <div className="flex items-center gap-3 flex-wrap">
-            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
-              Lesiones reportadas
-            </label>
-            <div className="flex gap-2">
-              {["Sí", "No"].map((op) => (
-                <button
-                  key={op}
-                  onClick={() => onDatos("lesiones", op === "Sí")}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold border-2 transition-all ${
-                    (datos.lesiones === true && op === "Sí") ||
-                    (datos.lesiones === false && op === "No")
-                      ? "bg-[#13193a] text-white border-[#13193a]"
-                      : "bg-white text-gray-500 border-gray-200"
-                  }`}
-                >
-                  {op}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <Sep label="Evidencia y documentos" />
+        <Sep label="Evidencia fotográfica" />
         <div className="grid grid-cols-2 gap-3">
           <BtnEvidencia
-            label="Fotos del siniestro"
-            icon="📸"
-            evidencias={ev.fotos}
-            onAdd={(u) => addEv("fotos", u)}
-            onRemove={(i) => remEv("fotos", i)}
+            label="Fotos del siniestro" icon="📸"
+            items={fotos.items}
+            onAdd={fotos.agregar}
+            onRemove={fotos.eliminar}
           />
           <BtnEvidencia
-            label="Licencia de conducir"
-            icon="🪪"
-            evidencias={ev.licencia}
-            onAdd={(u) => addEv("licencia", u)}
-            onRemove={(i) => remEv("licencia", i)}
+            label="Fotos del vehículo" icon="🚗"
+            items={vehiculo.items}
+            onAdd={vehiculo.agregar}
+            onRemove={vehiculo.eliminar}
           />
           <BtnEvidencia
-            label="Fotos del vehículo"
-            evidencias={ev.vehiculo}
-            onAdd={(u) => addEv("vehiculo", u)}
-            icon="🚗"
-            onRemove={(i) => remEv("vehiculo", i)}
+            label="Póliza física" icon="📄"
+            items={poliza.items}
+            onAdd={poliza.agregar}
+            onRemove={poliza.eliminar}
           />
-          {esNA && (
-            <BtnEvidencia
-              label="Póliza física"
-              icon="📄"
-              evidencias={ev.poliza}
-              onAdd={(u) => addEv("poliza", u)}
-              onRemove={(i) => remEv("poliza", i)}
-            />
-          )}
         </div>
 
-        <Sep label="Mapa de daños 3D" />
-        <p className="text-[11px] text-gray-400 -mt-2">
-          Arrastra para girar el vehículo · Toca la carrocería para marcar zonas
-          dañadas
-        </p>
-        <ModeloDanos3D instanceKey={modeloKey} />
+        <Sep label="Mapa de daños" />
+        <p className="text-[11px] text-gray-400 -mt-2">Arrastra para girar · Toca la carrocería para marcar zonas dañadas</p>
+        <ModeloDanos3D instanceKey="NA" />
       </div>
     </div>
   );
 }
 
-const datosVacios = (extra = {}) => ({
-  nombre: "",
-  rfc: "",
-  curp: "",
-  direccion: "",
-  telefono: "",
-  vehiculo: "",
-  placas: "",
-  color: "",
-  modelo: "",
-  serie: "",
-  aseguradora: "",
-  polizaTercero: "",
+// ── Panel Tercero Afectado ─────────────────────────────────────
+function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
+  const sid  = siniestro.id;
+  const num  = siniestro.numero_siniestro ?? siniestro.folio;
+
+  const licencia = useEvidencias(sid, num, afId, "licencias");
+  const vehiculo = useEvidencias(sid, num, afId, "vehiculo");
+  const fotos    = useEvidencias(sid, num, afId, "fotos_siniestro");
+  const danos    = useEvidencias(sid, num, afId, "danos");
+
+  return (
+    <div className="border-2 border-gray-100 rounded-2xl overflow-hidden">
+      <div className="bg-[#13193a] px-4 py-3">
+        <p className="text-sm font-bold text-white">Tercero Involucrado {idx}</p>
+        <p className="text-white/50 text-xs mt-0.5">Captura los datos del afectado</p>
+      </div>
+      <div className="p-4 space-y-4">
+
+        <Sep label="Datos personales" />
+        <div className="space-y-3">
+          <Campo label="Nombre completo" placeholder="Nombre del afectado" value={datos.nombre} onChange={(v) => onDatos("nombre", v)} />
+          <div className="grid grid-cols-3 gap-3">
+            <Campo label="Edad" type="number" placeholder="Años" value={datos.edad} onChange={(v) => onDatos("edad", v)} />
+            <div className="col-span-2">
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Sexo</label>
+              <div className="flex gap-2 h-[42px]">
+                {["Masculino", "Femenino"].map((op) => (
+                  <button key={op} onClick={() => onDatos("sexo", op)}
+                    className={`flex-1 rounded-xl text-xs font-bold border-2 transition-all ${datos.sexo === op ? "bg-[#13193a] text-white border-[#13193a]" : "bg-white text-gray-500 border-gray-200"}`}>
+                    {op}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Teléfono"  type="tel"   placeholder="55 0000 0000"      value={datos.telefono} onChange={(v) => onDatos("telefono", v)} />
+            <Campo label="Correo"    type="email" placeholder="correo@ejemplo.com" value={datos.email}    onChange={(v) => onDatos("email", v)}    />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="RFC"  placeholder="RFC con homoclave" value={datos.rfc}  onChange={(v) => onDatos("rfc", v)}  />
+            <Campo label="CURP" placeholder="CURP"              value={datos.curp} onChange={(v) => onDatos("curp", v)} />
+          </div>
+          <Campo label="Dirección" placeholder="Calle, número, colonia, ciudad..." value={datos.direccion} onChange={(v) => onDatos("direccion", v)} />
+        </div>
+
+        <Sep label="Datos del vehículo afectado" />
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Marca / Modelo" placeholder="Ej. Nissan Tsuru" value={datos.vehiculo} onChange={(v) => onDatos("vehiculo", v)} />
+            <Campo label="Año"            placeholder="2020"              value={datos.anio}     onChange={(v) => onDatos("anio", v)}     />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Color"  placeholder="Color"    value={datos.color}  onChange={(v) => onDatos("color", v)}  />
+            <Campo label="Placas" placeholder="ABC-123X" value={datos.placas} onChange={(v) => onDatos("placas", v)} />
+          </div>
+          <Campo label="Número de serie" placeholder="17 dígitos" value={datos.serie} onChange={(v) => onDatos("serie", v)} />
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Aseguradora"    placeholder="Si aplica" value={datos.aseguradora}   onChange={(v) => onDatos("aseguradora", v)}   />
+            <Campo label="Póliza tercero" placeholder="Si aplica" value={datos.polizaTercero} onChange={(v) => onDatos("polizaTercero", v)} />
+          </div>
+        </div>
+
+        <Sep label="Lesiones" />
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">¿Hay lesiones reportadas?</label>
+            <div className="flex gap-2">
+              {["Sí", "No"].map((op) => (
+                <button key={op} onClick={() => onDatos("lesiones", op === "Sí")}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                    (datos.lesiones === true  && op === "Sí") ? "bg-red-500 text-white border-red-500" :
+                    (datos.lesiones === false && op === "No") ? "bg-[#13193a] text-white border-[#13193a]" :
+                    "bg-white text-gray-500 border-gray-200"
+                  }`}>
+                  {op}
+                </button>
+              ))}
+            </div>
+          </div>
+          {datos.lesiones === true && (
+            <Campo label="Descripción de lesiones" placeholder="Describe el tipo y alcance..." rows={2}
+              value={datos.descripcionLesiones} onChange={(v) => onDatos("descripcionLesiones", v)} />
+          )}
+        </div>
+
+        <Sep label="Versión de los hechos" />
+        <Campo label="Declaración del afectado"
+          placeholder="Captura la versión de los hechos según indica el afectado..."
+          rows={3} value={datos.declaracion} onChange={(v) => onDatos("declaracion", v)} />
+
+        <Sep label="Evidencia y documentos" />
+        <div className="grid grid-cols-2 gap-3">
+          <BtnEvidencia label="Licencia de conducir" icon="🪪"
+            items={licencia.items} onAdd={licencia.agregar} onRemove={licencia.eliminar} />
+          <BtnEvidencia label="Fotos del vehículo" icon="🚗"
+            items={vehiculo.items} onAdd={vehiculo.agregar} onRemove={vehiculo.eliminar} />
+          <BtnEvidencia label="Fotos del siniestro" icon="📸"
+            items={fotos.items} onAdd={fotos.agregar} onRemove={fotos.eliminar} />
+          <BtnEvidencia label="Fotos de daños" icon="🔍"
+            items={danos.items} onAdd={danos.agregar} onRemove={danos.eliminar} />
+        </div>
+
+        <Sep label="Mapa de daños" />
+        <p className="text-[11px] text-gray-400 -mt-2">Arrastra para girar · Toca la carrocería para marcar zonas dañadas</p>
+        <ModeloDanos3D instanceKey={afId} />
+      </div>
+    </div>
+  );
+}
+
+const datosAfectadoVacio = () => ({
+  nombre: "", edad: "", sexo: "", telefono: "", email: "",
+  rfc: "", curp: "", direccion: "",
+  vehiculo: "", anio: "", color: "", placas: "", serie: "",
+  aseguradora: "", polizaTercero: "",
+  lesiones: null, descripcionLesiones: "",
   declaracion: "",
-  lesiones: null,
-  ...extra,
 });
 
 export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
-  const [activo, setActivo] = useState("NA");
+  const [activo,       setActivo]       = useState("NA");
   const [afectadosIds, setAfectadosIds] = useState(["AF1"]);
-  const [participantes, setParticipantes] = useState({
-    NA: datosVacios({
-      poliza: siniestro.poliza,
-      vigencia: siniestro.vigencia,
-      vehiculo: siniestro.vehiculo ?? "",
-    }),
-    AF1: datosVacios(),
-  });
+  const [afectados,    setAfectados]    = useState({ AF1: datosAfectadoVacio() });
 
   const agregarAfectado = () => {
-    const n = afectadosIds.length + 1;
+    const n  = afectadosIds.length + 1;
     const id = `AF${n}`;
     setAfectadosIds((ids) => [...ids, id]);
-    setParticipantes((p) => ({ ...p, [id]: datosVacios() }));
+    setAfectados((a) => ({ ...a, [id]: datosAfectadoVacio() }));
     setActivo(id);
   };
 
   const eliminarAfectado = (id) => {
     if (afectadosIds.length <= 1) return;
     setAfectadosIds((ids) => ids.filter((x) => x !== id));
-    setParticipantes((p) => {
-      const np = { ...p };
-      delete np[id];
-      return np;
-    });
+    setAfectados((a) => { const n = { ...a }; delete n[id]; return n; });
     if (activo === id) setActivo("NA");
   };
 
   const actualizarDato = useCallback((id, campo, valor) => {
-    setParticipantes((p) => ({ ...p, [id]: { ...p[id], [campo]: valor } }));
+    setAfectados((a) => ({ ...a, [id]: { ...a[id], [campo]: valor } }));
   }, []);
 
   const todos = ["NA", ...afectadosIds];
 
   return (
     <div className="px-4 py-4 space-y-4">
-      {/* Selector de participante */}
+
+      {/* Selector de participantes */}
       <div className="bg-gray-50 rounded-2xl p-3">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">
-          Partes involucradas
-        </p>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">Partes involucradas</p>
         <div className="flex items-center gap-2 flex-wrap">
           {todos.map((id) => {
-            const label =
-              id === "NA" ? "NA" : `Afectado ${id.replace("AF", "")}`;
+            const label = id === "NA" ? "N.A." : `Tercero ${id.replace("AF", "")}`;
             return (
               <div key={id} className="flex items-center gap-1">
-                <AfectadoTag
-                  label={label}
-                  active={activo === id}
-                  onClick={() => setActivo(id)}
-                />
+                <AfectadoTag label={label} active={activo === id} onClick={() => setActivo(id)} />
                 {id !== "NA" && afectadosIds.length > 1 && (
-                  <button
-                    onClick={() => eliminarAfectado(id)}
-                    className="w-4 h-4 rounded-full bg-gray-200 hover:bg-red-100 hover:text-red-500 flex items-center justify-center text-gray-400 transition-all"
-                  >
-                    <svg
-                      className="w-2.5 h-2.5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M6 18L18 6M6 6l12 12"
-                      />
+                  <button onClick={() => eliminarAfectado(id)}
+                    className="w-4 h-4 rounded-full bg-gray-200 hover:bg-red-100 hover:text-red-500 flex items-center justify-center text-gray-400 transition-all">
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 )}
               </div>
             );
           })}
-          <button
-            onClick={agregarAfectado}
-            className="w-7 h-7 rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-[#13193a]/40 hover:text-[#13193a] flex items-center justify-center font-bold text-base transition-all"
-          >
+          <button onClick={agregarAfectado} title="Agregar tercero"
+            className="w-7 h-7 rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-[#13193a]/40 hover:text-[#13193a] flex items-center justify-center font-bold text-base transition-all">
             +
           </button>
         </div>
       </div>
 
-      {/* Panel del participante activo */}
+      {/* Paneles */}
       {todos.map((id) => (
         <div key={id} className={id === activo ? "block" : "hidden"}>
-          <PanelVehiculo
-            esNA={id === "NA"}
-            datos={participantes[id] ?? datosVacios()}
-            onDatos={(campo, valor) => actualizarDato(id, campo, valor)}
-            modeloKey={id}
-          />
+          {id === "NA" ? (
+            <PanelNA siniestro={siniestro} />
+          ) : (
+            <PanelAfectado
+              idx={id.replace("AF", "")}
+              afId={id}
+              siniestro={siniestro}
+              datos={afectados[id] ?? datosAfectadoVacio()}
+              onDatos={(campo, valor) => actualizarDato(id, campo, valor)}
+            />
+          )}
         </div>
       ))}
 
-      {/* Botón al fondo del contenido */}
       <div className="pt-2 pb-6">
-        <button
-          onClick={onSiguiente}
-          className="w-full py-3.5 rounded-2xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-[#13193a]/15"
-        >
-          Continuar a Documentos
+        <button onClick={onSiguiente}
+          className="w-full py-3.5 rounded-2xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-[#13193a]/15">
+          Continuar a Documentos →
         </button>
       </div>
     </div>
