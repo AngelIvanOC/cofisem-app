@@ -256,7 +256,6 @@ export default function PaginaLanding() {
         </div>
 
         <div className="relative max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center w-full">
-
           {/* Texto */}
           <div>
             <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-blue-400/80 mb-6 border border-blue-400/20 px-3 py-1.5 rounded-full bg-blue-400/5">
@@ -281,8 +280,18 @@ export default function PaginaLanding() {
                 className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-[#13193a] text-sm font-bold hover:bg-gray-100 transition-all shadow-lg"
               >
                 Tramita tu póliza
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                  />
                 </svg>
               </a>
               <a
@@ -296,13 +305,15 @@ export default function PaginaLanding() {
             {/* Stats */}
             <div className="flex items-center gap-8 mt-12 pt-8 border-t border-white/10">
               {[
-                { value: "4+",   label: "Aseguradoras" },
-                { value: "100%", label: "Digital"       },
-                { value: "4",    label: "Oficinas"      },
+                { value: "4+", label: "Aseguradoras" },
+                { value: "100%", label: "Digital" },
+                { value: "4", label: "Oficinas" },
               ].map((s) => (
                 <div key={s.label}>
                   <p className="text-2xl font-bold text-white">{s.value}</p>
-                  <p className="text-xs text-white/40 mt-0.5 font-medium">{s.label}</p>
+                  <p className="text-xs text-white/40 mt-0.5 font-medium">
+                    {s.label}
+                  </p>
                 </div>
               ))}
             </div>
@@ -312,7 +323,9 @@ export default function PaginaLanding() {
           <div className="hidden lg:flex justify-center">
             <div className="relative w-full max-w-sm space-y-3">
               <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
-                <p className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-4">¿Qué cubre tu seguro?</p>
+                <p className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-4">
+                  ¿Qué cubre tu seguro?
+                </p>
                 <div className="space-y-3">
                   {[
                     "Daños a terceros",
@@ -323,8 +336,18 @@ export default function PaginaLanding() {
                   ].map((label) => (
                     <div key={label} className="flex items-center gap-3">
                       <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
-                        <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        <svg
+                          className="w-3 h-3 text-emerald-400"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M5 13l4 4L19 7"
+                          />
                         </svg>
                       </div>
                       <p className="text-sm text-white/70">{label}</p>
@@ -335,17 +358,26 @@ export default function PaginaLanding() {
 
               {/* Chip flotante */}
               <div className="absolute -top-4 -right-4 bg-emerald-500 rounded-2xl px-4 py-2.5 shadow-xl shadow-emerald-900/30">
-                <p className="text-[10px] text-white/80 font-semibold uppercase tracking-wide">Desde</p>
-                <p className="text-lg font-bold text-white leading-none">$637<span className="text-xs font-normal">/trimestre</span></p>
+                <p className="text-[10px] text-white/80 font-semibold uppercase tracking-wide">
+                  Desde
+                </p>
+                <p className="text-lg font-bold text-white leading-none">
+                  $550<span className="text-xs font-normal">/semanal</span>
+                </p>
               </div>
 
               {/* Chips de tipo */}
               <div className="flex gap-2 flex-wrap">
-                {["🚕 Taxi", "🚗 Personal", "📱 DIDI/UBER", "🚛 Carga"].map((t) => (
-                  <span key={t} className="text-xs text-white/60 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full font-medium">
-                    {t}
-                  </span>
-                ))}
+                {["🚕 Taxi", "🚗 Personal", "📱 DIDI/UBER", "🚛 Carga"].map(
+                  (t) => (
+                    <span
+                      key={t}
+                      className="text-xs text-white/60 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full font-medium"
+                    >
+                      {t}
+                    </span>
+                  ),
+                )}
               </div>
             </div>
           </div>
@@ -362,7 +394,10 @@ export default function PaginaLanding() {
           </p>
           <div className="flex flex-wrap justify-center items-center gap-12 lg:gap-20">
             {ASEGURADORAS.map((a) => (
-              <img key={a.nombre} src={a.logo} alt={a.nombre}
+              <img
+                key={a.nombre}
+                src={a.logo}
+                alt={a.nombre}
                 className={`${a.w} object-contain opacity-40 hover:opacity-70 grayscale hover:grayscale-0 transition-all duration-300`}
               />
             ))}
