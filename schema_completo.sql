@@ -139,6 +139,7 @@ CREATE TABLE public.pagos (
   recibido_por uuid,
   aplicado_por uuid,
   num_cuota integer,
+  descargado boolean DEFAULT false,
   CONSTRAINT pagos_pkey PRIMARY KEY (id),
   CONSTRAINT pagos_creado_por_fkey FOREIGN KEY (creado_por) REFERENCES public.usuarios(id),
   CONSTRAINT pagos_autorizado_por_fkey FOREIGN KEY (autorizado_por) REFERENCES public.usuarios(id),
@@ -181,6 +182,12 @@ CREATE TABLE public.siniestros (
   numero_ext text,
   referencia text,
   hora_inicio_reporte timestamp with time zone,
+  arribo_lat numeric,
+  arribo_lng numeric,
+  arribo_precision integer,
+  arribo_fecha timestamp with time zone,
+  arribo_foto_lat numeric,
+  arribo_foto_lng numeric,
   CONSTRAINT siniestros_pkey PRIMARY KEY (id),
   CONSTRAINT siniestros_poliza_id_fkey FOREIGN KEY (poliza_id) REFERENCES public.polizas(id),
   CONSTRAINT siniestros_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
@@ -266,14 +273,11 @@ CREATE TABLE public.coberturas (
   grupo_id bigint NOT NULL,
   vigente_desde date NOT NULL DEFAULT CURRENT_DATE,
   activa_hasta date,
-  variante text,
-  id_par uuid,
   prima_base numeric,
   regla_pago text DEFAULT 'ESTANDAR'::text,
   CONSTRAINT coberturas_pkey PRIMARY KEY (id),
   CONSTRAINT coberturas_oficina_id_fkey FOREIGN KEY (oficina_id) REFERENCES public.oficinas(id),
-  CONSTRAINT coberturas_grupo_id_fkey FOREIGN KEY (grupo_id) REFERENCES public.grupos_coberturas(id),
-  CONSTRAINT coberturas_id_par_fkey FOREIGN KEY (id_par) REFERENCES public.coberturas(id)
+  CONSTRAINT coberturas_grupo_id_fkey FOREIGN KEY (grupo_id) REFERENCES public.grupos_coberturas(id)
 );
 CREATE TABLE public.cobertura_rubros (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -373,4 +377,24 @@ CREATE TABLE public.siniestros_terceros (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT siniestros_terceros_pkey PRIMARY KEY (id),
   CONSTRAINT siniestros_terceros_siniestro_id_fkey FOREIGN KEY (siniestro_id) REFERENCES public.siniestros(id)
+);
+CREATE TABLE public.direcciones (
+  cp character NOT NULL,
+  colonia text NOT NULL,
+  municipio text NOT NULL,
+  estado text NOT NULL
+);
+CREATE TABLE public.siniestro_evidencias (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  siniestro_id integer NOT NULL,
+  numero_siniestro text NOT NULL,
+  participante text NOT NULL DEFAULT 'NA'::text,
+  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['llegada'::text, 'vehiculo'::text, 'danos'::text, 'documentos'::text, 'licencias'::text, 'fotos_siniestro'::text])),
+  storage_path text NOT NULL,
+  nombre_original text,
+  tamanio_bytes integer,
+  uploaded_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT siniestro_evidencias_pkey PRIMARY KEY (id),
+  CONSTRAINT siniestro_evidencias_siniestro_id_fkey FOREIGN KEY (siniestro_id) REFERENCES public.siniestros(id)
 );

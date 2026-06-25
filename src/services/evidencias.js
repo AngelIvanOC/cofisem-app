@@ -168,6 +168,23 @@ export async function getSignedUrl(storagePath) {
   return data.signedUrl;
 }
 
+// ── Guarda coordenadas de arribo en el siniestro ─────────────
+export async function registrarArribo(siniestroId, { lat, lng, precision, fotoLat, fotoLng }) {
+  const { error } = await supabase
+    .from("siniestros")
+    .update({
+      arribo_lat:       lat       ?? null,
+      arribo_lng:       lng       ?? null,
+      arribo_precision: precision ?? null,
+      arribo_fecha:     new Date().toISOString(),
+      arribo_foto_lat:  fotoLat   ?? null,
+      arribo_foto_lng:  fotoLng   ?? null,
+      estatus:          "En proceso",
+    })
+    .eq("id", siniestroId);
+  if (error) throw error;
+}
+
 // ── Todas las evidencias de un siniestro ─────────────────────
 export async function fetchEvidencias(siniestroId) {
   const { data, error } = await supabase

@@ -239,10 +239,12 @@ export async function fetchSiniestros() {
     .select(`
       id, numero_siniestro, tipo_siniestro, descripcion, estatus,
       fecha_siniestro, ubicacion, ajustador_id,
+      arribo_fecha, created_at,
       polizas(
         id, constancia, numero_poliza, placas, anio,
-        clientes(nombre, apellido),
-        vehiculos_amis(marca, tipo)
+        clientes(nombre, apellido, telefono),
+        vehiculos_amis(marca, tipo),
+        coberturas(nombre)
       ),
       ajustador:usuarios!siniestros_ajustador_id_fkey(nombre, apellido)
     `)
@@ -250,24 +252,29 @@ export async function fetchSiniestros() {
   if (error) throw error;
 
   return (data ?? []).map((s) => {
-    const p  = s.polizas ?? {};
+    const p   = s.polizas ?? {};
     const veh = p.vehiculos_amis;
-    const cliente = [p.clientes?.nombre, p.clientes?.apellido].filter(Boolean).join(" ") || "—";
+    const cl  = p.clientes ?? {};
+    const cliente  = [cl.nombre, cl.apellido].filter(Boolean).join(" ") || "—";
     const vehiculo = [veh?.marca, veh?.tipo, p.anio].filter(Boolean).join(" ") || p.placas || "—";
     const ajNombre = s.ajustador
       ? [s.ajustador.nombre, s.ajustador.apellido].filter(Boolean).join(" ")
       : null;
     return {
-      id:        s.id,
-      folio:     s.numero_siniestro,
-      asegurado: cliente,
+      id:               s.id,
+      folio:            s.numero_siniestro,
+      asegurado:        cliente,
       vehiculo,
-      fecha:     fmtFecha(s.fecha_siniestro),
-      ubicacion: s.ubicacion || "—",
-      ajustador: ajNombre,
-      estatus:   s.estatus || "Reportado",
-      polizaId:  p.id,
+      fecha:            fmtFecha(s.fecha_siniestro),
+      ubicacion:        s.ubicacion || "—",
+      ajustador:        ajNombre,
+      estatus:          s.estatus || "Reportado",
+      polizaId:         p.id,
       polizaConstancia: p.constancia || p.numero_poliza || "—",
+      cobertura:        p.coberturas?.nombre ?? "—",
+      telefono:         cl.telefono ?? "—",
+      arribo_fecha:     s.arribo_fecha ?? null,
+      reportadoFecha:   s.created_at  ?? null,
     };
   });
 }

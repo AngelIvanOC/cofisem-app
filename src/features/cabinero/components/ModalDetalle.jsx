@@ -2,14 +2,35 @@ import { useState } from "react";
 import { STATUS_CLS } from "../constants/estilos";
 import PanelAsignar from "./PanelAsignar";
 
+function fmtEtapa(iso) {
+  if (!iso) return "Pendiente";
+  return new Date(iso).toLocaleDateString("es-MX", {
+    day: "2-digit", month: "2-digit", year: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+}
+
 export default function ModalDetalle({ s, onClose, onAsignar }) {
   const [modoAsignar, setModoAsignar] = useState(!s.ajustador);
 
+  const arriboDone  = !!s.arribo_fecha;
+  const procesoDone = ["Cerrado", "Resuelto"].includes(s.estatus);
+  const cerradoDone = s.estatus === "Cerrado";
+
   const etapas = [
-    { label: "Reportado",  time: "17/03/26 10:30", done: true           },
-    { label: "Arribo",     time: "Pendiente",       done: !!s.ajustador  },
-    { label: "En proceso", time: "Pendiente",       done: false          },
-    { label: "Cerrado",    time: "Pendiente",       done: false          },
+    { label: "Reportado",  time: fmtEtapa(s.reportadoFecha), done: true        },
+    { label: "Arribo",     time: fmtEtapa(s.arribo_fecha),   done: arriboDone  },
+    { label: "En proceso", time: "Pendiente",                 done: procesoDone },
+    { label: "Cerrado",    time: "Pendiente",                 done: cerradoDone },
+  ];
+
+  const infoFields = [
+    ["Asegurado", s.asegurado],
+    ["Vehículo",  s.vehiculo],
+    ["Fecha",     s.fecha],
+    ["Teléfono",  s.telefono ?? "—"],
+    ["Póliza",    s.polizaConstancia ?? "—"],
+    ["Cobertura", s.cobertura ?? "—"],
   ];
 
   return (
@@ -66,14 +87,7 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
             <div>
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Información</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {[
-                  ["Asegurado", s.asegurado],
-                  ["Vehículo",  s.vehiculo],
-                  ["Fecha",     s.fecha],
-                  ["Teléfono",  "777 100 2233"],
-                  ["Póliza",    "3413241"],
-                  ["Cobertura", "TAXI BÁSICA 2500"],
-                ].map(([l, v]) => (
+                {infoFields.map(([l, v]) => (
                   <div key={l}>
                     <p className="text-[11px] text-gray-400 mb-0.5">{l}</p>
                     <p className="text-sm font-semibold text-gray-700">{v}</p>
@@ -109,12 +123,15 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
 
           {/* Derecha */}
           <div className="w-64 shrink-0 overflow-y-auto p-5 space-y-5 bg-gray-50/50 border-l border-gray-100">
+            {/* Seguimiento */}
             <div>
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">Seguimiento</p>
               {etapas.map((e, i) => (
                 <div key={i} className="flex gap-3">
                   <div className="flex flex-col items-center">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${e.done ? "border-emerald-500 bg-emerald-500" : "border-gray-300 bg-white"}`}>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                      e.done ? "border-emerald-500 bg-emerald-500" : "border-gray-300 bg-white"
+                    }`}>
                       {e.done && (
                         <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3.5">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
@@ -122,33 +139,48 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
                       )}
                     </div>
                     {i < etapas.length - 1 && (
-                      <div className={`w-0.5 h-7 my-1 rounded-full ${e.done ? "bg-emerald-200" : "bg-gray-200"}`} />
+                      <div className={`w-0.5 h-7 my-1 rounded-full transition-all ${e.done ? "bg-emerald-200" : "bg-gray-200"}`} />
                     )}
                   </div>
                   <div className="pb-1">
                     <p className={`text-xs font-semibold ${e.done ? "text-[#13193a]" : "text-gray-400"}`}>{e.label}</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">{e.time}</p>
+                    <p className={`text-[11px] mt-0.5 ${e.done ? "text-emerald-600 font-medium" : "text-gray-400"}`}>{e.time}</p>
                   </div>
                 </div>
               ))}
             </div>
 
+            {/* Ajustador */}
             <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Ajustador</p>
               {s.ajustador && !modoAsignar ? (
                 <>
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-[#13193a] flex items-center justify-center text-white text-xs font-bold shrink-0">
-                      {s.ajustador.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+                      {s.ajustador.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
                     </div>
                     <div>
                       <p className="text-xs font-bold text-[#13193a]">{s.ajustador}</p>
                       <p className="text-[11px] text-gray-400">Asignado</p>
                     </div>
                   </div>
-                  <span className="inline-flex text-[11px] bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-semibold">
-                    Pendiente de arribo
-                  </span>
+
+                  {/* Badge dinámico según arribo */}
+                  {!arriboDone ? (
+                    <span className="inline-flex text-[11px] bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-semibold">
+                      Pendiente de arribo
+                    </span>
+                  ) : procesoDone ? (
+                    <span className="inline-flex text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full font-semibold">
+                      Completado
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                      En proceso
+                    </span>
+                  )}
+
                   <button
                     onClick={() => setModoAsignar(true)}
                     className="w-full text-xs text-gray-400 hover:text-[#13193a] font-medium mt-1"
@@ -173,6 +205,7 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
                   </button>
                 </div>
               ) : null}
+
               {modoAsignar && (
                 <PanelAsignar
                   s={s}
@@ -189,7 +222,9 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 shrink-0 flex items-center justify-between bg-white">
-          <p className="text-xs text-gray-400">Última actualización: hoy</p>
+          <p className="text-xs text-gray-400">
+            Última actualización: {fmtEtapa(s.reportadoFecha).split(" ")[0] || "hoy"}
+          </p>
           <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-xs font-semibold transition-all">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round"
