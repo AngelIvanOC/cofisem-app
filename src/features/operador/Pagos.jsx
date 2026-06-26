@@ -14,8 +14,11 @@ import {
   Eye,
   Loader2,
   Lock,
+  Minus,
   Receipt,
   Search,
+  TrendingDown,
+  TrendingUp,
   X,
 } from "lucide-react";
 
@@ -146,6 +149,13 @@ function abrirRecibo(poliza, cuota, operador) {
   supabase.from("pagos").update({ descargado: true }).eq("id", cuota.id).then();
   localStorage.setItem("recibo_data", JSON.stringify(datos));
   window.open("/gaman/recibo-preview", "_blank");
+}
+
+// Devuelve true si la fecha "dd/mm/yyyy" corresponde al mes/año dados
+function enMes(fechaDDMMYYYY, anio, mes) {
+  if (!fechaDDMMYYYY) return false;
+  const p = fechaDDMMYYYY.split("/");
+  return parseInt(p[2]) === anio && parseInt(p[1]) === mes;
 }
 
 // Estatus efectivo de una cuota para display
@@ -918,6 +928,27 @@ export default function OperadorPagos({ usuario }) {
   const cuotasVencidas = vencidasList.length;
   const montoVencidas = vencidasList.reduce((s, c) => s + c.monto, 0);
 
+  // Tendencia mes anterior
+  const mesAct   = hoy.getMonth() + 1;
+  const anioAct  = hoy.getFullYear();
+  const mesPrev  = mesAct  === 1 ? 12 : mesAct  - 1;
+  const anioPrev = mesAct  === 1 ? anioAct - 1 : anioAct;
+  const todasCuotas = cargadas.flatMap((p) => p.cuotas);
+  const cobMesAct   = todasCuotas.filter((c) => c.estatus === "PAGADO"    && enMes(c.fechaPago, anioAct, mesAct)).length;
+  const cobMesPrev  = todasCuotas.filter((c) => c.estatus === "PAGADO"    && enMes(c.fechaPago, anioPrev, mesPrev)).length;
+  const adMesAct    = todasCuotas.filter((c) => c.estatus === "ADEUDO"    && enMes(c.vto, anioAct, mesAct)).length;
+  const adMesPrev   = todasCuotas.filter((c) => c.estatus === "ADEUDO"    && enMes(c.vto, anioPrev, mesPrev)).length;
+  const pendMesAct  = todasCuotas.filter((c) => c.estatus === "PENDIENTE" && enMes(c.vto, anioAct, mesAct)).length;
+  const pendMesPrev = todasCuotas.filter((c) => c.estatus === "PENDIENTE" && enMes(c.vto, anioPrev, mesPrev)).length;
+  const vencMesAct  = todasCuotas.filter((c) =>
+    c.estatus === "PENDIENTE" &&
+    enMes(c.vto, anioAct, mesAct) &&
+    new Date(c.vto.split("/").reverse().join("-") + "T12:00:00") < hoy,
+  ).length;
+  const vencMesPrev = todasCuotas.filter((c) =>
+    c.estatus === "PENDIENTE" && enMes(c.vto, anioPrev, mesPrev),
+  ).length;
+
   return (
     <div className="p-6 py-3 min-h-full bg-gray-50 space-y-3">
       <div>
@@ -929,32 +960,47 @@ export default function OperadorPagos({ usuario }) {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          {
-            label: "Total cobrado",
-            count: cuotasCobradas,
-            money: totalCobrado,
-          },
-          { label: "En adeudo", count: cuotasAdeudo, money: totalAdeudo },
-          { label: "Por recibir", count: cuotasPend, money: montoPendiente },
-          { label: "Vencidas", count: cuotasVencidas, money: montoVencidas },
-        ].map((m) => (
-          <div
-            key={m.label}
-            className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm flex flex-col gap-2"
-          >
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest leading-none">
-              {m.label}
-            </p>
-            <div className="flex items-end justify-between gap-2">
-              <p className="text-3xl font-bold text-[#13193a] tabular-nums leading-none">
-                {m.count}
+          { label: "Pagados",    count: cuotasCobradas, curr: cobMesAct,  prev: cobMesPrev,  positivo: true  },
+          { label: "Adeudo",     count: cuotasAdeudo,   curr: adMesAct,   prev: adMesPrev,   positivo: false },
+          { label: "Pendientes", count: cuotasPend,     curr: pendMesAct, prev: pendMesPrev, positivo: false },
+          { label: "Vencidas",   count: cuotasVencidas, curr: vencMesAct, prev: vencMesPrev, positivo: false },
+        ].map((m) => {
+          const delta   = m.curr - m.prev;
+          const sinRef  = m.prev === 0;
+          const pct     = sinRef ? null : Math.round((delta / m.prev) * 100);
+          const sube    = delta > 0;
+          const igual   = delta === 0;
+          const esBueno = sinRef || igual ? null : (m.positivo ? sube : !sube);
+          const color   = esBueno === null
+            ? "text-gray-400 bg-gray-50 border-gray-200"
+            : esBueno
+            ? "text-emerald-600 bg-emerald-50 border-emerald-200"
+            : "text-red-500 bg-red-50 border-red-200";
+          const Icono   = sinRef || igual ? Minus : sube ? TrendingUp : TrendingDown;
+          const texto   = sinRef
+            ? "sin ref."
+            : `${pct > 0 ? "+" : ""}${pct}%`;
+          return (
+            <div
+              key={m.label}
+              className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm flex flex-col gap-2"
+            >
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest leading-none">
+                {m.label}
               </p>
-              <span className="shrink-0 px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-500 tabular-nums">
-                ${m.money.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-              </span>
+              <div className="flex items-end justify-between gap-2">
+                <p className="text-3xl font-bold text-[#13193a] tabular-nums leading-none">
+                  {m.count}
+                </p>
+                <span className={`shrink-0 px-2.5 py-1.5 rounded-xl border text-xs font-bold tabular-nums flex items-center gap-1.5 ${color}`}>
+                  <Icono className="w-3.5 h-3.5 shrink-0" />
+                  {texto}
+                  <span className="text-[10px] font-normal opacity-60">mes ant.</span>
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
