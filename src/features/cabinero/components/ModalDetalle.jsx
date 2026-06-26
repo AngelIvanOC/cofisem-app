@@ -44,16 +44,19 @@ function BadgeUbicacion({ arriboLat, arriboLng, geoSin, cargando }) {
   const { cls, label } = CFG[nivel];
   const distLabel = dist < 1000 ? `${dist} m` : `${(dist / 1000).toFixed(1)} km`;
 
+  const DOT = { ok: "bg-emerald-500", cerca: "bg-amber-400", lejos: "bg-red-500" }[nivel];
+
   return (
-    <div className={`inline-flex flex-col gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold mt-1 ${cls}`}>
-      <span>{label}</span>
-      <span className="font-normal opacity-70">{distLabel} del lugar</span>
+    <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold mt-1 ${cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT}`} />
+      <span className="truncate">{label}</span>
+      <span className="ml-auto pl-2 font-normal opacity-60 shrink-0">{distLabel}</span>
     </div>
   );
 }
 
 const DOC_GRUPOS = [
-  { key: "siniestro",     tipos: ["siniestro", "fotos_siniestro", "llegada"], icon: "📷", label: "Siniestro"     },
+  { key: "siniestro",     tipos: ["siniestro", "fotos_siniestro"],            icon: "📷", label: "Siniestro"     },
   { key: "vehiculo",      tipos: ["vehiculo"],                                 icon: "🚗", label: "Vehículo"      },
   { key: "documentacion", tipos: ["documentacion", "documentos", "licencias"], icon: "📄", label: "Documentación" },
   { key: "danos",         tipos: ["danos"],                                    icon: "🔍", label: "Daños"         },
@@ -383,28 +386,28 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
           {/* Body */}
           <div className="flex flex-1 overflow-hidden">
             {/* Izquierda */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
               {/* Información */}
               <div>
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Información</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Información</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
                   {infoFields.map(([l, v]) => (
                     <div key={l}>
-                      <p className="text-[11px] text-gray-400 mb-0.5">{l}</p>
-                      <p className="text-sm font-semibold text-gray-700">{v}</p>
+                      <p className="text-[10px] text-gray-400">{l}</p>
+                      <p className="text-xs font-semibold text-gray-700">{v}</p>
                     </div>
                   ))}
                   <div className="col-span-2">
-                    <p className="text-[11px] text-gray-400 mb-0.5">Ubicación</p>
-                    <p className="text-sm text-gray-700">{live.ubicacion}</p>
+                    <p className="text-[10px] text-gray-400">Ubicación</p>
+                    <p className="text-xs text-gray-700">{live.ubicacion}</p>
                   </div>
                 </div>
               </div>
 
               {/* Documentos — acordeón por participante */}
               <div>
-                <div className="flex justify-between items-center mb-3">
+                <div className="flex justify-between items-center mb-2">
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Documentos</p>
                   <div className="flex items-center gap-2">
                     {loadingEvid && <div className="w-3 h-3 border border-gray-300 border-t-gray-500 rounded-full animate-spin" />}
@@ -428,53 +431,53 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
             </div>
 
             {/* Derecha */}
-            <div className="w-64 shrink-0 overflow-y-auto p-5 space-y-5 bg-gray-50/50 border-l border-gray-100">
+            <div className="w-64 shrink-0 overflow-y-auto p-3 space-y-3 bg-gray-50/50 border-l border-gray-100">
 
               {/* Seguimiento */}
               <div>
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">Seguimiento</p>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Seguimiento</p>
                 {etapas.map((e, i) => (
-                  <div key={i} className="flex gap-3">
+                  <div key={i} className="flex gap-2.5">
                     <div className="flex flex-col items-center">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${e.done ? "border-emerald-500 bg-emerald-500" : "border-gray-300 bg-white"}`}>
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${e.done ? "border-emerald-500 bg-emerald-500" : "border-gray-300 bg-white"}`}>
                         {e.done && (
-                          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3.5">
+                          <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
                           </svg>
                         )}
                       </div>
                       {i < etapas.length - 1 && (
-                        <div className={`w-0.5 h-7 my-1 rounded-full transition-all ${e.done ? "bg-emerald-200" : "bg-gray-200"}`} />
+                        <div className={`w-0.5 h-5 my-0.5 rounded-full transition-all ${e.done ? "bg-emerald-200" : "bg-gray-200"}`} />
                       )}
                     </div>
-                    <div className="pb-1">
-                      <p className={`text-xs font-semibold ${e.done ? "text-[#13193a]" : "text-gray-400"}`}>{e.label}</p>
-                      <p className={`text-[11px] mt-0.5 ${e.done ? "text-emerald-600 font-medium" : "text-gray-400"}`}>{e.time}</p>
+                    <div className="pb-0.5">
+                      <p className={`text-[11px] font-semibold leading-tight ${e.done ? "text-[#13193a]" : "text-gray-400"}`}>{e.label}</p>
+                      <p className={`text-[10px] ${e.done ? "text-emerald-600 font-medium" : "text-gray-400"}`}>{e.time}</p>
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Ajustador */}
-              <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+              <div className="bg-white rounded-xl border border-gray-100 p-3 space-y-2">
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Ajustador</p>
                 {live.ajustador && !modoAsignar ? (
                   <>
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-[#13193a] flex items-center justify-center text-white text-xs font-bold shrink-0">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-[#13193a] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
                           {live.ajustador.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-[#13193a]">{live.ajustador}</p>
-                          <p className="text-[11px] text-gray-400">Asignado</p>
+                          <p className="text-[11px] font-bold text-[#13193a] leading-tight">{live.ajustador}</p>
+                          <p className="text-[10px] text-gray-400">Asignado</p>
                         </div>
                       </div>
                       {fotoLlegada && (
                         <button
                           onClick={() => setCarousel({ imgs: [fotoLlegada], idx: 0 })}
                           title="Ver foto de llegada"
-                          className="w-11 h-11 rounded-lg overflow-hidden shrink-0 border-2 border-gray-200 hover:border-[#13193a]/40 transition-all"
+                          className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border-2 border-gray-200 hover:border-[#13193a]/40 transition-all"
                         >
                           <img src={fotoLlegada.signedUrl} className="w-full h-full object-cover" alt="Foto arribo" />
                         </button>
@@ -489,20 +492,20 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
                       />
                     )}
                     {!arriboDone ? (
-                      <span className="inline-flex text-[11px] bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-semibold">
+                      <span className="inline-flex text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-semibold">
                         Pendiente de arribo
                       </span>
                     ) : procesoDone ? (
-                      <span className="inline-flex text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full font-semibold">
+                      <span className="inline-flex text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold">
                         Completado
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full font-semibold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                      <span className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-semibold">
+                        <span className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
                         En proceso
                       </span>
                     )}
-                    <button onClick={() => setModoAsignar(true)} className="w-full text-xs text-gray-400 hover:text-[#13193a] font-medium mt-1">
+                    <button onClick={() => setModoAsignar(true)} className="w-full text-[10px] text-gray-400 hover:text-[#13193a] font-medium">
                       Cambiar ajustador
                     </button>
                   </>
