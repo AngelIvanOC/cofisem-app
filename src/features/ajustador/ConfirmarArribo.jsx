@@ -113,6 +113,101 @@ function TarjetaGPSDispositivo({ estado, coords }) {
   );
 }
 
+// ── Hook: geocodifica la dirección del siniestro (Nominatim) ─
+function useGeocodeSiniestro(siniestro) {
+  const [cargando, setCargando] = useState(true);
+  const [coords,   setCoords]   = useState(null);
+
+  useEffect(() => {
+    const municipio = siniestro?.municipio;
+    const estado    = siniestro?.estado;
+    const colonia   = siniestro?.colonia;
+    if (!municipio && !estado) { setCargando(false); return; }
+
+    let mounted = true;
+    const queries = [
+      colonia ? `${colonia}, ${municipio}, ${estado}, Mexico` : null,
+      `${municipio}, ${estado}, Mexico`,
+    ].filter(Boolean);
+
+    const tryFetch = async (q) => {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+        { headers: { "User-Agent": "CofisemApp/1.0", "Accept-Language": "es" } },
+      );
+      const data = await res.json();
+      return data[0] ? { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } : null;
+    };
+
+    const run = async () => {
+      for (const q of queries) {
+        try {
+          const r = await tryFetch(q);
+          if (r) { if (mounted) setCoords(r); break; }
+        } catch { /* silencioso */ }
+      }
+      if (mounted) setCargando(false);
+    };
+    run();
+    return () => { mounted = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siniestro?.id]);
+
+  return { cargando, coords };
+}
+
+// ── Tarjeta: ¿el ajustador está en el lugar? ─────────────────
+function TarjetaVerificacionSiniestro({ sinCoords, gpsDispositivo, cargando }) {
+  if (cargando) {
+    return (
+      <div className="flex items-center gap-2 p-3 rounded-2xl bg-gray-50 border border-gray-200">
+        <div className="w-3 h-3 border border-gray-300 border-t-gray-600 rounded-full animate-spin shrink-0" />
+        <p className="text-xs text-gray-400">Verificando zona del siniestro...</p>
+      </div>
+    );
+  }
+  if (!sinCoords || !gpsDispositivo) return null;
+
+  const dist = distanciaMetros(gpsDispositivo.lat, gpsDispositivo.lng, sinCoords.lat, sinCoords.lng);
+  const nivel =
+    dist < 1000  ? "confirmada" :
+    dist < 4000  ? "cerca"      : "lejana";
+
+  const CFG = {
+    confirmada: {
+      bg: "bg-emerald-50", border: "border-emerald-300",
+      text: "text-emerald-800", icono: "✓",
+      label: "Ubicación confirmada",
+      sub: `A ${dist < 1000 ? `${dist} m` : `${(dist/1000).toFixed(1)} km`} del lugar registrado`,
+    },
+    cerca: {
+      bg: "bg-amber-50", border: "border-amber-300",
+      text: "text-amber-800", icono: "~",
+      label: "Cerca del siniestro",
+      sub: `A ${(dist/1000).toFixed(1)} km del lugar registrado`,
+    },
+    lejana: {
+      bg: "bg-red-50", border: "border-red-300",
+      text: "text-red-800", icono: "✕",
+      label: "Ubicación fuera de rango",
+      sub: `A ${(dist/1000).toFixed(1)} km del lugar registrado`,
+    },
+  };
+  const c = CFG[nivel];
+
+  return (
+    <div className={`flex items-center gap-2.5 p-3 rounded-2xl border-2 ${c.bg} ${c.border}`}>
+      <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-black shrink-0 ${c.text} bg-white/70`}>
+        {c.icono}
+      </div>
+      <div>
+        <p className={`text-xs font-bold ${c.text}`}>{c.label}</p>
+        <p className={`text-[10px] ${c.text} opacity-80`}>{c.sub}</p>
+      </div>
+    </div>
+  );
+}
+
 // ── Tarjeta GPS de la foto (EXIF) ─────────────────────────────
 function TarjetaGPSFoto({ fotoGPS, gpsDispositivo }) {
   if (!fotoGPS) return null;
@@ -166,6 +261,7 @@ function TarjetaGPSFoto({ fotoGPS, gpsDispositivo }) {
 // ── Componente principal ──────────────────────────────────────
 export default function ConfirmarArribo({ siniestro, onConfirmar }) {
   const { estado: gpsEstado, coords: gpsCoords } = useGPS();
+  const { cargando: geoCargando, coords: sinCoords } = useGeocodeSiniestro(siniestro);
 
   const [confirmado,  setConfirmado]  = useState(false);
   const [fotoLocal,   setFotoLocal]   = useState(null);
@@ -299,6 +395,7 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
       <div className="space-y-2">
         <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Verificación de ubicación</p>
         <TarjetaGPSDispositivo estado={gpsEstado} coords={gpsCoords} />
+        <TarjetaVerificacionSiniestro sinCoords={sinCoords} gpsDispositivo={gpsCoords} cargando={geoCargando && !gpsCoords} />
         <TarjetaGPSFoto fotoGPS={fotoGPS} gpsDispositivo={gpsCoords} />
       </div>
 

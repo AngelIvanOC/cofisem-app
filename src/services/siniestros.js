@@ -239,7 +239,8 @@ export async function fetchSiniestros() {
     .select(`
       id, numero_siniestro, tipo_siniestro, descripcion, estatus,
       fecha_siniestro, ubicacion, ajustador_id,
-      arribo_fecha, created_at,
+      arribo_fecha, arribo_lat, arribo_lng, created_at,
+      municipio, estado, colonia,
       polizas(
         id, constancia, numero_poliza, placas, anio,
         clientes(nombre, apellido, telefono),
@@ -274,6 +275,11 @@ export async function fetchSiniestros() {
       cobertura:        p.coberturas?.nombre ?? "—",
       telefono:         cl.telefono ?? "—",
       arribo_fecha:     s.arribo_fecha ?? null,
+      arribo_lat:       s.arribo_lat   ?? null,
+      arribo_lng:       s.arribo_lng   ?? null,
+      municipio:        s.municipio    ?? null,
+      estado:           s.estado       ?? null,
+      colonia:          s.colonia      ?? null,
       reportadoFecha:   s.created_at  ?? null,
     };
   });

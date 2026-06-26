@@ -150,9 +150,10 @@ function PanelNA({ siniestro }) {
   const a    = siniestro.aseguradoInfo ?? { nombre: siniestro.asegurado };
   const v    = siniestro.vehiculoInfo  ?? {};
 
-  const fotos    = useEvidencias(sid, num, "NA", "fotos_siniestro");
-  const vehiculo = useEvidencias(sid, num, "NA", "vehiculo");
-  const poliza   = useEvidencias(sid, num, "NA", "documentos");
+  const sin = useEvidencias(sid, num, "NA", "siniestro");
+  const veh = useEvidencias(sid, num, "NA", "vehiculo");
+  const doc = useEvidencias(sid, num, "NA", "documentacion");
+  const dan = useEvidencias(sid, num, "NA", "danos");
 
   return (
     <div className="border-2 border-gray-100 rounded-2xl overflow-hidden">
@@ -180,24 +181,14 @@ function PanelNA({ siniestro }) {
 
         <Sep label="Evidencia fotográfica" />
         <div className="grid grid-cols-2 gap-3">
-          <BtnEvidencia
-            label="Fotos del siniestro" icon="📸"
-            items={fotos.items}
-            onAdd={fotos.agregar}
-            onRemove={fotos.eliminar}
-          />
-          <BtnEvidencia
-            label="Fotos del vehículo" icon="🚗"
-            items={vehiculo.items}
-            onAdd={vehiculo.agregar}
-            onRemove={vehiculo.eliminar}
-          />
-          <BtnEvidencia
-            label="Póliza física" icon="📄"
-            items={poliza.items}
-            onAdd={poliza.agregar}
-            onRemove={poliza.eliminar}
-          />
+          <BtnEvidencia label="Siniestro" icon="📸"
+            items={sin.items} onAdd={sin.agregar} onRemove={sin.eliminar} />
+          <BtnEvidencia label="Vehículo" icon="🚗"
+            items={veh.items} onAdd={veh.agregar} onRemove={veh.eliminar} />
+          <BtnEvidencia label="Documentación" icon="📄"
+            items={doc.items} onAdd={doc.agregar} onRemove={doc.eliminar} />
+          <BtnEvidencia label="Daños" icon="🔍"
+            items={dan.items} onAdd={dan.agregar} onRemove={dan.eliminar} />
         </div>
 
         <Sep label="Mapa de daños" />
@@ -213,10 +204,10 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
   const sid  = siniestro.id;
   const num  = siniestro.numero_siniestro ?? siniestro.folio;
 
-  const licencia = useEvidencias(sid, num, afId, "licencias");
-  const vehiculo = useEvidencias(sid, num, afId, "vehiculo");
-  const fotos    = useEvidencias(sid, num, afId, "fotos_siniestro");
-  const danos    = useEvidencias(sid, num, afId, "danos");
+  const sin = useEvidencias(sid, num, afId, "siniestro");
+  const veh = useEvidencias(sid, num, afId, "vehiculo");
+  const doc = useEvidencias(sid, num, afId, "documentacion");
+  const dan = useEvidencias(sid, num, afId, "danos");
 
   return (
     <div className="border-2 border-gray-100 rounded-2xl overflow-hidden">
@@ -301,14 +292,14 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
 
         <Sep label="Evidencia y documentos" />
         <div className="grid grid-cols-2 gap-3">
-          <BtnEvidencia label="Licencia de conducir" icon="🪪"
-            items={licencia.items} onAdd={licencia.agregar} onRemove={licencia.eliminar} />
-          <BtnEvidencia label="Fotos del vehículo" icon="🚗"
-            items={vehiculo.items} onAdd={vehiculo.agregar} onRemove={vehiculo.eliminar} />
-          <BtnEvidencia label="Fotos del siniestro" icon="📸"
-            items={fotos.items} onAdd={fotos.agregar} onRemove={fotos.eliminar} />
-          <BtnEvidencia label="Fotos de daños" icon="🔍"
-            items={danos.items} onAdd={danos.agregar} onRemove={danos.eliminar} />
+          <BtnEvidencia label="Siniestro" icon="📸"
+            items={sin.items} onAdd={sin.agregar} onRemove={sin.eliminar} />
+          <BtnEvidencia label="Vehículo" icon="🚗"
+            items={veh.items} onAdd={veh.agregar} onRemove={veh.eliminar} />
+          <BtnEvidencia label="Documentación" icon="📄"
+            items={doc.items} onAdd={doc.agregar} onRemove={doc.eliminar} />
+          <BtnEvidencia label="Daños" icon="🔍"
+            items={dan.items} onAdd={dan.agregar} onRemove={dan.eliminar} />
         </div>
 
         <Sep label="Mapa de daños" />
