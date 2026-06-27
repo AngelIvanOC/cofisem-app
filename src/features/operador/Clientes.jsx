@@ -122,29 +122,22 @@ export default function Clientes({ usuario }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50/80 border-b border-gray-100">
-                {["Nombre","RFC","Teléfono","Email","Pólizas","Estatus",""].map(h => (
+                {["Nombre","RFC","Teléfono","Email","Estatus",""].map(h => (
                   <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
-                <tr><td colSpan={7} className="text-center py-12 text-sm text-gray-400">Cargando clientes...</td></tr>
+                <tr><td colSpan={6} className="text-center py-12 text-sm text-gray-400">Cargando clientes...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-12 text-sm text-gray-400">No se encontraron clientes.</td></tr>
+                <tr><td colSpan={6} className="text-center py-12 text-sm text-gray-400">No se encontraron clientes.</td></tr>
               ) : clientesPag.map(c => (
                 <tr key={c.id} className="hover:bg-gray-50/60 transition-colors">
                   <td className="px-5 py-3.5 text-sm font-semibold text-[#13193a]">{c.nombre} {c.apellido || ""}</td>
                   <td className="px-5 py-3.5 font-mono text-xs text-gray-600">{c.rfc}</td>
                   <td className="px-5 py-3.5 text-xs text-gray-600">{c.telefono}</td>
                   <td className="px-5 py-3.5 text-xs text-gray-500">{c.email}</td>
-                  <td className="px-5 py-3.5">
-                    <span className={`inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full border ${
-                      c.polizasCount > 0 ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-500 border-gray-200"
-                    }`}>
-                      {c.polizasCount} {c.polizasCount === 1 ? "póliza" : "pólizas"}
-                    </span>
-                  </td>
                   <td className="px-5 py-3.5">
                     <span className={`inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full border ${
                       c.activo ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-100 text-gray-500 border-gray-200"
