@@ -285,6 +285,15 @@ export async function fetchSiniestros() {
   });
 }
 
+// ── Cerrar siniestro (paso final del ajustador) ───────────────
+export async function cerrarSiniestro(siniestroId) {
+  const { error } = await supabase
+    .from("siniestros")
+    .update({ estatus: "Cerrado" })
+    .eq("id", siniestroId);
+  if (error) throw error;
+}
+
 // ── Asignar ajustador a un siniestro ──────────────────────────
 export async function asignarAjustador(siniestroId, { id: ajustadorId }) {
   const { error } = await supabase

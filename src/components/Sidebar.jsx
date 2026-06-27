@@ -33,6 +33,7 @@ import {
   TrendingUp,
   Sliders,
   Briefcase,
+  Table,
 } from "lucide-react";
 
 // ── Iconos (Lucide React) ────────────────────────────────────
@@ -56,6 +57,7 @@ const ICONS = {
   sliders: Sliders,
   "edit-square": ClipboardList,
   briefcase: Briefcase,
+  table: Table,
 };
 
 // Renderiza el ícono Lucide correspondiente

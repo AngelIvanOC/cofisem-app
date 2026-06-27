@@ -44,6 +44,7 @@ import AdminPolizas         from "./pages/administracion/AdminPolizas";
 import AdminPagos           from "./pages/administracion/AdminPagos";
 import AdminUsuarios        from "./pages/administracion/AdminUsuarios";
 import AdminConfiguracion   from "./pages/administracion/AdminConfiguracion";
+import AdminEstadoCuenta    from "./pages/administracion/EstadoDeCuenta";
 
 // ── CABINERO SINIESTROS ───────────────────────────────────────
 import CabineroDashboard from "./pages/cabinero/CabineroDashboard";
@@ -92,6 +93,7 @@ const RUTAS_POR_ROL = {
     "/gaman/reportes",
     "/gaman/clientes",
     "/gaman/vendedores",
+    "/gaman/estado-cuenta",
   ],
   CABINERO_SINIESTROS: [
     "/gaman/dashboard",
@@ -364,6 +366,16 @@ export default function App() {
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/gaman/configuracion">
                   <AdminConfiguracion usuario={usuario} />
+                </RutaProtegida>
+              }
+            />
+
+            {/* Estado de cuenta (admin) */}
+            <Route
+              path="/gaman/estado-cuenta"
+              element={
+                <RutaProtegida rolNombre={rolNombre} path="/gaman/estado-cuenta">
+                  <AdminEstadoCuenta />
                 </RutaProtegida>
               }
             />

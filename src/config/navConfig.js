@@ -23,6 +23,7 @@ export const NAV_POR_ROL = {
     { label: "Pólizas",       path: "/gaman/polizas",         icon: "file-text"  },
     { label: "Pagos",         path: "/gaman/pagos",           icon: "credit-card"},
     { label: "Usuarios",      path: "/gaman/usuarios",        icon: "users"      },
+    { label: "Edo. Cuenta",   path: "/gaman/estado-cuenta",   icon: "table"      },
     { label: "Reportes",      path: "/gaman/reportes",        icon: "bar-chart"  },
     { label: "Clientes",      path: "/gaman/clientes",        icon: "briefcase"  },
     { label: "Vendedores",    path: "/gaman/vendedores",      icon: "hard-hat"   },
