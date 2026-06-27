@@ -128,11 +128,11 @@ export function Vendedores({ usuario }) {
                 <tr><td colSpan={6} className="text-center py-12 text-sm text-gray-400">No se encontraron vendedores.</td></tr>
               ) : vendedoresPag.map(v => (
                 <tr key={v.id} className="hover:bg-gray-50/60 transition-colors">
-                  <td className="px-5 py-3.5 font-mono text-xs font-bold text-[#13193a]">{v.codigo || "—"}</td>
-                  <td className="px-5 py-3.5 text-sm font-semibold text-[#13193a]">{v.nombre} {v.apellido || ""}</td>
-                  <td className="px-5 py-3.5 text-xs text-gray-600">{v.telefono || "—"}</td>
-                  <td className="px-5 py-3.5 text-xs text-gray-500">{v.email || "—"}</td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-5 py-2 font-mono text-xs font-bold text-[#13193a]">{v.codigo || "—"}</td>
+                  <td className="px-5 py-2 text-sm font-semibold text-[#13193a]">{v.nombre} {v.apellido || ""}</td>
+                  <td className="px-5 py-2 text-xs text-gray-600">{v.telefono || "—"}</td>
+                  <td className="px-5 py-2 text-xs text-gray-500">{v.email || "—"}</td>
+                  <td className="px-5 py-2">
                     <button onClick={() => handleToggle(v)}
                       className={`inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full border cursor-pointer transition-all ${
                         v.activo
@@ -142,7 +142,7 @@ export function Vendedores({ usuario }) {
                       {v.activo ? "Activo" : "Inactivo"}
                     </button>
                   </td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-5 py-2">
                     <button onClick={() => abrirEditar(v)}
                       className="w-7 h-7 rounded-lg text-gray-300 hover:text-[#13193a] hover:bg-gray-100 flex items-center justify-center transition-colors">
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

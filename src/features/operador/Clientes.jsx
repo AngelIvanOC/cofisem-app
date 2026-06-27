@@ -134,18 +134,18 @@ export default function Clientes({ usuario }) {
                 <tr><td colSpan={6} className="text-center py-12 text-sm text-gray-400">No se encontraron clientes.</td></tr>
               ) : clientesPag.map(c => (
                 <tr key={c.id} className="hover:bg-gray-50/60 transition-colors">
-                  <td className="px-5 py-3.5 text-sm font-semibold text-[#13193a]">{c.nombre} {c.apellido || ""}</td>
-                  <td className="px-5 py-3.5 font-mono text-xs text-gray-600">{c.rfc}</td>
-                  <td className="px-5 py-3.5 text-xs text-gray-600">{c.telefono}</td>
-                  <td className="px-5 py-3.5 text-xs text-gray-500">{c.email}</td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-5 py-2 text-sm font-semibold text-[#13193a]">{c.nombre} {c.apellido || ""}</td>
+                  <td className="px-5 py-2 font-mono text-xs text-gray-600">{c.rfc}</td>
+                  <td className="px-5 py-2 text-xs text-gray-600">{c.telefono}</td>
+                  <td className="px-5 py-2 text-xs text-gray-500">{c.email}</td>
+                  <td className="px-5 py-2">
                     <span className={`inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full border ${
                       c.activo ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-100 text-gray-500 border-gray-200"
                     }`}>
                       {c.activo ? "Activo" : "Inactivo"}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-5 py-2">
                     <button onClick={() => abrirEditar(c)}
                       className="w-7 h-7 rounded-lg text-gray-300 hover:text-[#13193a] hover:bg-gray-100 flex items-center justify-center transition-colors">
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
