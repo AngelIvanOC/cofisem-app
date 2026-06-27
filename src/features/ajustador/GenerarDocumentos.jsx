@@ -3,6 +3,7 @@
 // Paso 4: Pase taller + pase médico (con datos completos) + firmas
 // ============================================================
 import { useState, useRef } from "react";
+import { cerrarSiniestro } from "../../services/siniestros";
 import { Campo, CampoSistema, Sep, TALLERES_LISTA, CLINICAS_LISTA } from "./shared";
 
 const TIPOS_LESION = [
@@ -290,9 +291,23 @@ function ModalFirma({ label, onConfirmar, onCerrar }) {
 
 // ── Componente principal ──────────────────────────────────────
 export default function GenerarDocumentos({ siniestro, onFinalizar }) {
-  const [docs,    setDocs]    = useState({ taller: false, medico: false });
-  const [firmas,  setFirmas]  = useState({ asegurado: null, afectado: null, ajustador: null });
-  const [firmando, setFirmando] = useState(null);
+  const [docs,      setDocs]      = useState({ taller: false, medico: false });
+  const [firmas,    setFirmas]    = useState({ asegurado: null, afectado: null, ajustador: null });
+  const [firmando,  setFirmando]  = useState(null);
+  const [cerrando,  setCerrando]  = useState(false);
+  const [errorCierre, setErrorCierre] = useState(null);
+
+  const handleFinalizar = async () => {
+    setCerrando(true);
+    setErrorCierre(null);
+    try {
+      await cerrarSiniestro(siniestro.id);
+      onFinalizar();
+    } catch (err) {
+      setErrorCierre(err.message ?? "Error al cerrar el siniestro");
+      setCerrando(false);
+    }
+  };
 
   const FIRMAS_CONFIG = [
     { id: "asegurado", label: "Firma del Asegurado", sub: siniestro.asegurado        },
@@ -387,15 +402,28 @@ export default function GenerarDocumentos({ siniestro, onFinalizar }) {
         ))}
       </div>
 
-      <div className="pt-2 pb-6">
+      <div className="pt-2 pb-6 space-y-2">
+        {errorCierre && (
+          <p className="text-xs text-red-500 text-center font-medium">{errorCierre}</p>
+        )}
         <button
-          onClick={onFinalizar}
-          className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
+          onClick={handleFinalizar}
+          disabled={cerrando}
+          className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          Finalizar y Enviar Documentos
+          {cerrando ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Cerrando siniestro...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Finalizar y Enviar Documentos
+            </>
+          )}
         </button>
       </div>
 

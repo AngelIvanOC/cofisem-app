@@ -25,12 +25,14 @@ export default function ListaSiniestros({ onAtender }) {
       .finally(() => setLoading(false));
   }, []);
 
+  const esCerrado = (s) => s.estatus === "Atendido" || s.estatus === "Cerrado";
+
   const filtrados = tab === "todos"
     ? siniestros
-    : siniestros.filter((s) => s.estatus !== "Atendido");
+    : siniestros.filter((s) => !esCerrado(s));
 
   // Métricas dinámicas
-  const total     = siniestros.filter((s) => s.estatus !== "Atendido").length;
+  const total     = siniestros.filter((s) => !esCerrado(s)).length;
   const pendArr   = siniestros.filter((s) => s.estatus === "Pendiente de arribo").length;
   const enProceso = siniestros.filter((s) => s.estatus === "En proceso").length;
 
@@ -103,7 +105,7 @@ export default function ListaSiniestros({ onAtender }) {
 
         {/* Lista de siniestros */}
         {!loading && !error && filtrados.map((s) => {
-          const atendido  = s.estatus === "Atendido";
+          const atendido  = esCerrado(s);
           const tieneUbic = !!s.ubicacion && !!s.coords;
           const mapsUrl   = tieneUbic ? `https://maps.google.com/?q=${s.coords.lat},${s.coords.lng}` : null;
 

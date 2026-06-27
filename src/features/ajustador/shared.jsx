@@ -160,6 +160,7 @@ export const ESTATUS_CLS = {
   "Pendiente de arribo":"bg-amber-50     text-amber-700   border border-amber-200",
   "En proceso":         "bg-blue-50      text-blue-700    border border-blue-200",
   Atendido:             "bg-emerald-50   text-emerald-700 border border-emerald-200",
+  Cerrado:              "bg-emerald-50   text-emerald-700 border border-emerald-200",
 };
 
 export const STEP_LABELS_DEFAULT = ["Arribo", "Siniestro", "Partes", "Documentos"];

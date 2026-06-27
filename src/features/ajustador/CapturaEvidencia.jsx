@@ -6,7 +6,7 @@
 import { useState, useRef, useCallback } from "react";
 import { Campo, CampoSistema, Sep, AfectadoTag } from "./shared";
 import { subirEvidencia, eliminarEvidencia } from "../../services/evidencias";
-import ModeloDanos3D from "./ModeloDanos";
+// import ModeloDanos3D from "./ModeloDanos"; // temporalmente desactivado
 
 // ── Botón de evidencia con upload real ───────────────────────
 // Cada item: { localUrl, storagePath, uploading, error }
@@ -191,9 +191,9 @@ function PanelNA({ siniestro }) {
             items={dan.items} onAdd={dan.agregar} onRemove={dan.eliminar} />
         </div>
 
-        <Sep label="Mapa de daños" />
+        {/* <Sep label="Mapa de daños" />
         <p className="text-[11px] text-gray-400 -mt-2">Arrastra para girar · Toca la carrocería para marcar zonas dañadas</p>
-        <ModeloDanos3D instanceKey="NA" />
+        <ModeloDanos3D instanceKey="NA" /> */}
       </div>
     </div>
   );
@@ -302,9 +302,9 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
             items={dan.items} onAdd={dan.agregar} onRemove={dan.eliminar} />
         </div>
 
-        <Sep label="Mapa de daños" />
+        {/* <Sep label="Mapa de daños" />
         <p className="text-[11px] text-gray-400 -mt-2">Arrastra para girar · Toca la carrocería para marcar zonas dañadas</p>
-        <ModeloDanos3D instanceKey={afId} />
+        <ModeloDanos3D instanceKey={afId} /> */}
       </div>
     </div>
   );
