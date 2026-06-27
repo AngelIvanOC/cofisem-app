@@ -116,19 +116,18 @@ export function Vendedores({ usuario }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50/80 border-b border-gray-100">
-                {["Código","Nombre","Teléfono","Email","Estatus",""].map(h => (
+                {["Nombre","Teléfono","Email","Estatus",""].map(h => (
                   <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
-                <tr><td colSpan={6} className="text-center py-12 text-sm text-gray-400">Cargando vendedores...</td></tr>
+                <tr><td colSpan={5} className="text-center py-12 text-sm text-gray-400">Cargando vendedores...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-12 text-sm text-gray-400">No se encontraron vendedores.</td></tr>
+                <tr><td colSpan={5} className="text-center py-12 text-sm text-gray-400">No se encontraron vendedores.</td></tr>
               ) : vendedoresPag.map(v => (
                 <tr key={v.id} className="hover:bg-gray-50/60 transition-colors">
-                  <td className="px-5 py-2 font-mono text-xs font-bold text-[#13193a]">{v.codigo || "—"}</td>
                   <td className="px-5 py-2 text-sm font-semibold text-[#13193a]">{v.nombre} {v.apellido || ""}</td>
                   <td className="px-5 py-2 text-xs text-gray-600">{v.telefono || "—"}</td>
                   <td className="px-5 py-2 text-xs text-gray-500">{v.email || "—"}</td>
