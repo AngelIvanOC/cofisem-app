@@ -63,6 +63,7 @@ export default function EstadoDeCuenta() {
   const [fFin,       setFFin]       = useState("");
   const [cargando,   setCargando]   = useState(false);
   const [datos,      setDatos]      = useState(null);
+  const [polizasRaw, setPolizasRaw] = useState([]);
   const [rango,      setRango]      = useState({ s: "", e: "" });
 
   const anios = Array.from({ length: 7 }, (_, i) => anioAct - 5 + i);
@@ -94,10 +95,12 @@ export default function EstadoDeCuenta() {
     try {
       const { data, error } = await supabase
         .from("polizas")
-        .select("id, created_at, oficina_id, oficinas(id, nombre), coberturas(nombre)")
+        .select("id, constancia, created_at, forma_pago, oficina_id, oficinas(id, nombre), coberturas(nombre, prima_total)")
         .gte("created_at", `${r.s}T00:00:00`)
-        .lte("created_at", `${r.e}T23:59:59`);
+        .lte("created_at", `${r.e}T23:59:59`)
+        .order("created_at", { ascending: true });
       if (error) throw error;
+      setPolizasRaw(data || []);
       setDatos(procesarPolizas(data || []));
     } catch (err) {
       console.error(err);
@@ -156,28 +159,82 @@ export default function EstadoDeCuenta() {
 
   const exportarPDF = () => {
     if (!datos || datos.length === 0) return;
-    const th = (txt) =>
-      `<th style="background:#13193a;color:#fff;padding:6px 10px;border:1px solid #dde3f0;text-align:center">${txt}</th>`;
+
+    const th = (txt, extra = "") =>
+      `<th style="background:#13193a;color:#fff;padding:6px 10px;border:1px solid #dde3f0;text-align:center;${extra}">${txt}</th>`;
     const td = (txt, extra = "") =>
-      `<td style="padding:6px 10px;border:1px solid #dde3f0;${extra}">${txt}</td>`;
+      `<td style="padding:6px 10px;border:1px solid #dde3f0;${extra}">${txt ?? ""}</td>`;
+
+    // — Tabla resumen —
     const filasDatos = datos
-      .map(
-        (o, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
+      .map((o, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
           ${td(o.nombre)}
           ${td(o.carros, "text-align:center")}
           ${td(fmt$(o.carros * PRECIO_CARRO), "text-align:center")}
           ${td(o.motos, "text-align:center")}
           ${td(fmt$(o.motos * PRECIO_MOTO), "text-align:center")}
-        </tr>`
-      )
+        </tr>`)
       .join("");
+
+    // — Detalle por oficina —
+    const mapaOficinas = new Map();
+    for (const p of polizasRaw) {
+      const key    = p.oficina_id ?? "sin-oficina";
+      const nombre = p.oficinas?.nombre ?? "Sin Oficina";
+      if (!mapaOficinas.has(key)) mapaOficinas.set(key, { nombre, polizas: [] });
+      mapaOficinas.get(key).polizas.push(p);
+    }
+    const oficinasOrdenadas = [...mapaOficinas.values()].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre)
+    );
+
+    const fmtFecha = (str) => {
+      if (!str) return "—";
+      const d = new Date(str);
+      return d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+    };
+
+    const seccionesOficinas = oficinasOrdenadas
+      .map((of) => {
+        const filas = of.polizas
+          .map((p, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
+              ${td(p.constancia || "—")}
+              ${td(p.coberturas?.nombre || "—")}
+              ${td(fmt$(p.coberturas?.prima_total ?? 0), "text-align:right")}
+              ${td(p.forma_pago || "—", "text-align:center")}
+              ${td(fmtFecha(p.created_at), "text-align:center")}
+            </tr>`)
+          .join("");
+        return `
+          <h3 style="margin:24px 0 6px;font-size:13px;color:#13193a;border-bottom:2px solid #13193a;padding-bottom:4px">
+            ${of.nombre}
+          </h3>
+          <table style="border-collapse:collapse;width:100%;font-size:11px">
+            <thead>
+              <tr>
+                ${th("No. Póliza")}
+                ${th("Cobertura")}
+                ${th("Precio Total")}
+                ${th("Forma de Pago")}
+                ${th("Fecha Emisión")}
+              </tr>
+            </thead>
+            <tbody>${filas}</tbody>
+          </table>`;
+      })
+      .join("");
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
       <title>${periodo}</title>
-      <style>body{font-family:sans-serif;font-size:12px;margin:24px}
-      table{border-collapse:collapse;width:100%}
-      @media print{@page{margin:1cm}}</style>
+      <style>
+        body{font-family:sans-serif;font-size:12px;margin:24px;color:#111}
+        table{border-collapse:collapse;width:100%}
+        @media print{@page{margin:1.5cm} h3{page-break-before:auto}}
+      </style>
       </head><body>
-      <h2 style="text-align:center;margin-bottom:12px">${periodo}</h2>
+      <h2 style="text-align:center;margin-bottom:16px">${periodo}</h2>
+
+      <!-- Tabla resumen -->
       <table>
         <thead>
           <tr>${th("CONCEPTO")}${th("Cant.")}${th("S-Total")}${th("Cant.")}${th("S-Total")}</tr>
@@ -210,9 +267,15 @@ export default function EstadoDeCuenta() {
           </tr>
         </tbody>
       </table>
+
+      <!-- Detalle por oficina -->
+      <h2 style="margin-top:32px;margin-bottom:4px;font-size:14px">Detalle por Oficina</h2>
+      ${seccionesOficinas}
+
       <script>window.onload=()=>{window.print();}<\/script>
       </body></html>`;
-    const w = window.open("", "_blank", "width=900,height=700");
+
+    const w = window.open("", "_blank", "width=1000,height=750");
     w.document.write(html);
     w.document.close();
   };
