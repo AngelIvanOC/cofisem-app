@@ -121,7 +121,7 @@ export default function AnalistaPagos({ usuario }) {
       </div>
 
       {/* Métricas */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="hidden grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { l:"Por aplicar",    v: porAplicar.length,                                                            a:"blue",    f:"ADEUDO" },
           { l:"Monto pendiente",v:`$${montoPend.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`,         a:"amber",   f:"ADEUDO" },
