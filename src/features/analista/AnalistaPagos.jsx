@@ -17,6 +17,22 @@ function isoAMX(str) {
   return `${d}/${m}/${y}`;
 }
 
+function CuotaDots({ numCuota, totalCuotas, estatus }) {
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: totalCuotas }, (_, i) => {
+        const n = i + 1;
+        let cls;
+        if (n < numCuota)        cls = "bg-emerald-400";
+        else if (n === numCuota) cls = estatus === "PAGADO" ? "bg-emerald-500" : "bg-blue-400";
+        else                     cls = "bg-gray-200";
+        return <div key={n} className={`w-2 h-2 rounded-full ${cls}`} />;
+      })}
+      <span className="text-[10px] text-gray-400 ml-0.5 tabular-nums">{numCuota}/{totalCuotas}</span>
+    </div>
+  );
+}
+
 export default function AnalistaPagos({ usuario }) {
   const [pagos,         setPagos]         = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -57,6 +73,8 @@ export default function AnalistaPagos({ usuario }) {
           oficina:       pol?.oficinas?.nombre ?? '',
           formaPago:     pol?.forma_pago ?? '',
           cuota:         `${a.num_cuota ?? '?'}/${totalCuotas}`,
+          numCuota:      a.num_cuota ?? 1,
+          totalCuotas,
           monto:         Number(a.monto),
           fecha:         a.fecha_pago ? isoAMX(a.fecha_pago) : '—',
           solicitadoPor: op ? `${op.nombre ?? ''} ${op.apellido ?? ''}`.trim() || `OP-${op.id_muestra}` : '—',
@@ -186,7 +204,9 @@ export default function AnalistaPagos({ usuario }) {
                   <td className="px-4 py-1 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
                   <td className="px-4 py-1 text-xs text-gray-500 max-w-24 truncate">{p.oficina}</td>
                   <td className="px-4 py-1"><span className="text-[11px] px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600 font-medium">{p.formaPago || "—"}</span></td>
-                  <td className="px-4 py-1 text-xs text-center text-gray-500 font-mono">{p.cuota}</td>
+                  <td className="px-4 py-1">
+                    <CuotaDots numCuota={p.numCuota} totalCuotas={p.totalCuotas} estatus={p.estatus} />
+                  </td>
                   <td className="px-4 py-1 text-xs font-bold text-emerald-700">${p.monto.toFixed(2)}</td>
                   <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{p.fecha}</td>
                   <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{p.solicitadoPor}</td>

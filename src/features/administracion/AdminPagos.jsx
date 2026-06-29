@@ -202,7 +202,7 @@ export default function AdminPagos({ usuario }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50/80 border-b border-gray-100">
-                {["Póliza", "Asegurado", "Oficina", "Cuotas", "Monto", "Recibido", "Estatus", ""].map((h) => (
+                {["Póliza", "Asegurado", "Oficina", "Cuotas", "Monto", "Fecha recibido", "Recibido por", "Estatus", ""].map((h) => (
                   <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3">
                     {h}
                   </th>
@@ -212,7 +212,7 @@ export default function AdminPagos({ usuario }) {
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12">
+                  <td colSpan={9} className="text-center py-12">
                     <Loader2 className="w-5 h-5 animate-spin text-gray-300 mx-auto" />
                   </td>
                 </tr>
@@ -249,9 +249,11 @@ export default function AdminPagos({ usuario }) {
                     <td className="px-5 py-2 text-xs font-semibold text-emerald-600 tabular-nums">
                       {fmt$(p.monto)}
                     </td>
-                    <td className="px-5 py-2">
-                      <p className="text-xs text-gray-700">{fmtFecha(p.fecha)}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">{p.operador}</p>
+                    <td className="px-5 py-2 text-xs text-gray-700 whitespace-nowrap">
+                      {fmtFecha(p.fecha)}
+                    </td>
+                    <td className="px-5 py-2 text-xs text-gray-500 whitespace-nowrap">
+                      {p.operador}
                     </td>
                     <td className="px-5 py-2">
                       <span className={`inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full border ${
