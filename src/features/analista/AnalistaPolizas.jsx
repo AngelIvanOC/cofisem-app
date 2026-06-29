@@ -1,220 +1,137 @@
-// ============================================================
-// src/pages/analista/AnalistaPolizas.jsx
-// Analista: Aplicar, consultar y cambiar estatus de pólizas
-// El analista ve TODAS las oficinas pero no cotiza ni tramita
-// ============================================================
-import { useState, useMemo } from "react";
-import {
-  ArrowRight, CheckCircle2, FileText, Info, Loader2, Pencil, Search, X,
-} from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { supabase } from "../../supabaseClient";
+import { calcularEstatus } from "../../services/polizas";
+import StatusBadge from "../operador/components/StatusBadge";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
+import { ChevronLeft, Loader2, Search, X, CheckCircle2, Clock, AlertTriangle, Ban } from "lucide-react";
 
-// ── Mock data ─────────────────────────────────────────────────
-const OFICINAS = ["Todas", "COFISEM AV. E.ZAPATA", "OFICINA CIVAC", "COFISEM TEMIXCO", "COFISEM CUAUTLA"];
-const VENDEDORES = ["Todos", "Laura Rosher", "Marco A. Cruz", "Carlos Soto", "Patricia Morales"];
-const ASEGURADORAS = ["QUALITAS", "GNP", "AXA", "HDI", "MAPFRE"];
-
-const ESTATUSES = {
-  Vigente:     { cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  "Por vencer":{ cls: "bg-amber-50   text-amber-700   border-amber-200",   dot: "bg-amber-500"   },
-  Vencida:     { cls: "bg-red-50     text-red-600     border-red-200",      dot: "bg-red-500"     },
-  Cancelada:   { cls: "bg-gray-100   text-gray-500    border-gray-200",     dot: "bg-gray-400"    },
-  Suspendida:  { cls: "bg-orange-50  text-orange-700  border-orange-200",   dot: "bg-orange-500"  },
-  "Pend. aplicar":{ cls: "bg-blue-50 text-blue-700    border-blue-200",     dot: "bg-blue-500"    },
-};
-
-const POLIZAS_MOCK = [
-  { id:"3413241", aseguradora:"QUALITAS", asegurado:"Angel Ivan Ortega",   oficina:"OFICINA CIVAC",          vendedor:"Laura Rosher",  cobertura:"COBERTURA APP (UBER, DIDI)", placas:"TRAMITE",  uso:"DIDI",  tipo:"COCHE", prima:3142.80, primaNeta:2260.00, primerPago:3142.80, vigDesde:"13/03/2026", vigHasta:"13/03/2027", formaPago:"Trimestral", estatus:"Vigente",      fechaEmision:"13/03/2026", notas:"" },
-  { id:"3413198", aseguradora:"QUALITAS", asegurado:"María García López",  oficina:"COFISEM AV. E.ZAPATA",   vendedor:"Marco A. Cruz", cobertura:"TAXI BÁSICA 2500",           placas:"VRM-123A", uso:"TAXI",  tipo:"COCHE", prima:2200.00, primaNeta:1496.55, primerPago:2200.00, vigDesde:"12/03/2026", vigHasta:"12/03/2027", formaPago:"Contado",    estatus:"Vigente",      fechaEmision:"12/03/2026", notas:"" },
-  { id:"3413167", aseguradora:"GNP",      asegurado:"Roberto Díaz Ramos",  oficina:"COFISEM AV. E.ZAPATA",   vendedor:"Laura Rosher",  cobertura:"SERV. PÚB. 50/50 GAMAN 2",  placas:"CHM-456B", uso:"TAXI",  tipo:"COCHE", prima:2548.00, primaNeta:1790.00, primerPago:637.00,  vigDesde:"11/03/2026", vigHasta:"11/03/2027", formaPago:"4 Parciales",estatus:"Vigente",      fechaEmision:"11/03/2026", notas:"" },
-  { id:"3411002", aseguradora:"QUALITAS", asegurado:"Carmen López Vargas", oficina:"COFISEM TEMIXCO",         vendedor:"Carlos Soto",   cobertura:"TAXI BÁSICA 2500",           placas:"PQR-789C", uso:"TAXI",  tipo:"COCHE", prima:2200.00, primaNeta:1496.55, primerPago:2200.00, vigDesde:"20/03/2025", vigHasta:"20/03/2026", formaPago:"Contado",    estatus:"Por vencer",   fechaEmision:"20/03/2025", notas:"Avisar al cliente" },
-  { id:"3410888", aseguradora:"AXA",      asegurado:"José Martínez Ruiz",  oficina:"OFICINA CIVAC",          vendedor:"Marco A. Cruz", cobertura:"TAXI BÁSICA PAGOS 2700",     placas:"STU-321D", uso:"TAXI",  tipo:"COCHE", prima:2320.00, primaNeta:1600.00, primerPago:580.00,  vigDesde:"22/03/2025", vigHasta:"22/03/2026", formaPago:"4 Parciales",estatus:"Por vencer",   fechaEmision:"22/03/2025", notas:"" },
-  { id:"3408500", aseguradora:"HDI",      asegurado:"Ana Gutiérrez Pérez", oficina:"COFISEM CUAUTLA",         vendedor:"Patricia Morales",cobertura:"COBERTURA APP (UBER, DIDI)",placas:"VWX-654E", uso:"DIDI",  tipo:"COCHE", prima:3142.80, primaNeta:2260.00, primerPago:785.70,  vigDesde:"10/01/2025", vigHasta:"10/01/2026", formaPago:"Trimestral", estatus:"Vencida",      fechaEmision:"10/01/2025", notas:"" },
-  { id:"3407111", aseguradora:"MAPFRE",   asegurado:"Luis Torres Moreno",  oficina:"COFISEM AV. E.ZAPATA",   vendedor:"Carlos Soto",   cobertura:"TAXI BÁSICA 2500",           placas:"YZA-987F", uso:"TAXI",  tipo:"COCHE", prima:2200.00, primaNeta:1496.55, primerPago:2200.00, vigDesde:"05/02/2025", vigHasta:"05/02/2026", formaPago:"Contado",    estatus:"Cancelada",    fechaEmision:"05/02/2025", notas:"Solicitud del cliente" },
-  { id:"3414001", aseguradora:"QUALITAS", asegurado:"Pedro Ramos Salinas", oficina:"COFISEM TEMIXCO",         vendedor:"Laura Rosher",  cobertura:"SERV. PÚB. 50/50 GAMAN 2",  placas:"BCD-111G", uso:"TAXI",  tipo:"COCHE", prima:2548.00, primaNeta:1790.00, primerPago:2548.00, vigDesde:"17/03/2026", vigHasta:"17/03/2027", formaPago:"Contado",    estatus:"Pend. aplicar",fechaEmision:"17/03/2026", notas:"Enviada por operadora CIVAC" },
-  { id:"3414002", aseguradora:"GNP",      asegurado:"Rosa Mendoza Lima",   oficina:"OFICINA CIVAC",          vendedor:"Marco A. Cruz", cobertura:"TAXI BÁSICA 2500",           placas:"EFG-222H", uso:"TAXI",  tipo:"COCHE", prima:2200.00, primaNeta:1496.55, primerPago:2200.00, vigDesde:"17/03/2026", vigHasta:"17/03/2027", formaPago:"Contado",    estatus:"Pend. aplicar",fechaEmision:"17/03/2026", notas:"" },
-];
-
-const CAMBIOS_ESTATUS = ["Vigente", "Suspendida", "Cancelada", "Por vencer"];
-
-// ── Subcomponentes ────────────────────────────────────────────
-function Badge({ estatus }) {
-  const s = ESTATUSES[estatus] ?? ESTATUSES["Cancelada"];
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${s.cls}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${s.dot} shrink-0`}/>
-      {estatus}
-    </span>
-  );
+function fmtFecha(str) {
+  if (!str) return "—";
+  return new Date(str + "T12:00:00").toLocaleDateString("es-MX", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+  });
 }
 
-function Filtro({ label, value, onChange, opciones }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">{label}</span>
-      <select value={value} onChange={e => onChange(e.target.value)}
-        className="text-xs border border-gray-200 rounded-xl px-2.5 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 max-w-[160px]">
-        {opciones.map(o => <option key={o}>{o}</option>)}
-      </select>
-    </div>
-  );
+function fmtMXN(n) {
+  return `$${Number(n || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// ── Modal detalle / cambio de estatus ─────────────────────────
-function ModalPoliza({ poliza, onClose, onGuardar }) {
-  const [estatus,  setEstatus]  = useState(poliza.estatus);
-  const [notas,    setNotas]    = useState(poliza.notas);
-  const [aplicando, setAplicando] = useState(false);
+// ── Estatus de cuota ─────────────────────────────────────────
+function CuotaEstatus({ estatus }) {
+  const e = (estatus ?? "").toUpperCase();
+  if (e === "PAGADO" || e === "PAGADA")
+    return <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">Pagado</span>;
+  if (e === "VENCIDO" || e === "VENCIDA")
+    return <span className="text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">Vencido</span>;
+  return <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">Pendiente</span>;
+}
 
-  const cambioEstatus = estatus !== poliza.estatus;
+// ── Panel de detalle ──────────────────────────────────────────
+function DetallePoliza({ poliza, pagos, onVolver }) {
+  const cliente      = poliza.clientes     ?? {};
+  const vendedor     = poliza.vendedores   ?? {};
+  const concesionario= poliza.concesionarios ?? null;
+  const oficina      = poliza.oficinas     ?? {};
 
-  const handleGuardar = () => {
-    setAplicando(true);
-    setTimeout(() => { onGuardar({ ...poliza, estatus, notas }); }, 600);
-  };
+  const clienteLabel = [cliente.nombre, cliente.apellido].filter(Boolean).join(" ") || "—";
+  const vendedorLabel= [vendedor.nombre, vendedor.apellido].filter(Boolean).join(" ") || "—";
+  const concLabel    = concesionario
+    ? [concesionario.nombre, concesionario.apellido1, concesionario.apellido2].filter(Boolean).join(" ")
+    : "—";
+
+  const emision = poliza.created_at
+    ? new Date(poliza.created_at).toLocaleDateString("es-MX", { day:"2-digit", month:"2-digit", year:"numeric" })
+    : "—";
 
   const filas = [
-    ["No. Póliza",       poliza.id,            "mono"],
-    ["Aseguradora",      poliza.aseguradora,   ""],
-    ["Asegurado",        poliza.asegurado,      "semibold"],
-    ["Cobertura",        poliza.cobertura,      ""],
-    ["Oficina",          poliza.oficina,        ""],
-    ["Vendedor",         poliza.vendedor,       ""],
-    ["Placas",           poliza.placas,         "mono"],
-    ["Uso / Tipo",       `${poliza.uso} · ${poliza.tipo}`, ""],
-    ["Vigencia",         `${poliza.vigDesde} → ${poliza.vigHasta}`, ""],
-    ["Forma de pago",    poliza.formaPago,      ""],
-    ["Prima total",      `$${poliza.prima.toFixed(2)}`,    "semibold emerald"],
-    ["Prima neta",       `$${poliza.primaNeta.toFixed(2)}`, ""],
-    ["1er pago",         `$${poliza.primerPago.toFixed(2)}`, ""],
-    ["Fecha emisión",    poliza.fechaEmision,   ""],
+    { l: "No. Póliza",         v: poliza.constancia || poliza.numero_poliza || "—" },
+    { l: "Vendedor",           v: vendedorLabel },
+    { l: "Asegurado",          v: clienteLabel },
+    { l: "Concesionario",      v: concLabel },
+    { l: "Cobertura",          v: poliza.coberturas?.nombre || "—" },
+    { l: "Modalidad de pago",  v: poliza.forma_pago || "—" },
+    { l: "Inicio de vigencia", v: fmtFecha(poliza.fecha_inicio) },
+    { l: "Fin de vigencia",    v: fmtFecha(poliza.fecha_fin) },
+    { l: "Oficina",            v: oficina.nombre || "—" },
+    { l: "Placas",             v: poliza.placas || "—" },
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backdropFilter:"blur(8px)", backgroundColor:"rgba(10,15,40,0.55)" }}
-      onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto flex flex-col"
-        onClick={e => e.stopPropagation()}>
+    <div className="space-y-5">
+      <button
+        onClick={onVolver}
+        className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-[#13193a] transition-colors"
+      >
+        <ChevronLeft className="w-4 h-4" />
+        Volver a pólizas
+      </button>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-[#13193a]/8 flex items-center justify-center shrink-0">
-              <FileText className="w-4 h-4 text-[#13193a]" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-[#13193a]">Detalle de Póliza</h2>
-              <p className="text-xs text-gray-400 mt-0.5 font-mono">{poliza.id}</p>
-            </div>
+      {/* Banner */}
+      <div className="bg-[#13193a] rounded-2xl px-5 py-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+          <div>
+            <p className="text-white/40 mb-0.5">No. Póliza</p>
+            <p className="text-white font-mono font-bold">{poliza.constancia || poliza.numero_poliza}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
-            <X className="w-4 h-4" />
-          </button>
+          <div>
+            <p className="text-white/40 mb-0.5">Fecha emisión</p>
+            <p className="text-white font-semibold">{emision}</p>
+          </div>
+          <div>
+            <p className="text-white/40 mb-0.5">Estatus</p>
+            <StatusBadge estatus={poliza.estatus} />
+          </div>
+          <div>
+            <p className="text-white/40 mb-0.5">Oficina</p>
+            <p className="text-white font-semibold truncate">{oficina.nombre || "—"}</p>
+          </div>
         </div>
+      </div>
 
-        <div className="p-6 space-y-5 flex-1">
-          {/* Datos de la póliza */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
-            {filas.map(([label, valor, cls]) => (
-              <div key={label} className="flex items-start justify-between gap-4 py-2 border-b border-gray-50 last:border-0">
-                <p className="text-xs text-gray-400 shrink-0 font-medium">{label}</p>
-                <p className={`text-xs text-right truncate max-w-xs ${
-                  cls.includes("mono")    ? "font-mono font-bold text-[#13193a]" :
-                  cls.includes("semibold")? "font-semibold text-[#13193a]" :
-                  cls.includes("emerald") ? "font-bold text-emerald-700" :
-                  "text-gray-700"
-                }`}>{valor}</p>
+      {/* Datos */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+        {/* Características */}
+        <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">
+            Características de la póliza
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
+            {filas.map(({ l, v }) => (
+              <div key={l}>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">{l}</p>
+                <p className="font-semibold text-[#13193a] text-xs leading-snug">{v}</p>
               </div>
             ))}
           </div>
+          <div className="mt-5 pt-4 border-t border-gray-200 flex items-center justify-between">
+            <p className="text-sm font-bold text-gray-500">Prima total</p>
+            <p className="text-3xl font-black text-[#13193a] tabular-nums">
+              {fmtMXN(poliza.coberturas?.prima_total)}
+            </p>
+          </div>
+        </div>
 
-          {/* Cambio de estatus */}
-          <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-4">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Gestión de estatus</p>
-
-            <div className="flex items-center gap-3 flex-wrap">
-              <p className="text-xs text-gray-500">Estatus actual:</p>
-              <Badge estatus={poliza.estatus}/>
-              {cambioEstatus && (
-                <>
-                  <ArrowRight className="w-4 h-4 text-gray-400" />
-                  <Badge estatus={estatus}/>
-                </>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Cambiar a</label>
-              <div className="flex flex-wrap gap-2">
-                {CAMBIOS_ESTATUS.map(e => (
-                  <button
-                    key={e}
-                    onClick={() => setEstatus(e)}
-                    className={[
-                      "px-3 py-1.5 rounded-xl text-xs font-semibold border-2 transition-all",
-                      estatus === e
-                        ? "bg-[#13193a] text-white border-[#13193a]"
-                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-300",
-                    ].join(" ")}
-                  >
-                    {e}
-                  </button>
+        {/* Cuotas de pago */}
+        {pagos && pagos.length > 0 && (
+          <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+              Cuotas de Pago
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[...pagos]
+                .sort((a, b) => new Date(a.fecha_vencimiento) - new Date(b.fecha_vencimiento))
+                .map((q, i) => (
+                  <div key={q.id} className="bg-white rounded-xl border border-gray-100 p-2.5 text-center">
+                    <p className="text-[10px] text-gray-400 mb-1">Cuota {i + 1}</p>
+                    <p className="text-sm font-bold text-[#13193a]">{fmtMXN(q.monto)}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 mb-1.5">{fmtFecha(q.fecha_vencimiento)}</p>
+                    <CuotaEstatus estatus={q.estatus} />
+                  </div>
                 ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Notas / Motivo</label>
-              <textarea
-                rows={2}
-                value={notas}
-                onChange={e => setNotas(e.target.value)}
-                placeholder="Motivo del cambio, observaciones..."
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] resize-none"
-              />
             </div>
           </div>
-
-          {/* Aplicar póliza pendiente */}
-          {poliza.estatus === "Pend. aplicar" && (
-            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-              <div className="flex items-start gap-3">
-                <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-bold text-blue-800">Póliza pendiente de aplicación</p>
-                  <p className="text-xs text-blue-600 mt-0.5">
-                    Esta póliza fue tramitada por una operadora y requiere revisión y aplicación en el sistema de la aseguradora.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setEstatus("Vigente")}
-                className="mt-3 w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all"
-              >
-                Marcar como aplicada → Vigente
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex gap-3 px-6 pb-6 sticky bottom-0 bg-white border-t border-gray-100 pt-4">
-          <button onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
-            Cancelar
-          </button>
-          <button
-            onClick={handleGuardar}
-            disabled={aplicando}
-            className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2 transition-all shadow-lg shadow-[#13193a]/15"
-          >
-            {aplicando ? (
-              <><Loader2 className="animate-spin w-4 h-4" />Aplicando...</>
-            ) : (
-              <><CheckCircle2 className="w-4 h-4" />Guardar cambios</>
-            )}
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -222,175 +139,275 @@ function ModalPoliza({ poliza, onClose, onGuardar }) {
 
 // ── Página principal ──────────────────────────────────────────
 export default function AnalistaPolizas() {
-  const [polizas,        setPolizas]        = useState(POLIZAS_MOCK);
-  const [busqueda,       setBusqueda]       = useState("");
+  const [polizas,         setPolizas]         = useState([]);
+  const [cargando,        setCargando]        = useState(true);
+  const [busqueda,        setBusqueda]        = useState("");
+  const [busquedaFiltro,  setBusquedaFiltro]  = useState("");
   const [filtroOficina,   setFiltroOficina]   = useState("Todas");
   const [filtroVendedor,  setFiltroVendedor]  = useState("Todos");
   const [filtroEstatus,   setFiltroEstatus]   = useState("Todos");
   const [filtroFormaPago, setFiltroFormaPago] = useState("Todas");
   const [filtroCobertura, setFiltroCobertura] = useState("Todas");
-  const [filtroFecha,     setFiltroFecha]     = useState("");
-  const [polizaSel,       setPolizaSel]       = useState(null);
-  const [tab,             setTab]             = useState("todas");
+  const [detalleData,     setDetalleData]     = useState(null);
+  const [loadingDetalleId,setLoadingDetalleId]= useState(null);
 
-  const pendientes = polizas.filter(p => p.estatus === "Pend. aplicar");
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    const { data, error } = await supabase
+      .from("polizas")
+      .select(`
+        id, numero_poliza, constancia, estatus, forma_pago,
+        fecha_inicio, fecha_fin, placas, created_at,
+        cliente_id, cobertura_id, oficina_id,
+        clientes(nombre, apellido),
+        vendedores(nombre, apellido),
+        concesionarios(nombre, apellido1, apellido2),
+        oficinas(id, nombre),
+        coberturas(nombre, prima_neta, prima_total)
+      `)
+      .in("estatus", ["VIGENTE", "POR VENCER", "VENCIDA", "CANCELADA", "ANULADA"])
+      .order("fecha_inicio", { ascending: false });
 
-  const listaFormasPago = useMemo(() =>
-    ["Todas", ...new Set(polizas.map(p => p.formaPago).filter(Boolean))].sort((a, b) => a === "Todas" ? -1 : a.localeCompare(b)),
+    if (error) console.error("Error cargando pólizas analista:", error.message);
+    setPolizas(
+      (data ?? []).map((p) => ({
+        ...p,
+        estatus: calcularEstatus(p.estatus, p.fecha_fin),
+      })),
+    );
+    setCargando(false);
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setBusquedaFiltro(busqueda), 300);
+    return () => clearTimeout(t);
+  }, [busqueda]);
+
+  // Listas únicas para filtros
+  const listaOficinas = useMemo(() =>
+    [...new Set(polizas.map((p) => p.oficinas?.nombre).filter(Boolean))].sort(),
+  [polizas]);
+
+  const listaVendedores = useMemo(() =>
+    [...new Set(polizas.map((p) =>
+      `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim()
+    ).filter(Boolean))].sort(),
   [polizas]);
 
   const listaCoberturas = useMemo(() =>
-    ["Todas", ...new Set(polizas.map(p => p.cobertura).filter(Boolean))].sort((a, b) => a === "Todas" ? -1 : a.localeCompare(b)),
+    [...new Set(polizas.map((p) => p.coberturas?.nombre).filter(Boolean))].sort(),
   [polizas]);
 
-  const filtradas = polizas.filter(p => {
-    const matchBusq  = p.id.includes(busqueda) || p.asegurado.toLowerCase().includes(busqueda.toLowerCase()) || p.placas.toLowerCase().includes(busqueda.toLowerCase());
-    const matchOfic  = filtroOficina   === "Todas" || p.oficina    === filtroOficina;
-    const matchVend  = filtroVendedor  === "Todos"  || p.vendedor   === filtroVendedor;
-    const matchEst   = filtroEstatus   === "Todos"  || p.estatus    === filtroEstatus;
-    const matchFp    = filtroFormaPago === "Todas"  || p.formaPago  === filtroFormaPago;
-    const matchCob   = filtroCobertura === "Todas"  || p.cobertura  === filtroCobertura;
-    const matchTab   = tab === "todas" || p.estatus === "Pend. aplicar";
-    return matchBusq && matchOfic && matchVend && matchEst && matchFp && matchCob && matchTab;
-  });
+  const listaEstatus = ["Todos", "VIGENTE", "POR VENCER", "VENCIDA", "CANCELADA", "ANULADA"];
 
-  const onGuardar = (updated) => {
-    setPolizas(ps => ps.map(p => p.id === updated.id ? updated : p));
-    setPolizaSel(null);
+  // Métricas
+  const nVigentes  = polizas.filter((p) => p.estatus === "VIGENTE").length;
+  const nPorVencer = polizas.filter((p) => p.estatus === "POR VENCER").length;
+  const nVencidas  = polizas.filter((p) => p.estatus === "VENCIDA").length;
+  const nCanceladas= polizas.filter((p) => p.estatus === "CANCELADA").length;
+
+  const filtradas = useMemo(() => {
+    const b = busquedaFiltro.toLowerCase();
+    return polizas.filter((p) => {
+      const txt = `${p.constancia || p.numero_poliza} ${p.clientes?.nombre || ""} ${p.clientes?.apellido || ""} ${p.placas || ""}`.toLowerCase();
+      const mb = txt.includes(b);
+      const mo = filtroOficina   === "Todas" || p.oficinas?.nombre === filtroOficina;
+      const mv = filtroVendedor  === "Todos" ||
+        `${p.vendedores?.nombre || ""} ${p.vendedores?.apellido || ""}`.trim() === filtroVendedor;
+      const me = filtroEstatus   === "Todos" || p.estatus === filtroEstatus;
+      const mfp= filtroFormaPago === "Todas" || p.forma_pago === filtroFormaPago;
+      const mc = filtroCobertura === "Todas" || p.coberturas?.nombre === filtroCobertura;
+      return mb && mo && mv && me && mfp && mc;
+    });
+  }, [polizas, busquedaFiltro, filtroOficina, filtroVendedor, filtroEstatus, filtroFormaPago, filtroCobertura]);
+
+  const { paginated: paginadas, page, setPage, totalPages, total } = usePagination(filtradas);
+
+  const abrirDetalle = async (p) => {
+    setLoadingDetalleId(p.id);
+    try {
+      const [polizaRes, pagosRes] = await Promise.all([
+        supabase
+          .from("polizas")
+          .select(`
+            id, numero_poliza, constancia, estatus, forma_pago,
+            fecha_inicio, fecha_fin, placas, created_at,
+            clientes(nombre, apellido),
+            vendedores(nombre, apellido),
+            concesionarios(nombre, apellido1, apellido2),
+            oficinas(id, nombre),
+            coberturas(nombre, prima_neta, prima_total)
+          `)
+          .eq("id", p.id)
+          .single(),
+        supabase
+          .from("pagos")
+          .select("id, monto, fecha_vencimiento, estatus")
+          .eq("poliza_id", p.id)
+          .order("fecha_vencimiento", { ascending: true }),
+      ]);
+      if (polizaRes.data) {
+        setDetalleData({
+          poliza: { ...polizaRes.data, estatus: calcularEstatus(polizaRes.data.estatus, polizaRes.data.fecha_fin) },
+          pagos: pagosRes.data ?? [],
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingDetalleId(null);
+    }
   };
 
-  // Métricas rápidas
-  const vigentes   = polizas.filter(p => p.estatus === "Vigente").length;
-  const porVencer  = polizas.filter(p => p.estatus === "Por vencer").length;
-  const vencidas   = polizas.filter(p => p.estatus === "Vencida").length;
-  const pendAplic  = pendientes.length;
+  const selCls = "text-xs border border-gray-200 rounded-xl px-2.5 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 max-w-[160px]";
+
+  if (detalleData) {
+    return (
+      <div className="p-6 min-h-full bg-gray-50">
+        <DetallePoliza poliza={detalleData.poliza} pagos={detalleData.pagos} onVolver={() => setDetalleData(null)} />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 min-h-full bg-gray-50 space-y-5">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-[#13193a]">Pólizas</h1>
-        <p className="text-gray-400 text-sm mt-0.5">Consulta, aplicación y cambio de estatus — todas las oficinas</p>
+        <p className="text-gray-400 text-sm mt-0.5">Consulta de pólizas — todas las oficinas</p>
       </div>
 
-      {/* Métricas rápidas */}
+      {/* Métricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label:"Vigentes",       value:vigentes,  accent:"emerald", onClick:()=>{setFiltroEstatus("Vigente");    setTab("todas"); } },
-          { label:"Por vencer",     value:porVencer, accent:"amber",   onClick:()=>{setFiltroEstatus("Por vencer"); setTab("todas"); } },
-          { label:"Vencidas",       value:vencidas,  accent:"red",     onClick:()=>{setFiltroEstatus("Vencida");    setTab("todas"); } },
-          { label:"Pend. aplicar",  value:pendAplic, accent:"blue",    onClick:()=>{setTab("pendientes"); setFiltroEstatus("Todos"); } },
-        ].map(m => {
-          const colors = {
-            emerald:"bg-emerald-50 text-emerald-600 border-emerald-100",
-            amber:  "bg-amber-50   text-amber-600   border-amber-100",
-            red:    "bg-red-50     text-red-600     border-red-100",
-            blue:   "bg-blue-50    text-blue-600    border-blue-100",
-          };
-          return (
-            <button key={m.label} onClick={m.onClick}
-              className={`${colors[m.accent]} border rounded-2xl p-4 text-left hover:shadow-sm transition-all`}>
-              <p className="text-2xl font-bold tabular-nums">{m.value}</p>
-              <p className="text-xs font-semibold mt-0.5 opacity-80">{m.label}</p>
-            </button>
-          );
-        })}
+          { label: "Vigentes",   value: nVigentes,   Icon: CheckCircle2,  num: "text-emerald-600", ico: "text-emerald-500", est: "VIGENTE"    },
+          { label: "Por vencer", value: nPorVencer,  Icon: Clock,         num: "text-amber-500",   ico: "text-amber-400",   est: "POR VENCER" },
+          { label: "Vencidas",   value: nVencidas,   Icon: AlertTriangle, num: "text-red-500",     ico: "text-red-400",     est: "VENCIDA"    },
+          { label: "Canceladas", value: nCanceladas, Icon: Ban,           num: "text-gray-500",    ico: "text-gray-400",    est: "CANCELADA"  },
+        ].map((m) => (
+          <button
+            key={m.label}
+            onClick={() => setFiltroEstatus(m.est)}
+            className="bg-white border border-gray-100 rounded-2xl p-4 text-left hover:shadow-sm transition-all"
+          >
+            <div className="flex items-start justify-between mb-1">
+              <p className={`text-2xl font-bold tabular-nums ${m.num}`}>{m.value}</p>
+              <m.Icon className={`w-5 h-5 ${m.ico} mt-0.5 shrink-0`} />
+            </div>
+            <p className={`text-xs font-semibold ${m.num}`}>{m.label}</p>
+          </button>
+        ))}
       </div>
 
-      {/* Tabla */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-
-        {/* Tabs */}
-        <div className="flex items-center border-b border-gray-100 px-2">
-          {[
-            { k:"todas",      l:"Todas las pólizas" },
-            { k:"pendientes", l:`Pend. de aplicar`, badge: pendAplic },
-          ].map(t => (
-            <button key={t.k} onClick={() => setTab(t.k)}
-              className={[
-                "flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all",
-                tab === t.k ? "border-[#13193a] text-[#13193a]" : "border-transparent text-gray-400 hover:text-gray-600",
-              ].join(" ")}>
-              {t.l}
-              {t.badge > 0 && (
-                <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{t.badge}</span>
-              )}
-            </button>
-          ))}
-        </div>
-
         {/* Filtros */}
         <div className="flex flex-wrap items-end gap-2 px-5 py-3 border-b border-gray-100">
-          {/* Búsqueda */}
           <div className="flex flex-col gap-0.5">
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Buscar</span>
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+              <input
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Póliza, asegurado, placas..."
-                className="pl-8 pr-3 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] w-48 bg-white"/>
+                className="pl-8 pr-3 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] w-52 bg-white"
+              />
             </div>
           </div>
-          <Filtro label="Oficina"      value={filtroOficina}   onChange={setFiltroOficina}   opciones={OFICINAS}/>
-          <Filtro label="Vendedor"     value={filtroVendedor}  onChange={setFiltroVendedor}  opciones={VENDEDORES}/>
-          <Filtro label="Estatus"      value={filtroEstatus}   onChange={setFiltroEstatus}   opciones={["Todos", ...Object.keys(ESTATUSES)]}/>
-          <Filtro label="Forma de pago" value={filtroFormaPago} onChange={setFiltroFormaPago} opciones={listaFormasPago}/>
-          <Filtro label="Cobertura"    value={filtroCobertura} onChange={setFiltroCobertura} opciones={listaCoberturas}/>
+
+          {[
+            { label: "Oficina",       value: filtroOficina,   set: setFiltroOficina,
+              opts: [["Todas","Todas las oficinas"], ...listaOficinas.map(o => [o,o])] },
+            { label: "Vendedor",      value: filtroVendedor,  set: setFiltroVendedor,
+              opts: [["Todos","Todos los vendedores"], ...listaVendedores.map(v => [v,v])] },
+            { label: "Estatus",       value: filtroEstatus,   set: setFiltroEstatus,
+              opts: listaEstatus.map(o => [o,o]) },
+            { label: "Forma de pago", value: filtroFormaPago, set: setFiltroFormaPago,
+              opts: [["Todas","Todas"],["CONTADO","Contado"],["PARCIALES","Parciales"]] },
+            { label: "Cobertura",     value: filtroCobertura, set: setFiltroCobertura,
+              opts: [["Todas","Todas"], ...listaCoberturas.map(c => [c,c])] },
+          ].map(({ label, value, set, opts }) => (
+            <div key={label} className="flex flex-col gap-0.5">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">{label}</span>
+              <select value={value} onChange={(e) => set(e.target.value)} className={selCls}>
+                {opts.map(([v, lbl]) => <option key={v} value={v}>{lbl}</option>)}
+              </select>
+            </div>
+          ))}
         </div>
 
-        {/* Tabla de resultados */}
+        {/* Tabla */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50/80 border-b border-gray-100">
-                {["Póliza","Asegurado","Aseguradora","Oficina","Vendedor","Cobertura","Placas","Prima","Vigencia","Estatus",""].map(h => (
-                  <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-1 whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtradas.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-12 text-sm text-gray-400">No se encontraron pólizas con esos filtros.</td></tr>
-              ) : filtradas.map((p, i) => (
-                <tr key={i} className="hover:bg-gray-50/60 transition-colors cursor-pointer" onClick={() => setPolizaSel(p)}>
-                  <td className="px-4 py-1 font-mono text-xs font-bold text-[#13193a]">{p.id}</td>
-                  <td className="px-4 py-1 text-xs font-semibold text-gray-700 whitespace-nowrap">{p.asegurado}</td>
-                  <td className="px-4 py-1 text-xs text-gray-500">{p.aseguradora}</td>
-                  <td className="px-4 py-1 text-xs text-gray-500 max-w-32 truncate">{p.oficina}</td>
-                  <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{p.vendedor}</td>
-                  <td className="px-4 py-1 text-xs text-gray-500 max-w-36 truncate">{p.cobertura}</td>
-                  <td className="px-4 py-1 font-mono text-xs text-gray-600">{p.placas}</td>
-                  <td className="px-4 py-1 text-xs font-bold text-emerald-700">${p.prima.toFixed(2)}</td>
-                  <td className="px-4 py-1 text-xs text-gray-500 whitespace-nowrap">{p.vigHasta}</td>
-                  <td className="px-4 py-1"><Badge estatus={p.estatus}/></td>
-                  <td className="px-4 py-1">
-                    <button onClick={e => { e.stopPropagation(); setPolizaSel(p); }}
-                      className="w-7 h-7 rounded-lg text-gray-300 hover:text-[#13193a] hover:bg-gray-100 flex items-center justify-center transition-colors">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                  </td>
+          {cargando ? (
+            <div className="flex items-center justify-center py-16 gap-3 text-gray-400">
+              <Loader2 className="animate-spin w-5 h-5" />
+              <span className="text-sm">Cargando pólizas…</span>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50/80 border-b border-gray-100">
+                  {["Constancia","Asegurado","Oficina","Vendedor","Cobertura","Placas","Prima","Vence","Estatus"].map((h) => (
+                    <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-3 py-2 whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtradas.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="text-center py-12 text-sm text-gray-400">
+                      No se encontraron pólizas.
+                    </td>
+                  </tr>
+                ) : (
+                  paginadas.map((p) => (
+                    <tr
+                      key={p.id}
+                      onClick={() => abrirDetalle(p)}
+                      className={`hover:bg-gray-50/60 transition-colors cursor-pointer ${
+                        loadingDetalleId === p.id ? "opacity-60" : ""
+                      }`}
+                    >
+                      <td className="px-3 py-1.5 font-mono text-xs font-bold text-[#13193a] whitespace-nowrap">
+                        {p.constancia || p.numero_poliza}
+                      </td>
+                      <td className="px-3 py-1.5 text-xs font-semibold text-gray-700 max-w-[9rem] truncate">
+                        {p.clientes?.nombre} {p.clientes?.apellido}
+                      </td>
+                      <td className="px-3 py-1.5 text-xs text-gray-500 max-w-[6rem] truncate">
+                        {p.oficinas?.nombre || "—"}
+                      </td>
+                      <td className="px-3 py-1.5 text-xs text-gray-500 max-w-[8rem] truncate">
+                        {p.vendedores?.nombre} {p.vendedores?.apellido}
+                      </td>
+                      <td className="px-3 py-1.5 text-xs text-gray-500 max-w-[9rem] truncate">
+                        {p.coberturas?.nombre}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono text-xs text-gray-600 whitespace-nowrap">
+                        {p.placas || "—"}
+                      </td>
+                      <td className="px-3 py-1.5 text-xs font-bold text-emerald-700 whitespace-nowrap">
+                        {fmtMXN(p.coberturas?.prima_total)}
+                      </td>
+                      <td className="px-3 py-1.5 text-xs text-gray-500 whitespace-nowrap">
+                        {fmtFecha(p.fecha_fin)}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <StatusBadge estatus={p.estatus} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400">
-            Mostrando <strong className="text-gray-600">{filtradas.length}</strong> de <strong className="text-gray-600">{polizas.length}</strong> pólizas
-          </p>
-          <button onClick={() => { setFiltroOficina("Todas"); setFiltroVendedor("Todos"); setFiltroEstatus("Todos"); setFiltroFormaPago("Todas"); setFiltroCobertura("Todas"); setBusqueda(""); setTab("todas"); }}
-            className="text-xs text-blue-600 hover:underline font-medium">
-            Limpiar filtros
-          </button>
-        </div>
+        <Paginator page={page} totalPages={totalPages} total={total} pageSize={10} onPage={setPage} />
       </div>
-
-      {/* Modal */}
-      {polizaSel && (
-        <ModalPoliza poliza={polizaSel} onClose={() => setPolizaSel(null)} onGuardar={onGuardar}/>
-      )}
     </div>
   );
 }

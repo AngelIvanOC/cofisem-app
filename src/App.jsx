@@ -269,7 +269,7 @@ export default function App() {
           path="/login"
           element={
             session && rolNombre
-              ? <Navigate to={["CABINERO_SINIESTROS", "AJUSTADOR"].includes(rolNombre) ? "/gaman/dashboard" : "/accesos"} replace />
+              ? <Navigate to={["CABINERO_SINIESTROS", "AJUSTADOR", "ANALISTA"].includes(rolNombre) ? "/gaman/dashboard" : "/accesos"} replace />
               : <Login />
           }
         />

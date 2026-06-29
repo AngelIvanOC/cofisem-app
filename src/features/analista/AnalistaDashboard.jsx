@@ -1,375 +1,417 @@
-// ============================================================
-// src/features/analista/AnalistaDashboard.jsx
-// ============================================================
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../../supabaseClient";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid,
+} from "recharts";
+import {
+  AlertTriangle, ArrowRight, CheckCircle2, CreditCard,
+  FileText, Loader2, Clock,
+} from "lucide-react";
 
-const HOY = new Date().toLocaleDateString("es-MX", {
-  weekday: "long",
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-});
+function fmt$(n) {
+  return `$${Number(n || 0).toLocaleString("es-MX", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  })}`;
+}
+function fmtCorta(str) {
+  if (!str) return "—";
+  return new Date(str + "T12:00:00").toLocaleDateString("es-MX", {
+    day: "2-digit", month: "short",
+  });
+}
+function nombreCorto(pol) {
+  const c = pol?.clientes;
+  if (!c) return "—";
+  return `${c.nombre ?? ""} ${(c.apellido ?? "").split(" ")[0]}`.trim();
+}
 
-const OFICINAS = [
-  { nombre: "CIVAC", polizas: 30, cobrado: 72000, pctMeta: 100 },
-  { nombre: "ZAPATA", polizas: 22, cobrado: 50600, pctMeta: 88 },
-  { nombre: "TEMIXCO", polizas: 10, cobrado: 23000, pctMeta: 67 },
-  { nombre: "CUAUTLA", polizas: 6, cobrado: 13800, pctMeta: 60 },
-];
-
-const PENDIENTES = [
-  {
-    poliza: "3414001",
-    asegurado: "Pedro Ramos",
-    oficina: "TEMIXCO",
-    tipo: "Pend. aplicar",
-  },
-  {
-    poliza: "3414002",
-    asegurado: "Rosa Mendoza",
-    oficina: "CIVAC",
-    tipo: "Pend. aplicar",
-  },
-  {
-    poliza: "3410888",
-    asegurado: "José Martínez",
-    oficina: "CIVAC",
-    tipo: "Pago vencido",
-  },
-  {
-    poliza: "3411002",
-    asegurado: "Carmen López",
-    oficina: "TEMIXCO",
-    tipo: "Por vencer",
-  },
-];
-
-const COBROS_DIA = [
-  {
-    asegurado: "Angel Ivan Ortega",
-    poliza: "3413241",
-    monto: 785.7,
-    forma: "Efectivo",
-    hora: "09:13",
-  },
-  {
-    asegurado: "María García López",
-    poliza: "3413198",
-    monto: 2200.0,
-    forma: "Efectivo",
-    hora: "10:42",
-  },
-  {
-    asegurado: "Roberto Díaz",
-    poliza: "3413167",
-    monto: 637.0,
-    forma: "Transferencia",
-    hora: "11:30",
-  },
-];
-
-const TIPO_CLS = {
-  "Pend. aplicar": "bg-blue-50 text-blue-700",
-  "Pago vencido": "bg-red-50 text-red-600",
-  "Por vencer": "bg-amber-50 text-amber-700",
-};
-
-function BarHoriz({ pct, color }) {
+function RingChart({ pagado, adeudo }) {
+  const total = pagado + adeudo || 1;
+  const r     = 42;
+  const circ  = 2 * Math.PI * r;
+  const dash  = (pagado / total) * circ;
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${Math.min(pct, 100)}%`, background: color }}
-        />
+    <div className="relative w-full min-h-0" style={{ height: "65%" }}>
+      <svg width="100%" height="100%" viewBox="0 0 100 100" style={{ transform: "rotate(-90deg)" }}>
+        <circle cx="50" cy="50" r={r} fill="none" stroke="#f1f5f9" strokeWidth="8" />
+        <circle cx="50" cy="50" r={r} fill="none" stroke="#10b981" strokeWidth="8"
+          strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="butt" />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-2xl font-black text-[#13193a] leading-none">
+          {Math.round((pagado / total) * 100)}%
+        </span>
+        <span className="text-xs text-gray-400 font-semibold mt-1">aplicado</span>
       </div>
-      <span
-        className="text-[11px] font-bold tabular-nums"
-        style={{ color, minWidth: 32 }}
-      >
-        {pct}%
-      </span>
+    </div>
+  );
+}
+
+function TooltipPagos({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-3 py-2 text-xs">
+      <p className="font-bold text-[#13193a]">{payload[0]?.payload?.label}</p>
+      <p className="text-amber-600 mt-0.5">Por aplicar: <strong>{payload[0]?.value}</strong></p>
+      {payload[1] && <p className="text-emerald-600">Aplicados: <strong>{payload[1]?.value}</strong></p>}
     </div>
   );
 }
 
 export default function AnalistaDashboard({ usuario }) {
   const navigate = useNavigate();
-  const h = new Date().getHours();
-  const saludo =
-    h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
 
-  const totalPolizas = OFICINAS.reduce((s, o) => s + o.polizas, 0);
-  const totalCobrado = OFICINAS.reduce((s, o) => s + o.cobrado, 0);
+  const [pagos,   setPagos]   = useState([]);
+  const [alertas, setAlertas] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const h      = new Date().getHours();
+  const saludo = h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
+  const HOY_LABEL = new Date().toLocaleDateString("es-MX", {
+    weekday: "long", day: "2-digit", month: "long", year: "numeric",
+  });
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    try {
+      const hoy = new Date().toISOString().split("T")[0];
+      const [pagosRes, alertasRes] = await Promise.all([
+        supabase
+          .from("pagos")
+          .select(`
+            id, monto, num_cuota, estatus, fecha_pago,
+            polizas(constancia, numero_poliza, forma_pago, estatus, fecha_fin,
+              clientes(nombre, apellido),
+              oficinas(nombre))
+          `)
+          .in("estatus", ["ADEUDO", "PAGADO"])
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("polizas")
+          .select("id, constancia, numero_poliza, fecha_fin, clientes(nombre, apellido), oficinas(nombre)")
+          .eq("estatus", "VENCIDA")
+          .gte("fecha_fin", hoy)
+          .order("fecha_fin", { ascending: true })
+          .limit(8),
+      ]);
+      setPagos(pagosRes.data ?? []);
+      setAlertas(alertasRes.data ?? []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const pagosAdeudo = useMemo(() => pagos.filter(p => p.estatus === "ADEUDO"), [pagos]);
+  const pagosPagado = useMemo(() => pagos.filter(p => p.estatus === "PAGADO"), [pagos]);
+
+  const nAdeudo    = pagosAdeudo.length;
+  const nPagado    = pagosPagado.length;
+  const montoPend  = pagosAdeudo.reduce((s, p) => s + (p.monto || 0), 0);
+  const montoAplic = pagosPagado.reduce((s, p) => s + (p.monto || 0), 0);
+
+  const topPendientes = pagosAdeudo;
+
+  const porOficina = useMemo(() => {
+    const map = {}, mapAplic = {};
+    pagosAdeudo.forEach(p => {
+      const of = p.polizas?.oficinas?.nombre ?? "Sin oficina";
+      map[of] = (map[of] || 0) + 1;
+    });
+    pagosPagado.forEach(p => {
+      const of = p.polizas?.oficinas?.nombre ?? "Sin oficina";
+      mapAplic[of] = (mapAplic[of] || 0) + 1;
+      if (!map[of]) map[of] = 0;
+    });
+    return Object.keys(map)
+      .map(nombre => ({
+        label: nombre.replace(/^COFISEM\s*/i, "").replace(/^OFICINA\s*/i, ""),
+        adeudo: map[nombre] || 0,
+        pagado: mapAplic[nombre] || 0,
+      }))
+      .sort((a, b) => b.adeudo - a.adeudo)
+      .slice(0, 6);
+  }, [pagosAdeudo, pagosPagado]);
+
+  const recientes = pagosPagado.slice(0, 5);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-full bg-[#f7f8fa]">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full overflow-y-auto bg-[#f7f8fa]">
-      <div className="max-w-7xl mx-auto p-6 space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-xs text-gray-400 capitalize">{HOY}</p>
-            <h1 className="text-2xl font-bold text-[#13193a] mt-0.5">
-              {saludo},{" "}
-              <span className="font-light">
-                {usuario?.nombre ?? "Analista"}
-              </span>
-            </h1>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Panel de analista · Todas las oficinas
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => navigate("/gaman/polizas")}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-semibold hover:bg-[#1e2a50] transition-all"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 12h3.75M9 15h3.75m-5.25 6h12A2.25 2.25 0 0021 18.75V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12.75A2.25 2.25 0 005.25 21z"
-                />
-              </svg>
-              Pólizas pendientes
-            </button>
-            <button
-              onClick={() => navigate("/gaman/reportes")}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
-            >
-              Reportes
-            </button>
-          </div>
-        </div>
+    <div className="h-full overflow-hidden bg-[#f7f8fa]">
+    <div
+      className="max-w-7xl mx-auto h-full p-6"
+      style={{ display: "grid", gridTemplateRows: "2fr 3fr 8fr 7fr", gap: "10px" }}
+    >
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            {
-              label: "Pólizas vigentes",
-              value: "186",
-              sub: "+5 esta semana",
-              accent: "#059669",
-              path: "/polizas",
-            },
-            {
-              label: "Pend. de aplicar",
-              value: "4",
-              sub: "Requieren acción",
-              accent: "#3b82f6",
-              path: "/polizas",
-            },
-            {
-              label: "Cuotas vencidas",
-              value: "7",
-              sub: "Sin cobrar",
-              accent: "#ef4444",
-              path: "/pagos",
-            },
-            {
-              label: "Cortes pendientes",
-              value: "1/4",
-              sub: "1 oficina abierta",
-              accent: "#d97706",
-              path: "/corte-diario",
-            },
-          ].map((k) => (
-            <button
-              key={k.label}
-              onClick={() => navigate(k.path)}
-              className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
-            >
-              <div
-                className="w-8 h-1 rounded-full mb-3"
-                style={{ background: k.accent }}
-              />
-              <p className="text-2xl font-black text-[#13193a] tabular-nums">
-                {k.value}
-              </p>
-              <p className="text-xs font-semibold text-gray-600 mt-1">
-                {k.label}
-              </p>
-              <p className="text-[11px] text-gray-400 mt-0.5">{k.sub}</p>
-            </button>
-          ))}
+      {/* ── Fila 1: Header (10%) ───────────────────────────── */}
+      <div className="flex items-center justify-between gap-4 overflow-hidden mb-[10px]">
+        <div>
+          <p className="text-xs text-gray-400 capitalize">{HOY_LABEL}</p>
+          <h1 className="text-xl font-bold text-[#13193a]">
+            {saludo}, <span className="font-light">{usuario?.nombre ?? "Analista"}</span>
+          </h1>
+          <p className="text-xs text-gray-400">Panel de analista · Todas las oficinas</p>
         </div>
+        <button
+          onClick={() => navigate("/gaman/pagos")}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#13193a] text-white text-sm font-semibold hover:bg-[#1e2a50] transition-all shadow-sm shrink-0"
+        >
+          <CreditCard className="w-4 h-4" />
+          Ir a pagos
+        </button>
+      </div>
 
-        {/* Fila 2: Oficinas + Pendientes */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          {/* Producción por oficina — 3/5 */}
-          <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
-              <p className="text-sm font-bold text-[#13193a]">
-                Producción mensual por oficina
-              </p>
-              <p className="text-xs text-gray-400">
-                {totalPolizas} pólizas · ${(totalCobrado / 1000).toFixed(0)}k
-              </p>
+      {/* ── Fila 2: KPIs (15%) ─────────────────────────────── */}
+      <div className="grid grid-cols-4 gap-2 min-h-0">
+        {[
+          { label: "Por aplicar",     value: nAdeudo,         sub: "pagos pendientes",            num: "text-amber-500",   ico: "text-amber-400",   Icon: Clock,         onClick: () => navigate("/gaman/pagos") },
+          { label: "Monto pendiente", value: fmt$(montoPend), sub: "por aplicar",                  num: "text-[#13193a]",   ico: "text-gray-400",    Icon: CreditCard,    onClick: () => navigate("/gaman/pagos") },
+          { label: "Total aplicados", value: nPagado,          sub: fmt$(montoAplic),              num: "text-emerald-600", ico: "text-emerald-400", Icon: CheckCircle2,  onClick: () => navigate("/gaman/pagos") },
+          { label: "Alertas de pago", value: alertas.length,   sub: "pólizas vencidas (sin pago)",
+            num: alertas.length > 0 ? "text-red-500" : "text-gray-400",
+            ico: alertas.length > 0 ? "text-red-400" : "text-gray-300",
+            Icon: AlertTriangle, onClick: () => navigate("/gaman/polizas") },
+        ].map(k => (
+          <button key={k.label} onClick={k.onClick}
+            className="bg-white border border-gray-100 rounded-xl px-3 py-2 text-left hover:shadow-sm transition-all h-full flex flex-col justify-center gap-0.5">
+            <div className="flex items-start justify-between w-full mb-0.5">
+              <p className={`text-xl font-black tabular-nums leading-none ${k.num}`}>{k.value}</p>
+              <k.Icon className={`w-4 h-4 ${k.ico} shrink-0 mt-0.5`} />
             </div>
-            <div className="divide-y divide-gray-50">
-              {OFICINAS.map((o) => (
-                <div key={o.nombre} className="px-5 py-3.5">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-xs font-bold text-[#13193a]">
-                      {o.nombre}
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <p className="text-xs text-gray-500">{o.polizas} pól.</p>
-                      <p className="text-xs font-bold text-emerald-700">
-                        ${(o.cobrado / 1000).toFixed(0)}k
-                      </p>
-                    </div>
-                  </div>
-                  <BarHoriz
-                    pct={o.pctMeta}
-                    color={
-                      o.pctMeta >= 100
-                        ? "#059669"
-                        : o.pctMeta >= 80
-                          ? "#3b82f6"
-                          : o.pctMeta >= 60
-                            ? "#d97706"
-                            : "#ef4444"
-                    }
-                  />
+            <p className="text-[11px] font-semibold text-gray-700">{k.label}</p>
+            <p className="text-[10px] text-gray-400">{k.sub}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Fila 3: Pendientes + Alertas (35%) ─────────────── */}
+      <div className="grid grid-cols-3 gap-2 min-h-0">
+
+        {/* Pendientes (2/3) */}
+        <div className="col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex">
+
+          {/* Izquierda: título + lista (70%) */}
+          <div className="flex flex-col overflow-hidden" style={{ width: "75%" }}>
+            <div className="px-3 py-2 border-b border-gray-50 shrink-0">
+              <p className="text-sm font-bold text-[#13193a]">Pagos por aplicar</p>
+              <p className="text-[11px] text-gray-400">Pendientes de confirmación</p>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {topPendientes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-1 text-gray-400">
+                  <CheckCircle2 className="w-7 h-7 text-emerald-300" />
+                  <p className="text-sm font-medium">Todo al corriente</p>
                 </div>
-              ))}
+              ) : (
+                <div className="divide-y divide-gray-50">
+                  {topPendientes.map(p => {
+                    const pol = p.polizas;
+                    const constancia = pol?.constancia || pol?.numero_poliza || "—";
+                    const totalCuotas = pol?.forma_pago === "CONTADO" ? 1 : 4;
+                    return (
+                      <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50/60 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-[#13193a] truncate">{nombreCorto(pol)}</p>
+                          <p className="text-[10px] text-gray-400 font-mono">{constancia} · {pol?.oficinas?.nombre ?? "—"}</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {Array.from({ length: totalCuotas }, (_, i) => (
+                            <div key={i} className={`w-1.5 h-1.5 rounded-full ${i+1 < (p.num_cuota??1) ? "bg-emerald-400" : i+1 === (p.num_cuota??1) ? "bg-amber-400" : "bg-gray-200"}`} />
+                          ))}
+                          <span className="text-[10px] text-gray-400 ml-1 tabular-nums">{p.num_cuota??1}/{totalCuotas}</span>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs font-bold text-emerald-700 tabular-nums">{fmt$(p.monto)}</p>
+                          <p className="text-[10px] text-gray-400">{p.fecha_pago ? fmtCorta(p.fecha_pago) : "Sin fecha"}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div className="px-5 py-3 border-t border-gray-50">
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-400">Promedio de meta global</p>
-                <p className="text-sm font-black text-[#13193a]">78%</p>
+
+            <div className="px-3 py-1.5 border-t border-gray-50 shrink-0">
+              <button onClick={() => navigate("/gaman/pagos")}
+                className="flex items-center gap-1 text-xs font-semibold text-[#13193a] hover:underline">
+                Ver todos los pagos <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Derecha: donut + stats (30%) */}
+          <div className="flex flex-col items-center justify-center border-l border-gray-50 p-2 min-h-0" style={{ width: "25%" }}>
+            <RingChart pagado={nPagado} adeudo={nAdeudo} />
+            <div className="space-y-1.5 shrink-0 mt-2">
+              <div className="flex items-center justify-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                <span className="text-[11px] text-gray-500">Aplicados: <strong className="text-gray-700">{nPagado}</strong></span>
+              </div>
+              <div className="flex items-center justify-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                <span className="text-[11px] text-gray-500">Pendientes: <strong className="text-amber-700">{nAdeudo}</strong></span>
               </div>
             </div>
           </div>
 
-          {/* Acciones pendientes — 2/5 */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
-              <p className="text-sm font-bold text-[#13193a]">
-                Requieren acción
-              </p>
-              <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                {PENDIENTES.length}
-              </span>
-            </div>
-            <div className="divide-y divide-gray-50">
-              {PENDIENTES.map((p, i) => (
-                <div key={i} className="flex items-center gap-3 px-5 py-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-[#13193a] truncate">
-                      {p.asegurado}
-                    </p>
-                    <p className="text-[10px] text-gray-400 font-mono">
-                      {p.poliza} · {p.oficina}
-                    </p>
-                  </div>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${TIPO_CLS[p.tipo]}`}
-                  >
-                    {p.tipo}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="p-4 border-t border-gray-50">
-              <button
-                onClick={() => navigate("/gaman/polizas")}
-                className="w-full py-2 rounded-xl bg-[#13193a] text-white text-xs font-bold hover:bg-[#1e2a50] transition-all"
-              >
-                Ver todas las pólizas
-              </button>
-            </div>
-          </div>
         </div>
 
-        {/* Fila 3: Cobros del día + Corte */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Cobros registrados hoy */}
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
-              <p className="text-sm font-bold text-[#13193a]">
-                Cobros registrados hoy
-              </p>
-              <p className="text-xs font-bold text-emerald-700">
-                ${COBROS_DIA.reduce((s, c) => s + c.monto, 0).toFixed(2)}
-              </p>
+        {/* Alertas (1/3) */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+          <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-50 shrink-0">
+            <div className="w-6 h-6 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-3 h-3 text-red-500" />
             </div>
-            <div className="divide-y divide-gray-50">
-              {COBROS_DIA.map((c, i) => (
-                <div key={i} className="flex items-center gap-3 px-5 py-3">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
-                    <svg
-                      className="w-4 h-4 text-emerald-600"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"
-                      />
-                    </svg>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-[#13193a]">
-                      {c.asegurado}
-                    </p>
-                    <p className="text-[10px] text-gray-400">
-                      {c.forma} · {c.hora}
-                    </p>
-                  </div>
-                  <p className="text-xs font-bold text-emerald-700 shrink-0">
-                    ${c.monto.toFixed(2)}
-                  </p>
-                </div>
-              ))}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-[#13193a]">Alertas de pago</p>
+              <p className="text-[11px] text-gray-400">Pólizas vencidas por adeudo</p>
             </div>
+            {alertas.length > 0 && (
+              <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                {alertas.length}
+              </span>
+            )}
           </div>
 
-          {/* Estado de cortes */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <p className="text-sm font-bold text-[#13193a] mb-4">
-              Estado de cortes — hoy
-            </p>
-            <div className="space-y-3">
-              {[
-                { oficina: "COFISEM AV. E.ZAPATA", cerrado: true, polizas: 3 },
-                { oficina: "OFICINA CIVAC", cerrado: true, polizas: 4 },
-                { oficina: "COFISEM TEMIXCO", cerrado: false, polizas: 2 },
-                { oficina: "COFISEM CUAUTLA", cerrado: true, polizas: 1 },
-              ].map((c) => (
-                <div key={c.oficina} className="flex items-center gap-3">
-                  <div
-                    className={`w-2 h-2 rounded-full shrink-0 ${c.cerrado ? "bg-emerald-500" : "bg-amber-500"}`}
-                  />
-                  <p className="text-xs text-gray-700 flex-1">{c.oficina}</p>
-                  <p className="text-[11px] text-gray-400">{c.polizas} pól.</p>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.cerrado ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
-                  >
-                    {c.cerrado ? "Cerrado" : "Abierto"}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => navigate("/gaman/corte-diario")}
-              className="w-full mt-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-all"
-            >
-              Ver corte completo
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {alertas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-1 text-gray-400">
+                <CheckCircle2 className="w-6 h-6 text-emerald-300" />
+                <p className="text-xs font-medium">Sin alertas</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {alertas.map(p => (
+                  <div key={p.id} className="flex items-start justify-between gap-1 px-3 py-1.5">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-[#13193a] truncate">
+                        {[p.clientes?.nombre, p.clientes?.apellido].filter(Boolean).join(" ") || "—"}
+                      </p>
+                      <p className="text-[10px] text-gray-400 font-mono">{p.constancia || p.numero_poliza}</p>
+                      <p className="text-[10px] text-gray-400 truncate">{p.oficinas?.nombre ?? "—"}</p>
+                    </div>
+                    <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-full whitespace-nowrap shrink-0">
+                      Vence {fmtCorta(p.fecha_fin)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="px-3 py-1.5 border-t border-gray-50 shrink-0">
+            <button onClick={() => navigate("/gaman/polizas")}
+              className="flex items-center gap-1 text-xs font-semibold text-[#13193a] hover:underline">
+              Ver pólizas <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       </div>
+
+      {/* ── Fila 4: Gráfica + Recientes (35%) ──────────────── */}
+      <div className="grid grid-cols-[7fr_3fr] gap-2 min-h-0">
+
+        {/* Gráfica por oficina */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-50 shrink-0">
+            <div>
+              <p className="text-sm font-bold text-[#13193a]">Pagos por oficina</p>
+              <p className="text-[11px] text-gray-400">Pendientes vs aplicados</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm bg-amber-400" />
+                <span className="text-[11px] text-gray-500">Por aplicar</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm bg-emerald-400" />
+                <span className="text-[11px] text-gray-500">Aplicados</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 p-3">
+            {porOficina.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-xs text-gray-400">Sin datos disponibles</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart layout="vertical" data={porOficina} margin={{ top: 4, right: 8, left: 4, bottom: 0 }} barSize={8} barGap={2}>
+                  <CartesianGrid horizontal={false} stroke="#f1f5f9" />
+                  <XAxis type="number" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <YAxis type="category" dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8", fontWeight: 600 }} tickLine={false} axisLine={false} width={60} />
+                  <Tooltip content={<TooltipPagos />} cursor={{ fill: "#f8fafc" }} />
+                  <Bar dataKey="adeudo" fill="#fbbf24" radius={[0,4,4,0]} name="Por aplicar" />
+                  <Bar dataKey="pagado" fill="#10b981" radius={[0,4,4,0]} name="Aplicados" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Últimos aplicados */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-50 shrink-0">
+            <div>
+              <p className="text-sm font-bold text-[#13193a]">Últimos aplicados</p>
+              <p className="text-[11px] text-gray-400">Pagos confirmados recientemente</p>
+            </div>
+            <FileText className="w-4 h-4 text-gray-300" />
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {recientes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-1 text-gray-400">
+                <Clock className="w-6 h-6 text-gray-200" />
+                <p className="text-xs font-medium">Sin actividad reciente</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {recientes.map(p => {
+                  const pol = p.polizas;
+                  const constancia = pol?.constancia || pol?.numero_poliza || "—";
+                  const totalCuotas = pol?.forma_pago === "CONTADO" ? 1 : 4;
+                  return (
+                    <div key={p.id} className="flex items-center gap-2 px-3 py-1.5">
+                      <div className="w-7 h-7 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-[#13193a] truncate">{nombreCorto(pol)}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">{constancia} · cuota {p.num_cuota??1}/{totalCuotas}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-bold text-emerald-700 tabular-nums">{fmt$(p.monto)}</p>
+                        <p className="text-[10px] text-gray-400">{p.fecha_pago ? fmtCorta(p.fecha_pago) : "—"}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="px-3 py-1.5 border-t border-gray-50 shrink-0">
+            <button onClick={() => navigate("/gaman/pagos")}
+              className="flex items-center gap-1 text-xs font-semibold text-[#13193a] hover:underline">
+              Ver historial de pagos <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
     </div>
   );
 }
