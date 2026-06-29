@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, Clock, UserCheck, ArrowRight, Plus } from "lucide-react";
+import { CheckCircle2, Clock, UserCheck, User, ArrowRight, Plus } from "lucide-react";
 
-export default function ReporteExito({ folio, ajustador, horaInicio, horaFin, minutos }) {
+export default function ReporteExito({ folio, ajustador, horaInicio, horaFin, minutos, constancia, vendedor }) {
   const navigate = useNavigate();
 
   return (
@@ -25,35 +25,71 @@ export default function ReporteExito({ folio, ajustador, horaInicio, horaFin, mi
             <p className="text-white font-black font-mono text-6xl tracking-tight leading-none">
               {folio}
             </p>
+            {constancia && (
+              <p className="text-white/40 text-xs font-mono mt-3">
+                Póliza{" "}
+                <span className="text-white/75 font-semibold">{constancia}</span>
+              </p>
+            )}
           </div>
         </div>
 
         {/* Ajustador asignado */}
         {ajustador ? (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-4 flex items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-[#13193a] flex items-center justify-center shrink-0">
-              <UserCheck className="w-5 h-5 text-white" />
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-4">
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl bg-[#13193a] flex items-center justify-center shrink-0">
+                <UserCheck className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
+                  Ajustador asignado
+                </p>
+                <p className="text-[#13193a] font-bold text-sm truncate">{ajustador}</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Asignado para folio{" "}
+                  <span className="font-mono font-semibold text-gray-600">{folio}</span>
+                </p>
+              </div>
+              <span className="inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                Asignado
+              </span>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
-                Ajustador asignado
-              </p>
-              <p className="text-[#13193a] font-bold text-sm truncate">{ajustador}</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Asignado para folio{" "}
-                <span className="font-mono font-semibold text-gray-600">{folio}</span>
-              </p>
-            </div>
-            <span className="inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-              Asignado
-            </span>
+            {vendedor && (
+              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
+                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                  <User className="w-3.5 h-3.5 text-gray-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
+                    Vendedor
+                  </p>
+                  <p className="text-[#13193a] font-semibold text-sm truncate">{vendedor}</p>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 flex items-center gap-3">
-            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-            <p className="text-xs text-amber-700 font-semibold">
-              Sin ajustador asignado — se puede asignar desde la lista de siniestros
-            </p>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              <p className="text-xs text-amber-700 font-semibold">
+                Sin ajustador asignado — se puede asignar desde la lista de siniestros
+              </p>
+            </div>
+            {vendedor && (
+              <div className="pt-3 border-t border-gray-100 flex items-center gap-3">
+                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                  <User className="w-3.5 h-3.5 text-gray-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
+                    Vendedor
+                  </p>
+                  <p className="text-[#13193a] font-semibold text-sm truncate">{vendedor}</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

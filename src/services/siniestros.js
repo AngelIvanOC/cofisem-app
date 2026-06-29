@@ -33,6 +33,7 @@ const SEL_POLIZA = `
   cliente_id, placas, num_serie, num_motor, anio, capacidad,
   clientes(nombre, apellido),
   oficinas(nombre),
+  vendedores(nombre, apellido),
   concesionarios(nombre, apellido1, apellido2),
   vehiculos_amis(marca, tipo, dc, dl, anio),
   coberturas(nombre, prima_total, prima_neta,
@@ -101,6 +102,7 @@ function mapPolizaACard(p) {
     clienteId: p.cliente_id,   // necesario para crearSiniestro
     numero:    p.constancia || p.numero_poliza,
     titular,
+    vendedor:  [p.vendedores?.nombre, p.vendedores?.apellido].filter(Boolean).join(" ") || null,
     prima:     fmtMXN(primaTotal),
     estatus:   calcularEstatus(p.estatus, p.fecha_fin),
     agencia:   p.oficinas?.nombre ?? "—",

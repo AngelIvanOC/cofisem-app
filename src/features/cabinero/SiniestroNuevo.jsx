@@ -96,6 +96,8 @@ export default function SiniestroNuevo({ usuario }) {
         horaInicio: fmtTime(horaInicio),
         horaFin:    fmtTime(horaFin),
         minutos,
+        constancia: poliza.numero,
+        vendedor:   poliza.vendedor || null,
       });
       setPaso("exito");
     } catch (e) {
