@@ -29,6 +29,7 @@ import {
   Eye,
   Loader2,
   Pencil,
+  RefreshCcw,
   Search,
   TrendingDown,
   X,
@@ -1426,6 +1427,196 @@ function DetallePolizaAdmin({ poliza, pagos, config, onVolver }) {
   );
 }
 
+// ── Modal Poner al Corriente ──────────────────────────────────
+function ModalPonerAlCorriente({ poliza, onClose, onDone }) {
+  const [cargando, setCargando] = useState(true);
+  const [cuotas, setCuotas] = useState([]);
+  const [fechas, setFechas] = useState({});
+  const [procesando, setProcesando] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("pagos")
+          .select("id, num_cuota, monto, fecha_vencimiento, estatus")
+          .eq("poliza_id", poliza.id)
+          .neq("estatus", "PAGADO")
+          .order("num_cuota", { ascending: true });
+        if (error) throw error;
+        const filas = data ?? [];
+        setCuotas(filas);
+        const init = {};
+        filas.forEach((c) => { init[c.id] = ""; });
+        setFechas(init);
+      } catch (e) {
+        console.error(e);
+        onClose();
+      } finally {
+        setCargando(false);
+      }
+    })();
+  }, [poliza.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const valido = cuotas.length > 0 && cuotas.every((c) => fechas[c.id]?.trim());
+
+  const handleGuardar = async () => {
+    if (!valido) return;
+    setProcesando(true);
+    try {
+      await Promise.all(
+        cuotas.map((c) =>
+          supabase
+            .from("pagos")
+            .update({ estatus: "PAGADO", fecha_pago: fechas[c.id] })
+            .eq("id", c.id),
+        ),
+      );
+      await supabase.from("polizas").update({ estatus: "VIGENTE" }).eq("id", poliza.id);
+      await supabase.from("polizas_historial").insert({
+        poliza_id: poliza.id,
+        estatus_nuevo: "VIGENTE",
+        notas: "SE PONE AL CORRIENTE POR ADMINISTRADOR — PAGOS REGISTRADOS",
+        cambiado_por: null,
+      });
+      onDone();
+      Swal.fire({
+        icon: "success",
+        title: "Póliza al corriente",
+        text: `La póliza ${poliza.constancia || poliza.numero_poliza} fue actualizada a VIGENTE.`,
+        confirmButtonColor: "#13193a",
+        timer: 4000,
+        timerProgressBar: true,
+      });
+    } catch (e) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudo actualizar: " + e.message,
+        confirmButtonColor: "#13193a",
+      });
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const inpCls =
+    "w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.55)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
+            <RefreshCcw className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-sm font-bold text-[#13193a]">Poner al corriente</h2>
+            <p className="text-xs text-gray-400 mt-0.5 font-mono">
+              {poliza.constancia || poliza.numero_poliza} · {poliza.clientes?.nombre}{" "}
+              {poliza.clientes?.apellido}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          {cargando ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
+            </div>
+          ) : cuotas.length === 0 ? (
+            <p className="text-sm text-center text-gray-400 py-6">
+              No hay cuotas pendientes de pago.
+            </p>
+          ) : (
+            <>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs text-emerald-800 font-medium">
+                Ingresa la fecha en que se recibió cada pago. Al guardar, la póliza
+                cambiará a VIGENTE.
+              </div>
+              {cuotas.map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-gray-50 rounded-xl border border-gray-100 p-4 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-[#13193a]">
+                      Cuota {c.num_cuota}
+                    </p>
+                    <p className="text-xs font-semibold text-emerald-700">
+                      ${Number(c.monto).toFixed(2)}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    Vencimiento: {fmtFecha(c.fecha_vencimiento)}
+                  </p>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">
+                      Fecha de pago recibido <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={fechas[c.id] ?? ""}
+                      onChange={(e) =>
+                        setFechas((f) => ({ ...f, [c.id]: e.target.value }))
+                      }
+                      className={inpCls}
+                    />
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!cargando && (
+          <div className="flex gap-3 px-6 pb-6">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleGuardar}
+              disabled={!valido || procesando}
+              className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-40 transition-all shadow-lg shadow-emerald-600/15 flex items-center justify-center gap-2"
+            >
+              {procesando ? (
+                <>
+                  <Loader2 className="animate-spin w-4 h-4" />
+                  Guardando…
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  Guardar pagos
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ──────────────────────────────────────────
 export default function AdminPolizas() {
   const [polizas, setPolizas] = useState([]);
@@ -1841,6 +2032,18 @@ export default function AdminPolizas() {
                               >
                                 Devengar
                               </button>
+                              {p.estatus === "VENCIDA" &&
+                                p.fecha_fin >= new Date().toISOString().split("T")[0] && (
+                                  <button
+                                    onClick={() => {
+                                      setPolSel(p);
+                                      setModal("corriente");
+                                    }}
+                                    className="px-1.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold hover:bg-emerald-100 transition-colors whitespace-nowrap"
+                                  >
+                                    Al corriente
+                                  </button>
+                                )}
                             </>
                           )}
                         </div>
@@ -1884,6 +2087,16 @@ export default function AdminPolizas() {
       )}
       {modal === "devengar" && polSel && (
         <ModalCancelarProrrata
+          poliza={polSel}
+          onClose={cerrarModal}
+          onDone={() => {
+            cerrarModal();
+            cargar();
+          }}
+        />
+      )}
+      {modal === "corriente" && polSel && (
+        <ModalPonerAlCorriente
           poliza={polSel}
           onClose={cerrarModal}
           onDone={() => {

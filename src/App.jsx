@@ -210,7 +210,7 @@ function PagosRoute({ rolNombre, usuario }) {
   switch (rolNombre) {
     case "OPERADOR":       return <OperadorPagos usuario={usuario} />;
     case "ANALISTA":       return <AnalistaPagos usuario={usuario} />;
-    case "ADMINISTRACION": return <AnalistaPagos usuario={usuario} />;
+    case "ADMINISTRACION": return <AdminPagos usuario={usuario} />;
     default:               return <PaginaEnConstruccion titulo="Pagos" />;
   }
 }
