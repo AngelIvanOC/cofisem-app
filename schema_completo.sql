@@ -389,7 +389,7 @@ CREATE TABLE public.siniestro_evidencias (
   siniestro_id integer NOT NULL,
   numero_siniestro text NOT NULL,
   participante text NOT NULL DEFAULT 'NA'::text,
-  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['llegada'::text, 'vehiculo'::text, 'danos'::text, 'documentos'::text, 'licencias'::text, 'fotos_siniestro'::text])),
+  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['llegada'::text, 'siniestro'::text, 'vehiculo'::text, 'documentacion'::text, 'danos'::text, 'fotos_siniestro'::text, 'documentos'::text, 'licencias'::text])),
   storage_path text NOT NULL,
   nombre_original text,
   tamanio_bytes integer,
