@@ -487,19 +487,9 @@ export async function emitirPoliza({
     .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA'])
     .lte('id', newId);
 
-  // Contar versiones del mismo vehículo
-  let vehiculoSeq = 1;
-  if (serie) {
-    const { count } = await supabase
-      .from('polizas')
-      .select('id', { count: 'exact', head: true })
-      .eq('num_serie', serie.toUpperCase())
-      .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA'])
-      .lte('id', newId);
-    vehiculoSeq = count ?? 1;
-  }
-
-  const constancia = generarConstancia(ahora, globalSeq ?? 1, vehiculoSeq, oficinaId);
+  // Toda emisión nueva es siempre la primera versión (-01) de ese número de póliza.
+  // El incremento del sufijo solo ocurre al renovar (ver renovarPoliza).
+  const constancia = generarConstancia(ahora, globalSeq ?? 1, 1, oficinaId);
 
   const { data: final, error: e2 } = await supabase
     .from('polizas')
