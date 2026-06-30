@@ -33,6 +33,17 @@ const STATUS_CLS = {
 };
 
 // ── Datos mock ────────────────────────────────────────────────
+const ACUERDO_VACIO = {
+  registrado: false,
+  modalidad: null,   // "taller" | "directo"
+  monto: "",
+  cotizacion: null,  // { nombre, tipo: "pdf"|"excel" }
+  contraparte: null, // "asegurado" | "afectado"  (solo directo)
+  canal: null,       // "whatsapp" | "llamada" | "presencial"
+  notas: "",
+  fechaRegistro: null,
+};
+
 const SINIESTROS_MOCK = [
   {
     folio: "SN-10234", fecha: "17/03/2026", hora: "08:15",
@@ -55,6 +66,16 @@ const SINIESTROS_MOCK = [
       { evento:"Captura de datos iniciada",  fecha:"17/03/2026 09:10", actor:"Félix Hernández" },
     ],
     documentos: ["Póliza", "Fotos daños", "Licencias", "No. serie"],
+    acuerdo: {
+      registrado: true,
+      modalidad: "taller",
+      monto: "12500",
+      cotizacion: { nombre: "cotizacion_taller_norte.pdf", tipo: "pdf" },
+      contraparte: null,
+      canal: null,
+      notas: "Taller El Norte confirmó reparación en 5 días hábiles.",
+      fechaRegistro: "17/03/2026 11:30",
+    },
   },
   {
     folio: "SN-10231", fecha: "17/03/2026", hora: "09:40",
@@ -73,6 +94,7 @@ const SINIESTROS_MOCK = [
       { evento:"Reporte recibido", fecha:"17/03/2026 09:40", actor:"Cabinero: Carlos P." },
     ],
     documentos: [],
+    acuerdo: { ...ACUERDO_VACIO },
   },
   {
     folio: "SN-10227", fecha: "17/03/2026", hora: "07:30",
@@ -95,6 +117,7 @@ const SINIESTROS_MOCK = [
       { evento:"Abogado asignado",          fecha:"17/03/2026 11:30", actor:"Lic. Jorge Méndez" },
     ],
     documentos: ["Póliza", "Acta MP", "Fotos zona", "No. serie"],
+    acuerdo: { ...ACUERDO_VACIO },
   },
   {
     folio: "SN-10220", fecha: "17/03/2026", hora: "10:15",
@@ -114,6 +137,7 @@ const SINIESTROS_MOCK = [
       { evento:"Reporte recibido", fecha:"17/03/2026 10:15", actor:"Cabinero: Carlos P." },
     ],
     documentos: [],
+    acuerdo: { ...ACUERDO_VACIO },
   },
   {
     folio: "SN-10215", fecha: "16/03/2026", hora: "14:20",
@@ -138,6 +162,16 @@ const SINIESTROS_MOCK = [
       { evento:"Caso cerrado",         fecha:"16/03/2026 16:30", actor:"Supervisor: Héctor D." },
     ],
     documentos: ["Póliza", "Fotos daños", "Licencias", "No. serie", "Orden de reparación"],
+    acuerdo: {
+      registrado: true,
+      modalidad: "directo",
+      monto: "8200",
+      cotizacion: null,
+      contraparte: "afectado",
+      canal: "whatsapp",
+      notas: "Acuerdo vía WhatsApp con Juan Cruz. Pago por transferencia SPEI.",
+      fechaRegistro: "16/03/2026 15:30",
+    },
   },
   {
     folio: "SN-10208", fecha: "16/03/2026", hora: "11:00",
@@ -163,18 +197,58 @@ const SINIESTROS_MOCK = [
       { evento:"Asistencia jurídica act.", fecha:"16/03/2026 14:00", actor:"Supervisor: Héctor D." },
     ],
     documentos: ["Póliza", "Fotos daños", "Licencias", "Pase médico"],
+    acuerdo: { ...ACUERDO_VACIO },
   },
 ];
 
 // ── Modal desglose de caso ────────────────────────────────────
-function ModalDesglose({ s, ajustadores, onClose, onReasignar, onCanalizar }) {
-  const [tabActivo, setTabActivo]   = useState("info");  // info | timeline | acciones
+function ModalDesglose({ s, ajustadores, onClose, onReasignar, onCanalizar, onGuardarAcuerdo }) {
+  const [tabActivo, setTabActivo]   = useState("info");  // info | timeline | acciones | acuerdo
   const [modoCanaliz, setModoCanaliz] = useState(false);
   const [tipoCanaliz, setTipoCanaliz] = useState("");
   const [abogado, setAbogado]       = useState("");
   const [modoReasig, setModoReasig] = useState(false);
   const [ajSel, setAjSel]           = useState(s.ajustador?.id ?? "");
   const [procesando, setProcesando] = useState(false);
+
+  // ── Estado del formulario de acuerdo ──
+  const [acuerdo, setAcuerdo] = useState({ ...s.acuerdo });
+  const [modoEditar, setModoEditar] = useState(!s.acuerdo.registrado);
+  const [guardando, setGuardando]   = useState(false);
+  const [archivoNombre, setArchivoNombre] = useState(s.acuerdo.cotizacion?.nombre ?? "");
+
+  const actualizarAcuerdo = (campo, val) =>
+    setAcuerdo(prev => ({ ...prev, [campo]: val }));
+
+  const handleArchivo = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const tipo = file.name.endsWith(".pdf") ? "pdf" : "excel";
+    setArchivoNombre(file.name);
+    actualizarAcuerdo("cotizacion", { nombre: file.name, tipo });
+  };
+
+  const quitarArchivo = () => {
+    setArchivoNombre("");
+    actualizarAcuerdo("cotizacion", null);
+  };
+
+  const guardarAcuerdo = () => {
+    setGuardando(true);
+    const now = new Date();
+    const fecha = `${now.getDate().toString().padStart(2,"0")}/${(now.getMonth()+1).toString().padStart(2,"0")}/${now.getFullYear()} ${now.getHours().toString().padStart(2,"0")}:${now.getMinutes().toString().padStart(2,"0")}`;
+    const nuevo = { ...acuerdo, registrado: true, fechaRegistro: fecha };
+    setTimeout(() => {
+      onGuardarAcuerdo(s.folio, nuevo);
+      setAcuerdo(nuevo);
+      setModoEditar(false);
+      setGuardando(false);
+    }, 600);
+  };
+
+  const puedeGuardar = acuerdo.modalidad &&
+    acuerdo.monto !== "" &&
+    (acuerdo.modalidad === "taller" || (acuerdo.contraparte && acuerdo.canal));
 
   const confirmarReasig = () => {
     setProcesando(true);
@@ -190,6 +264,7 @@ function ModalDesglose({ s, ajustadores, onClose, onReasignar, onCanalizar }) {
     { k:"info",      l:"Información" },
     { k:"timeline",  l:"Línea de tiempo" },
     { k:"acciones",  l:"Acciones" },
+    { k:"acuerdo",   l:"Acuerdo monetario", badge: s.acuerdo.registrado },
   ];
 
   return (
@@ -226,12 +301,17 @@ function ModalDesglose({ s, ajustadores, onClose, onReasignar, onCanalizar }) {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100 px-2 shrink-0">
+        <div className="flex border-b border-gray-100 px-2 shrink-0 overflow-x-auto">
           {TABS.map(t => (
             <button key={t.k} onClick={() => setTabActivo(t.k)}
-              className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all ${
+              className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 whitespace-nowrap transition-all ${
                 tabActivo === t.k ? "border-[#13193a] text-[#13193a]" : "border-transparent text-gray-400 hover:text-gray-600"
-              }`}>{t.l}</button>
+              }`}>
+              {t.l}
+              {t.badge && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"/>
+              )}
+            </button>
           ))}
         </div>
 
@@ -318,6 +398,51 @@ function ModalDesglose({ s, ajustadores, onClose, onReasignar, onCanalizar }) {
                   }
                 </div>
               </div>
+
+              {/* Resumen acuerdo monetario */}
+              {s.acuerdo.registrado ? (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                      <p className="text-sm font-bold text-emerald-800">Acuerdo monetario registrado</p>
+                    </div>
+                    <button onClick={() => setTabActivo("acuerdo")}
+                      className="text-[11px] font-bold text-emerald-700 hover:underline">Ver detalle</button>
+                  </div>
+                  <div className="flex flex-wrap gap-4">
+                    <div>
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Modalidad</p>
+                      <p className="text-xs font-semibold text-emerald-800 mt-0.5">{s.acuerdo.modalidad === "taller" ? "Envío a taller" : "Pago directo"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Monto acordado</p>
+                      <p className="text-xs font-semibold text-emerald-800 mt-0.5">${Number(s.acuerdo.monto).toLocaleString("es-MX")}</p>
+                    </div>
+                    {s.acuerdo.cotizacion && (
+                      <div>
+                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">Cotización</p>
+                        <p className="text-xs font-semibold text-emerald-800 mt-0.5 truncate max-w-40">{s.acuerdo.cotizacion.nombre}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setTabActivo("acuerdo")}
+                  className="w-full flex items-center gap-3 p-4 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 transition-all text-left">
+                  <div className="w-8 h-8 rounded-xl bg-amber-200 flex items-center justify-center shrink-0">
+                    <svg className="w-4 h-4 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">Registrar acuerdo monetario</p>
+                    <p className="text-xs text-amber-600 mt-0.5">Pendiente — registra monto, cotización de taller o acuerdo directo</p>
+                  </div>
+                </button>
+              )}
 
               {/* Canalización jurídica */}
               {s.juridico && (
@@ -482,6 +607,240 @@ function ModalDesglose({ s, ajustadores, onClose, onReasignar, onCanalizar }) {
               )}
             </div>
           )}
+
+          {/* ── TAB: ACUERDO MONETARIO ─── */}
+          {tabActivo === "acuerdo" && (
+            <div className="space-y-5">
+
+              {/* Encabezado */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-[#13193a]">Acuerdo monetario</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Registro del trato económico negociado por el supervisor</p>
+                </div>
+                {acuerdo.registrado && !modoEditar && (
+                  <button onClick={() => setModoEditar(true)}
+                    className="text-xs font-bold text-[#13193a] border border-[#13193a]/20 px-3 py-1.5 rounded-xl hover:bg-[#13193a]/5 transition-all">
+                    Editar
+                  </button>
+                )}
+              </div>
+
+              {/* Vista de solo lectura */}
+              {acuerdo.registrado && !modoEditar && (
+                <div className="space-y-4">
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500"/>
+                      <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Acuerdo registrado · {acuerdo.fechaRegistro}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Modalidad</p>
+                        <p className="text-sm font-semibold text-[#13193a]">{acuerdo.modalidad === "taller" ? "Envío a taller" : "Pago directo"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Monto acordado</p>
+                        <p className="text-xl font-bold text-emerald-700">${Number(acuerdo.monto).toLocaleString("es-MX")}</p>
+                      </div>
+                      {acuerdo.modalidad === "directo" && acuerdo.contraparte && (
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Pago a</p>
+                          <p className="text-sm font-semibold text-[#13193a] capitalize">{acuerdo.contraparte}</p>
+                        </div>
+                      )}
+                      {acuerdo.modalidad === "directo" && acuerdo.canal && (
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Canal de acuerdo</p>
+                          <p className="text-sm font-semibold text-[#13193a] capitalize">{acuerdo.canal}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {acuerdo.cotizacion && (
+                    <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${acuerdo.cotizacion.tipo === "pdf" ? "bg-red-100" : "bg-green-100"}`}>
+                        <svg className={`w-4 h-4 ${acuerdo.cotizacion.tipo === "pdf" ? "text-red-600" : "text-green-700"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-700 truncate">{acuerdo.cotizacion.nombre}</p>
+                        <p className="text-[11px] text-gray-400 uppercase">{acuerdo.cotizacion.tipo === "pdf" ? "PDF" : "Excel"} · Cotización de taller</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {acuerdo.notas && (
+                    <div>
+                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Notas del acuerdo</p>
+                      <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-xl p-3 border border-gray-100">{acuerdo.notas}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Formulario de registro / edición */}
+              {(!acuerdo.registrado || modoEditar) && (
+                <div className="space-y-4">
+
+                  {/* Modalidad */}
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Modalidad de resolución</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { k:"taller",  icono:"M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12", label:"Envío a taller" },
+                        { k:"directo", icono:"M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z", label:"Pago directo" },
+                      ].map(op => (
+                        <button key={op.k} onClick={() => actualizarAcuerdo("modalidad", op.k)}
+                          className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
+                            acuerdo.modalidad === op.k
+                              ? "border-[#13193a] bg-[#13193a]/5"
+                              : "border-gray-200 hover:border-gray-300 bg-white"
+                          }`}>
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${acuerdo.modalidad === op.k ? "bg-[#13193a]" : "bg-gray-100"}`}>
+                            <svg className={`w-5 h-5 ${acuerdo.modalidad === op.k ? "text-white" : "text-gray-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+                              <path strokeLinecap="round" strokeLinejoin="round" d={op.icono}/>
+                            </svg>
+                          </div>
+                          <p className={`text-xs font-bold ${acuerdo.modalidad === op.k ? "text-[#13193a]" : "text-gray-500"}`}>{op.label}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── Campos de TALLER ── */}
+                  {acuerdo.modalidad === "taller" && (
+                    <div className="space-y-4 p-4 bg-blue-50 border border-blue-100 rounded-2xl">
+                      <p className="text-[11px] font-bold text-blue-700 uppercase tracking-widest">Datos del taller</p>
+
+                      {/* Subir cotización */}
+                      <div>
+                        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">Cotización del taller <span className="normal-case font-normal text-gray-400">(PDF o Excel)</span></p>
+                        {archivoNombre ? (
+                          <div className="flex items-center gap-3 p-3 rounded-xl border border-blue-200 bg-white">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${archivoNombre.endsWith(".pdf") ? "bg-red-100" : "bg-green-100"}`}>
+                              <svg className={`w-4 h-4 ${archivoNombre.endsWith(".pdf") ? "text-red-600" : "text-green-700"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+                              </svg>
+                            </div>
+                            <p className="text-xs font-semibold text-gray-700 flex-1 truncate">{archivoNombre}</p>
+                            <button onClick={quitarArchivo} className="text-gray-300 hover:text-red-500 transition-colors shrink-0">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-blue-200 bg-white hover:border-blue-400 cursor-pointer transition-all">
+                            <svg className="w-5 h-5 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+                            </svg>
+                            <div>
+                              <p className="text-xs font-semibold text-blue-700">Subir cotización</p>
+                              <p className="text-[11px] text-blue-400">PDF o Excel · máx. 10 MB</p>
+                            </div>
+                            <input type="file" accept=".pdf,.xlsx,.xls" onChange={handleArchivo} className="hidden"/>
+                          </label>
+                        )}
+                      </div>
+
+                      {/* Monto */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Monto acordado con el taller</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">$</span>
+                          <input type="number" min="0" value={acuerdo.monto}
+                            onChange={e => actualizarAcuerdo("monto", e.target.value)}
+                            placeholder="0.00"
+                            className="w-full pl-7 pr-4 py-2.5 rounded-xl border border-blue-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400"/>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Campos de PAGO DIRECTO ── */}
+                  {acuerdo.modalidad === "directo" && (
+                    <div className="space-y-4 p-4 bg-amber-50 border border-amber-100 rounded-2xl">
+                      <p className="text-[11px] font-bold text-amber-700 uppercase tracking-widest">Datos del acuerdo directo</p>
+
+                      {/* A quién se paga */}
+                      <div>
+                        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">Pago a</p>
+                        <div className="flex gap-2">
+                          {["asegurado","afectado"].map(op => (
+                            <button key={op} onClick={() => actualizarAcuerdo("contraparte", op)}
+                              className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 capitalize transition-all ${
+                                acuerdo.contraparte === op
+                                  ? "border-amber-500 bg-amber-500 text-white"
+                                  : "border-amber-200 bg-white text-amber-700 hover:border-amber-400"
+                              }`}>{op}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Canal */}
+                      <div>
+                        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">Canal de comunicación</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {[
+                            { k:"whatsapp", l:"WhatsApp" },
+                            { k:"llamada",  l:"Llamada" },
+                            { k:"presencial", l:"Presencial" },
+                          ].map(op => (
+                            <button key={op.k} onClick={() => actualizarAcuerdo("canal", op.k)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border-2 transition-all ${
+                                acuerdo.canal === op.k
+                                  ? "border-amber-500 bg-amber-500 text-white"
+                                  : "border-amber-200 bg-white text-amber-700 hover:border-amber-400"
+                              }`}>{op.l}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Monto */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Monto acordado</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-400">$</span>
+                          <input type="number" min="0" value={acuerdo.monto}
+                            onChange={e => actualizarAcuerdo("monto", e.target.value)}
+                            placeholder="0.00"
+                            className="w-full pl-7 pr-4 py-2.5 rounded-xl border border-amber-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400"/>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notas */}
+                  {acuerdo.modalidad && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                        Notas del acuerdo <span className="normal-case font-normal">(opcional)</span>
+                      </label>
+                      <textarea rows={3} value={acuerdo.notas}
+                        onChange={e => actualizarAcuerdo("notas", e.target.value)}
+                        placeholder="Detalles del trato, condiciones, plazos de pago, observaciones..."
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] resize-none"/>
+                    </div>
+                  )}
+
+                  {/* Botones */}
+                  <div className="flex gap-3 pt-1">
+                    {acuerdo.registrado && (
+                      <button onClick={() => { setAcuerdo({ ...s.acuerdo }); setModoEditar(false); }}
+                        className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-all">
+                        Cancelar
+                      </button>
+                    )}
+                    <button onClick={guardarAcuerdo} disabled={!puedeGuardar || guardando}
+                      className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all">
+                      {guardando ? "Guardando..." : acuerdo.registrado ? "Actualizar acuerdo" : "Registrar acuerdo"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -512,6 +871,12 @@ export default function SupervisorSiniestros() {
       : s
     ));
     setSeleccionado(prev => prev ? { ...prev, juridico: true, tipoJuridico: tipoCanaliz, abogado: abogado || null, estatus: "Jurídico" } : null);
+  };
+
+  // Guardar acuerdo monetario
+  const onGuardarAcuerdo = (folio, nuevoAcuerdo) => {
+    setSiniestros(ss => ss.map(s => s.folio === folio ? { ...s, acuerdo: nuevoAcuerdo } : s));
+    setSeleccionado(prev => prev ? { ...prev, acuerdo: nuevoAcuerdo } : null);
   };
 
   // Filtros por tab
@@ -545,8 +910,8 @@ export default function SupervisorSiniestros() {
         {[
           { l:"Total activos",      v:siniestros.filter(s=>!["Completado","Cancelado"].includes(s.estatus)).length, a:"blue"   },
           { l:"Sin asignar",        v:sinAsignarCount,                                                              a:"red"    },
+          { l:"Con acuerdo",        v:siniestros.filter(s=>s.acuerdo?.registrado).length,                          a:"emerald"},
           { l:"Jurídicos",          v:juridicosCount,                                                               a:"purple" },
-          { l:"Cerrados hoy",       v:siniestros.filter(s=>s.estatus==="Completado").length,                        a:"emerald"},
         ].map(m => {
           const c = { blue:"bg-blue-50 border-blue-200 text-blue-700", red:"bg-red-50 border-red-200 text-red-600", purple:"bg-purple-50 border-purple-200 text-purple-700", emerald:"bg-emerald-50 border-emerald-200 text-emerald-700" };
           return (
@@ -630,12 +995,17 @@ export default function SupervisorSiniestros() {
                     }
                   </td>
                   <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className={`inline-flex text-[11px] font-semibold px-2.5 py-1 rounded-full border ${STATUS_CLS[s.estatus] ?? STATUS_CLS["Sin asignar"]}`}>{s.estatus}</span>
                       {s.juridico && (
                         <svg className="w-3.5 h-3.5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" title={s.tipoJuridico}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.971z"/>
                         </svg>
+                      )}
+                      {s.acuerdo?.registrado && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200" title={`Acuerdo: $${Number(s.acuerdo.monto).toLocaleString("es-MX")}`}>
+                          $
+                        </span>
                       )}
                     </div>
                   </td>
@@ -672,6 +1042,7 @@ export default function SupervisorSiniestros() {
           onClose={() => setSeleccionado(null)}
           onReasignar={onReasignar}
           onCanalizar={onCanalizar}
+          onGuardarAcuerdo={onGuardarAcuerdo}
         />
       )}
     </div>
