@@ -108,8 +108,8 @@ export default function Polizas({ usuario }) {
       title: "Renovar póliza",
       html: `¿Deseas iniciar la renovación de <b>${constanciaLabel}</b>?<br/><br/>
              Se creará <b>${nuevaConstancia}</b>. Podrás revisar y ajustar<br/>
-             los datos antes de confirmar. La póliza anterior se cancelará<br/>
-             al momento de emitir la renovación.`,
+             los datos antes de confirmar. La póliza anterior continuará<br/>
+             vigente hasta su fecha de vencimiento.`,
       icon: "question",
       showCancelButton: true,
       confirmButtonColor: "#13193a",
