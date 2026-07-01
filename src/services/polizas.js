@@ -442,9 +442,16 @@ export async function emitirPoliza({
         .select(SELECT_FULL).single();
       if (ef) throw ef;
       await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
-      // Si es renovación: cancelar la póliza anterior
+      // Si es renovación: solo marcar la póliza anterior como VENCIDA si ya expiró.
+      // Si aún está dentro de su vigencia (renovación anticipada), no se toca — expirará
+      // naturalmente en su fecha_fin y calcularEstatus la mostrará como VENCIDA.
       if (esRenovacion && renovacionDeId) {
-        await supabase.from('polizas').update({ estatus: 'CANCELADA' }).eq('id', renovacionDeId);
+        const hoy = new Date().toISOString().split('T')[0];
+        const { data: origAnterior } = await supabase
+          .from('polizas').select('fecha_fin').eq('id', renovacionDeId).single();
+        if (origAnterior && origAnterior.fecha_fin <= hoy) {
+          await supabase.from('polizas').update({ estatus: 'VENCIDA' }).eq('id', renovacionDeId);
+        }
       }
       return final;
     }
