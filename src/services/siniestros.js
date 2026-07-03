@@ -30,7 +30,7 @@ export function detectarTipoBusqueda(v) {
 // ── SELECT completo para cargar una póliza con todos sus datos ─
 const SEL_POLIZA = `
   id, constancia, numero_poliza, estatus, fecha_inicio, fecha_fin,
-  cliente_id, placas, num_serie, num_motor, anio, capacidad,
+  cliente_id, placas, num_serie, num_motor, anio, capacidad, notas,
   clientes(nombre, apellido),
   oficinas(nombre),
   vendedores(nombre, apellido),
@@ -70,7 +70,7 @@ function mapPolizaACard(p) {
 
   const veh = p.vehiculos_amis;
   const descripcion =
-    veh?.dl || [veh?.marca, veh?.tipo, veh?.dc].filter(Boolean).join(" ") || "—";
+    veh?.dl || [veh?.marca, veh?.tipo, veh?.dc].filter(Boolean).join(" ") || p.notas || "—";
 
   const coberturas = [...(p.coberturas?.cobertura_rubros ?? [])]
     .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
@@ -244,9 +244,9 @@ export async function fetchSiniestros() {
       arribo_fecha, arribo_lat, arribo_lng, created_at,
       municipio, estado, colonia,
       polizas(
-        id, constancia, numero_poliza, placas, anio,
+        id, constancia, numero_poliza, placas, anio, notas,
         clientes(nombre, apellido, telefono),
-        vehiculos_amis(marca, tipo),
+        vehiculos_amis(marca, tipo, dl),
         coberturas(nombre)
       ),
       ajustador:usuarios!siniestros_ajustador_id_fkey(nombre, apellido)
@@ -259,7 +259,11 @@ export async function fetchSiniestros() {
     const veh = p.vehiculos_amis;
     const cl  = p.clientes ?? {};
     const cliente  = [cl.nombre, cl.apellido].filter(Boolean).join(" ") || "—";
-    const vehiculo = [veh?.marca, veh?.tipo, p.anio].filter(Boolean).join(" ") || p.placas || "—";
+    const vehiculo = veh?.dl
+      || (veh ? [veh.marca, veh.tipo, p.anio].filter(Boolean).join(" ") : null)
+      || p.notas
+      || p.placas
+      || "—";
     const ajNombre = s.ajustador
       ? [s.ajustador.nombre, s.ajustador.apellido].filter(Boolean).join(" ")
       : null;

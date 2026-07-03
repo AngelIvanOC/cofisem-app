@@ -1,153 +1,195 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, Clock, UserCheck, User, ArrowRight, Plus } from "lucide-react";
+import { PDFViewer } from "@react-pdf/renderer";
+import { CheckCircle2, Clock, UserCheck, Car, ArrowRight, Plus, FileText, X, Loader2 } from "lucide-react";
+import PolizaPDF from "../../../components/pdf/PolizaPDF";
+import { fetchPolizaById, buildPolizaPDF } from "../../../services/polizas";
+import { fetchConfigCostos } from "../../../services/configuracion";
+import { generateQR } from "../../../utils/generateQR";
 
-export default function ReporteExito({ folio, ajustador, horaInicio, horaFin, minutos, constancia, vendedor }) {
+export default function ReporteExito({ folio, ajustador, horaInicio, horaFin, minutos, constancia, vendedor, polizaId, usuario, vehiculoDesc, placas }) {
   const navigate = useNavigate();
 
+  const [pdfData,    setPdfData]    = useState(null);
+  const [loadingPDF, setLoadingPDF] = useState(false);
+  const [showViewer, setShowViewer] = useState(false);
+
+  const handleVerPoliza = async () => {
+    if (pdfData) { setShowViewer(true); return; }
+    setLoadingPDF(true);
+    try {
+      const [full, config] = await Promise.all([fetchPolizaById(polizaId), fetchConfigCostos()]);
+      const base      = buildPolizaPDF(full, usuario?.oficinas, config);
+      const qrDataUrl = await generateQR(`${window.location.origin}/gaman/verificar/${full.constancia}`);
+      setPdfData({ ...base, qrDataUrl });
+      setShowViewer(true);
+    } catch (e) {
+      alert("No se pudo cargar la póliza: " + e.message);
+    } finally {
+      setLoadingPDF(false);
+    }
+  };
+
   return (
-    <div className="min-h-[80vh] flex items-center justify-center py-10">
-      <div className="w-full max-w-md">
+    <>
+      <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
+        <div className="w-full max-w-md space-y-2.5">
 
-        {/* Encabezado de éxito */}
-        <div className="bg-[#13193a] rounded-2xl px-8 py-10 text-center mb-4 relative overflow-hidden">
-          {/* Fondo decorativo */}
-          <div className="absolute inset-0 opacity-[0.04]"
-            style={{ backgroundImage: "radial-gradient(circle at 70% 20%, white 0%, transparent 60%)" }} />
-
-          <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-emerald-400/10 border-2 border-emerald-400/25 flex items-center justify-center mx-auto mb-5">
-              <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+          {/* ── Header horizontal — ícono + texto · folio ── */}
+          <div className="bg-[#13193a] rounded-2xl px-5 py-5 flex items-center gap-4 relative overflow-hidden">
+            <div className="absolute inset-0 opacity-[0.04]"
+              style={{ backgroundImage: "radial-gradient(circle at 80% 20%, white 0%, transparent 55%)" }} />
+            {/* Izquierda: check + labels */}
+            <div className="relative flex items-center gap-3 flex-1 min-w-0">
+              <div className="w-11 h-11 rounded-full bg-emerald-400/10 border-2 border-emerald-400/25 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-[0.15em] leading-none">
+                  Reporte generado
+                </p>
+                <p className="text-white/50 text-[10px] uppercase tracking-widest mt-0.5">exitosamente</p>
+                {constancia && (
+                  <p className="text-white/35 text-[10px] font-mono mt-1.5 truncate">
+                    Póliza <span className="text-white/60 font-semibold">{constancia}</span>
+                  </p>
+                )}
+              </div>
             </div>
-            <p className="text-emerald-400 text-[11px] font-bold uppercase tracking-[0.2em] mb-3">
-              Reporte generado exitosamente
-            </p>
-            <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Número de reporte</p>
-            <p className="text-white font-black font-mono text-6xl tracking-tight leading-none">
-              {folio}
-            </p>
-            {constancia && (
-              <p className="text-white/40 text-xs font-mono mt-3">
-                Póliza{" "}
-                <span className="text-white/75 font-semibold">{constancia}</span>
-              </p>
-            )}
+            {/* Derecha: número de reporte */}
+            <div className="relative text-right shrink-0">
+              <p className="text-white/30 text-[9px] uppercase tracking-widest mb-0.5">Nro. Reporte</p>
+              <p className="text-white font-black font-mono text-3xl tracking-tight leading-none">{folio}</p>
+            </div>
           </div>
-        </div>
 
-        {/* Ajustador asignado */}
-        {ajustador ? (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-4">
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-[#13193a] flex items-center justify-center shrink-0">
-                <UserCheck className="w-5 h-5 text-white" />
+          {/* ── Vehículo ── */}
+          {(vehiculoDesc || placas) && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
+                <Car className="w-4 h-4 text-gray-500" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
+                {vehiculoDesc && (
+                  <p className="text-xs font-bold text-[#13193a] leading-tight truncate">{vehiculoDesc}</p>
+                )}
+                {placas && placas !== "—" && (
+                  <p className="text-[10px] font-mono text-gray-400 mt-0.5">Placas <span className="font-semibold text-gray-600">{placas}</span></p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Ajustador ── */}
+          {ajustador ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3.5 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#13193a] flex items-center justify-center shrink-0">
+                <UserCheck className="w-4 h-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-0.5">
                   Ajustador asignado
                 </p>
                 <p className="text-[#13193a] font-bold text-sm truncate">{ajustador}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Asignado para folio{" "}
-                  <span className="font-mono font-semibold text-gray-600">{folio}</span>
-                </p>
+                {vendedor && (
+                  <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                    <span className="text-gray-300">Vendedor:</span> {vendedor}
+                  </p>
+                )}
               </div>
-              <span className="inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+              <span className="inline-flex items-center text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
                 Asignado
               </span>
             </div>
-            {vendedor && (
-              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
-                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                  <User className="w-3.5 h-3.5 text-gray-500" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
-                    Vendedor
-                  </p>
-                  <p className="text-[#13193a] font-semibold text-sm truncate">{vendedor}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-4 space-y-3">
-            <div className="flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-2.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
               <p className="text-xs text-amber-700 font-semibold">
-                Sin ajustador asignado — se puede asignar desde la lista de siniestros
+                Sin ajustador — se puede asignar desde la lista de siniestros
               </p>
             </div>
-            {vendedor && (
-              <div className="pt-3 border-t border-gray-100 flex items-center gap-3">
-                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                  <User className="w-3.5 h-3.5 text-gray-500" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
-                    Vendedor
-                  </p>
-                  <p className="text-[#13193a] font-semibold text-sm truncate">{vendedor}</p>
-                </div>
+          )}
+
+          {/* ── Tiempos ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3.5">
+            <div className="flex items-center gap-1.5 mb-2.5">
+              <Clock className="w-3 h-3 text-gray-400" />
+              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Tiempos del reporte</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider mb-1.5">Hora Inicio</p>
+                <p className="text-[#13193a] font-bold font-mono text-xs leading-none">{horaInicio}</p>
               </div>
-            )}
+              <div className="text-center p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider mb-1.5">Hora Final</p>
+                <p className="text-[#13193a] font-bold font-mono text-xs leading-none">{horaFin}</p>
+              </div>
+              <div className="text-center p-2.5 bg-emerald-50 rounded-xl border border-emerald-100">
+                <p className="text-[8px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Tiempo</p>
+                <p className="text-emerald-700 font-black text-lg leading-none">{minutos}</p>
+                <p className="text-emerald-500 text-[9px] font-bold">min</p>
+              </div>
+            </div>
           </div>
-        )}
 
-        {/* Tiempos */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Clock className="w-3.5 h-3.5 text-gray-400" />
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              Tiempos del reporte
-            </p>
+          {/* ── Botón Ver Póliza ── */}
+          {polizaId && (
+            <button
+              onClick={handleVerPoliza}
+              disabled={loadingPDF}
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-[#13193a]/20 text-[#13193a] text-xs font-semibold hover:bg-[#13193a]/5 transition-all disabled:opacity-50"
+            >
+              {loadingPDF
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Cargando póliza...</>
+                : <><FileText className="w-3.5 h-3.5" />Ver póliza</>}
+            </button>
+          )}
+
+          {/* ── Acciones principales ── */}
+          <div className="flex gap-2.5">
+            <button
+              onClick={() => navigate("/gaman/siniestros/nuevo", { replace: true })}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Nuevo reporte
+            </button>
+            <button
+              onClick={() => navigate("/gaman/siniestros")}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all"
+            >
+              Ver siniestros
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="text-center p-3 bg-gray-50 rounded-xl border border-gray-100">
-              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-2">
-                Hora Inicio
-              </p>
-              <p className="text-[#13193a] font-bold font-mono text-sm leading-none">
-                {horaInicio}
-              </p>
-            </div>
-            <div className="text-center p-3 bg-gray-50 rounded-xl border border-gray-100">
-              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-2">
-                Hora Final
-              </p>
-              <p className="text-[#13193a] font-bold font-mono text-sm leading-none">
-                {horaFin}
-              </p>
-            </div>
-            <div className="text-center p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-              <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-wider mb-1">
-                Tiempo
-              </p>
-              <p className="text-emerald-700 font-black text-2xl leading-none">{minutos}</p>
-              <p className="text-emerald-500 text-[10px] font-bold mt-0.5">min</p>
-            </div>
-          </div>
         </div>
-
-        {/* Acciones */}
-        <div className="flex gap-3">
-          <button
-            onClick={() => navigate("/gaman/siniestros/nuevo", { replace: true })}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo reporte
-          </button>
-          <button
-            onClick={() => navigate("/gaman/siniestros")}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all"
-          >
-            Ver siniestros
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-
       </div>
-    </div>
+
+      {/* ── Modal visor PDF ── */}
+      {showViewer && pdfData && (
+        <div className="fixed inset-0 z-50 bg-[#13193a]/90 flex flex-col">
+          <div className="flex items-center justify-between px-5 py-3 shrink-0 border-b border-white/10">
+            <div>
+              <p className="text-white font-bold text-sm">Póliza — {constancia}</p>
+              <p className="text-white/40 text-xs mt-0.5">Reporte #{folio}</p>
+            </div>
+            <button
+              onClick={() => setShowViewer(false)}
+              className="flex items-center gap-1.5 text-white/50 hover:text-white text-xs font-semibold transition-colors px-3 py-1.5 rounded-lg hover:bg-white/10"
+            >
+              <X className="w-4 h-4" />
+              Cerrar
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <PDFViewer width="100%" height="100%" style={{ border: "none" }}>
+              <PolizaPDF poliza={pdfData} />
+            </PDFViewer>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

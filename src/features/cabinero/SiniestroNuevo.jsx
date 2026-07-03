@@ -91,13 +91,16 @@ export default function SiniestroNuevo({ usuario }) {
       });
 
       setResultado({
-        folio:      form.nroReporte,
-        ajustador:  form.ajustador || null,
-        horaInicio: fmtTime(horaInicio),
-        horaFin:    fmtTime(horaFin),
+        folio:        form.nroReporte,
+        ajustador:    form.ajustador || null,
+        horaInicio:   fmtTime(horaInicio),
+        horaFin:      fmtTime(horaFin),
         minutos,
-        constancia: poliza.numero,
-        vendedor:   poliza.vendedor || null,
+        constancia:   poliza.numero,
+        vendedor:     poliza.vendedor || null,
+        polizaId:     poliza.id,
+        vehiculoDesc: poliza.vehiculo?.descripcion || null,
+        placas:       poliza.vehiculo?.placas || null,
       });
       setPaso("exito");
     } catch (e) {
@@ -119,7 +122,7 @@ export default function SiniestroNuevo({ usuario }) {
   if (paso === "exito" && resultado) {
     return (
       <div className="p-3 sm:p-6 min-h-full bg-gray-50">
-        <ReporteExito {...resultado} />
+        <ReporteExito {...resultado} usuario={usuario} />
       </div>
     );
   }
