@@ -154,6 +154,9 @@ export default function VerificarPoliza() {
   const cfg = poliza
     ? (ESTATUS_CONFIG[poliza.estatus] ?? ESTATUS_CONFIG.CANCELADA)
     : null;
+  const esPorVencer = poliza?.estatus === 'POR VENCER';
+  const displayCfg  = esPorVencer ? ESTATUS_CONFIG.VIGENTE : cfg;
+  const displayLabel = esPorVencer ? 'VIGENTE' : poliza?.estatus;
   const nombreBase = (poliza?.cliente_nombre || "").toUpperCase();
   const nombreConc = poliza?.concesionario_nombre
     ? poliza.concesionario_nombre.toUpperCase()
@@ -234,11 +237,17 @@ export default function VerificarPoliza() {
               {/* Estatus + forma de pago */}
               <div className="flex flex-col items-center gap-2 mb-5">
                 <div
-                  className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-full border-2 font-black text-xl tracking-widest ${cfg.bg} ${cfg.border} ${cfg.color}`}
+                  className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-full border-2 font-black text-xl tracking-widest ${displayCfg.bg} ${displayCfg.border} ${displayCfg.color}`}
                 >
-                  <StatusIcon type={cfg.icon} />
-                  {poliza.estatus}
+                  <StatusIcon type={displayCfg.icon} />
+                  {displayLabel}
                 </div>
+                {esPorVencer && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 tracking-widest uppercase">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    POR VENCER
+                  </span>
+                )}
                 <span className="text-[11px] font-bold text-gray-400 tracking-widest uppercase">
                   ** {formaPago} **
                 </span>
