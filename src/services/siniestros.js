@@ -291,13 +291,207 @@ export async function fetchSiniestros() {
   });
 }
 
-// ── Cerrar siniestro (paso final del ajustador) ───────────────
-export async function cerrarSiniestro(siniestroId) {
+// ── Guardar Paso 2 del ajustador (datos generales del siniestro) ─
+// Nota: "tipo" es la clasificación propia del ajustador (catálogo TIPOS_SINIESTRO)
+// y se guarda aparte de tipo_siniestro/circunstancia, que son la causa ya
+// capturada por el cabinero (catálogo CAUSAS/CIRCUNSTANCIAS) y no se debe pisar.
+export async function actualizarDatosSiniestro(siniestroId, { tipo, fechaAccidente, horaAccidente, lugar, descripcion, versionAsegurado }) {
   const { error } = await supabase
     .from("siniestros")
-    .update({ estatus: "Cerrado" })
+    .update({
+      clasificacion_siniestro: tipo             || null,
+      fecha_siniestro:         fechaAccidente   || null,
+      hora_siniestro:          horaAccidente    || null,
+      ubicacion:               lugar            || null,
+      descripcion:             descripcion      || null,
+      version_asegurado:       versionAsegurado || null,
+    })
     .eq("id", siniestroId);
   if (error) throw error;
+}
+
+// ── Horas oficiales del proceso — nunca las escribe el ajustador ─
+// Se derivan de datos que el sistema ya registra solo (hora en que se
+// levantó el reporte, hora en que quedó registrado el caso, y hora de
+// llegada por GPS al confirmar el arribo), para que no se puedan falsear.
+export async function fetchTiemposSiniestro(siniestroId) {
+  const { data, error } = await supabase
+    .from("siniestros")
+    .select("hora_inicio_reporte, created_at, arribo_fecha")
+    .eq("id", siniestroId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// ── Formatea un timestamp ISO a "HH:MM:SS" hora local ─────────
+export function horaLocal(isoStr) {
+  if (!isoStr) return null;
+  return new Date(isoStr).toLocaleTimeString("es-MX", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  });
+}
+
+// ── Guardar Paso 3 del ajustador (terceros + lesionados) ──────
+// Reemplaza por completo lo guardado previamente para este siniestro,
+// así el ajustador puede regresar y corregir sin generar duplicados.
+export async function guardarPartesInvolucradas(siniestroId, afectadosIds, afectados) {
+  const { error: errDelT } = await supabase.from("siniestros_terceros").delete().eq("siniestro_id", siniestroId);
+  if (errDelT) throw errDelT;
+  const { error: errDelL } = await supabase.from("siniestros_lesionados").delete().eq("siniestro_id", siniestroId);
+  if (errDelL) throw errDelL;
+
+  const terceros = afectadosIds.map((id) => {
+    const d = afectados[id];
+    return {
+      siniestro_id:          siniestroId,
+      vehiculo_desc:         d.vehiculo    || null,
+      vehiculo_modelo:       d.anio        || null,
+      vehiculo_color:        d.color       || null,
+      vehiculo_placas:       d.placas      || null,
+      vehiculo_serie:        d.serie       || null,
+      // Nota: la UI aún no distingue propietario vs conductor del tercero;
+      // se usa el mismo nombre para ambos hasta que se agregue ese campo.
+      propietario_nombre:    d.nombre      || null,
+      conductor_nombre:      d.nombre      || null,
+      propietario_domicilio: d.direccion   || null,
+      propietario_telefono:  d.telefono    || null,
+      rfc:                   d.rfc         || null,
+      curp:                  d.curp        || null,
+      email:                 d.email       || null,
+      aseguradora_nombre:    d.aseguradora || null,
+      poliza_tercero:        d.polizaTercero || null,
+      declaracion:           d.declaracion || null,
+    };
+  });
+  if (terceros.length) {
+    const { error } = await supabase.from("siniestros_terceros").insert(terceros);
+    if (error) throw error;
+  }
+
+  const lesionados = afectadosIds
+    .filter((id) => afectados[id].lesiones === true)
+    .map((id) => {
+      const d = afectados[id];
+      return {
+        siniestro_id:  siniestroId,
+        participante_id: id,
+        nombre:        d.nombre   || null,
+        domicilio:     d.direccion || null,
+        telefono:      d.telefono || null,
+        edad:          d.edad ? Number(d.edad) : null,
+        descripcion:   d.descripcionLesiones || null,
+      };
+    });
+  if (lesionados.length) {
+    const { error } = await supabase.from("siniestros_lesionados").insert(lesionados);
+    if (error) throw error;
+  }
+}
+
+// ── Guardar firmas (paso 4 — al cerrar el siniestro) ──────────
+// Recibe storage paths ya subidos (ver subirFirma en services/evidencias.js).
+// Nota: "reclamante" hoy es una sola firma para todos los terceros; si el
+// siniestro tiene más de un tercero, se asigna al primero registrado.
+export async function guardarFirmas(siniestroId, { asegurado, ajustador, reclamante } = {}) {
+  const updates = {};
+  if (asegurado) updates.firma_asegurado_url = asegurado;
+  if (ajustador) updates.firma_ajustador_url = ajustador;
+  if (Object.keys(updates).length) {
+    const { error } = await supabase.from("siniestros").update(updates).eq("id", siniestroId);
+    if (error) throw error;
+  }
+
+  if (reclamante) {
+    const { data: tercero, error: errSel } = await supabase
+      .from("siniestros_terceros")
+      .select("id")
+      .eq("siniestro_id", siniestroId)
+      .order("id", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (errSel) throw errSel;
+    if (tercero) {
+      const { error: errUpd } = await supabase
+        .from("siniestros_terceros")
+        .update({ firma_reclamante_url: reclamante })
+        .eq("id", tercero.id);
+      if (errUpd) throw errUpd;
+    }
+  }
+}
+
+// ── Guardar Datos de Ajuste (sección Reverso) + croquis ───────
+// causa/circunstancia: confirmadas/corregidas por el ajustador — pisan lo
+// que puso el cabinero a propósito (decisión de negocio).
+// horaTomado/horaPasado/horaLlegada: NO vienen de un input del ajustador —
+// el componente las llena con fetchTiemposSiniestro()/horaLocal(), nunca
+// con texto libre, para que no se puedan falsear.
+export async function guardarDatosAjuste(siniestroId, datos) {
+  const { error } = await supabase
+    .from("siniestros")
+    .update({
+      tipo_siniestro:          datos.causa                  || null,
+      circunstancia:           datos.circunstancia           || null,
+      culpabilidad:            datos.culpabilidad             || null,
+      solicito_grua:           datos.solicitoGrua,
+      calificacion_siniestro:  datos.calificacionSiniestro   || null,
+      requiere_investigacion:  datos.requiereInvestigacion,
+      convenio_gxg:            datos.convenioGxg,
+      articulo_infringido:     datos.articuloInfringido      || null,
+      hora_tomado:             datos.horaTomado              || null,
+      hora_pasado:             datos.horaPasado              || null,
+      ajuste_hora_llegada:     datos.horaLlegada             || null,
+      inicio_averiguacion:     datos.inicioAveriguacion,
+      numero_averiguacion:     datos.numeroAveriguacion      || null,
+      numero_parte_pfp:        datos.numeroPartePfp          || null,
+      solicito_abogado:        datos.solicitoAbogado,
+      despacho_abogado:        datos.despachoAbogado         || null,
+      recuperacion:            datos.recuperacion            || null,
+      tipo_recuperacion:       datos.tipoRecuperacion        || null,
+      objeto_garantia_importe: datos.objetoGarantiaImporte   || null,
+      conclusiones:            datos.conclusiones            || null,
+      croquis_url:             datos.croquisUrl              || null,
+    })
+    .eq("id", siniestroId);
+  if (error) throw error;
+}
+
+// ── Guardar Encuesta de satisfacción (captura el ajustador) ───
+export async function guardarEncuesta(siniestroId, datos) {
+  const { error } = await supabase
+    .from("siniestros_encuesta")
+    .upsert({
+      siniestro_id:                  siniestroId,
+      hora_reporte:                  datos.horaReporte             || null,
+      calificacion_reporte:          datos.calificacionReporte     || null,
+      motivo_calificacion_reporte:   datos.motivoReporte           || null,
+      hora_llegada:                  datos.horaLlegada             || null,
+      calificacion_ajustador:        datos.calificacionAjustador   || null,
+      motivo_calificacion_ajustador: datos.motivoAjustador         || null,
+      hora_termino:                  datos.horaTermino             || null,
+      comentarios:                   datos.comentarios             || null,
+    }, { onConflict: "siniestro_id" });
+  if (error) throw error;
+}
+
+// ── Cerrar siniestro (paso final del ajustador) ───────────────
+// hora_termino_ajuste: se sella con la hora real del servidor/dispositivo
+// en el momento del cierre — el ajustador nunca la escribe.
+export async function cerrarSiniestro(siniestroId) {
+  const horaTermino = horaLocal(new Date().toISOString());
+
+  const { error } = await supabase
+    .from("siniestros")
+    .update({ estatus: "Cerrado", hora_termino_ajuste: horaTermino })
+    .eq("id", siniestroId);
+  if (error) throw error;
+
+  // Si ya existe la encuesta de este siniestro, se le refleja la misma hora de cierre.
+  await supabase
+    .from("siniestros_encuesta")
+    .update({ hora_termino: horaTermino })
+    .eq("siniestro_id", siniestroId);
 }
 
 // ── Asignar ajustador a un siniestro ──────────────────────────

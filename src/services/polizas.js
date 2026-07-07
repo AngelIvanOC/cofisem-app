@@ -530,13 +530,17 @@ export async function renovarPoliza(polizaId, creadoPor) {
   const siguienteSufijo = String(parseInt(match[2], 10) + 1).padStart(2, '0');
   const nuevaConstancia = `${base}-${siguienteSufijo}`;
 
-  // 3. Verificar que la nueva constancia no exista
+  // 3. Verificar que la nueva constancia no exista.
+  // Si ya existe pero está CANCELADA (p.ej. una renovación previa mal capturada
+  // y cancelada), se reutiliza ese registro en vez de bloquear la renovación.
   const { data: duplicado } = await supabase
     .from('polizas')
-    .select('id')
+    .select('id, estatus')
     .eq('constancia', nuevaConstancia)
     .maybeSingle();
-  if (duplicado) throw new Error(`La póliza ${nuevaConstancia} ya existe`);
+  if (duplicado && duplicado.estatus !== 'CANCELADA') {
+    throw new Error(`La póliza ${nuevaConstancia} ya existe`);
+  }
 
   // 4. Calcular nuevas fechas (inicio = día siguiente al vencimiento original)
   const fechaInicioNueva = (() => {
@@ -551,48 +555,56 @@ export async function renovarPoliza(polizaId, creadoPor) {
   })();
 
   // 5. Insertar nueva póliza copiando los datos del original
+  // (o actualizar el registro CANCELADO reutilizado, ya que `constancia` es UNIQUE en BD)
   const notasOrig = (() => {
     try { return JSON.parse(original.notas ?? '{}'); } catch { return {}; }
   })();
-  const { data: nueva, error: e1 } = await supabase
-    .from('polizas')
-    .insert({
-      constancia:         nuevaConstancia,
-      numero_poliza:      nuevaConstancia,
-      cliente_id:         original.cliente_id,
-      vendedor_id:        original.vendedor_id,
-      vehiculo_amis_id:   original.vehiculo_amis_id,
-      concesionario_id:   original.concesionario_id ?? null,
-      anio:               original.anio,
-      placas:             original.placas,
-      num_serie:          original.num_serie,
-      num_motor:          original.num_motor,
-      capacidad:          original.capacidad,
-      uso:                original.uso,
-      tipo_servicio:      original.tipo_servicio,
-      aseguradora:        original.aseguradora,
-      tipo_poliza:        original.tipo_poliza,
-      cobertura_id:       original.cobertura_id,
-      forma_pago:         original.forma_pago,
-      fecha_inicio:       fechaInicioNueva,
-      fecha_fin:          fechaFinNueva,
-      hora_inicio:        '12:00:00 hrs.',
-      hora_fin:           '12:00:00 hrs.',
-      en_letras:          original.en_letras,
-      cp_asegurado:       original.cp_asegurado,
-      uso_tarifario:      original.uso_tarifario,
-      conductor_habitual: original.conductor_habitual,
-      conductor_sexo:     original.conductor_sexo,
-      conductor_edad:     original.conductor_edad,
-      descuento:          0,
-      recargo:            0,
-      estatus:            'RENOVACION',
-      oficina_id:         original.oficina_id,
-      creado_por:         creadoPor || null,
-      notas:              JSON.stringify({ ...notasOrig, renovacionDeId: polizaId }),
-    })
-    .select('id')
-    .single();
+  const datosRenovacion = {
+    constancia:         nuevaConstancia,
+    numero_poliza:      nuevaConstancia,
+    cliente_id:         original.cliente_id,
+    vendedor_id:        original.vendedor_id,
+    vehiculo_amis_id:   original.vehiculo_amis_id,
+    concesionario_id:   original.concesionario_id ?? null,
+    anio:               original.anio,
+    placas:             original.placas,
+    num_serie:          original.num_serie,
+    num_motor:          original.num_motor,
+    capacidad:          original.capacidad,
+    uso:                original.uso,
+    tipo_servicio:      original.tipo_servicio,
+    aseguradora:        original.aseguradora,
+    tipo_poliza:        original.tipo_poliza,
+    cobertura_id:       original.cobertura_id,
+    forma_pago:         original.forma_pago,
+    fecha_inicio:       fechaInicioNueva,
+    fecha_fin:          fechaFinNueva,
+    hora_inicio:        '12:00:00 hrs.',
+    hora_fin:           '12:00:00 hrs.',
+    en_letras:          original.en_letras,
+    cp_asegurado:       original.cp_asegurado,
+    uso_tarifario:      original.uso_tarifario,
+    conductor_habitual: original.conductor_habitual,
+    conductor_sexo:     original.conductor_sexo,
+    conductor_edad:     original.conductor_edad,
+    descuento:          0,
+    recargo:            0,
+    estatus:            'RENOVACION',
+    oficina_id:         original.oficina_id,
+    creado_por:         creadoPor || null,
+    notas:              JSON.stringify({ ...notasOrig, renovacionDeId: polizaId }),
+  };
+
+  let nueva, e1;
+  if (duplicado) {
+    // Limpiar cuotas de la captura anterior (cancelada) antes de reactivar el registro
+    await supabase.from('pagos').delete().eq('poliza_id', duplicado.id);
+    ({ data: nueva, error: e1 } = await supabase
+      .from('polizas').update(datosRenovacion).eq('id', duplicado.id).select('id').single());
+  } else {
+    ({ data: nueva, error: e1 } = await supabase
+      .from('polizas').insert(datosRenovacion).select('id').single());
+  }
   if (e1) throw e1;
 
   return { id: nueva.id, constancia: nuevaConstancia };

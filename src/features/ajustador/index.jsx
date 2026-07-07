@@ -10,18 +10,25 @@
 //   Los hijos NO manejan scroll — son bloques normales que
 //   simplemente fluyen dentro del único overflow-y-auto.
 // ============================================================
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { PDFDownloadLink } from "@react-pdf/renderer";
 import { StepBar } from "./shared";
 import ListaSiniestros from "./ListaSiniestros";
 import ConfirmarArribo from "./ConfirmarArribo";
 import DatosSiniestro from "./DatosSiniestro";
 import CapturaDatosEvidencia from "./CapturaEvidencia";
+import DatosAjuste from "./DatosAjuste";
+import Encuesta from "./Encuesta";
 import GenerarDocumentos from "./GenerarDocumentos";
+import DeclaracionAccidentePDF from "../../components/pdf/DeclaracionAccidentePDF";
+import { fetchDeclaracionData, buildDeclaracionPDF } from "../../services/declaracionPdf";
 
 const NOMBRE_PASO = [
   "Confirmar Arribo",
   "Datos del Siniestro",
   "Partes y Evidencia",
+  "Datos de Ajuste",
+  "Encuesta",
   "Documentos",
 ];
 
@@ -31,6 +38,15 @@ const NOMBRE_PASO = [
 const ROOT_CLS = "h-full w-full overflow-hidden";
 
 function Exito({ siniestro, onVolver }) {
+  const [declaracionPDF, setDeclaracionPDF] = useState(null);
+  const [errorPDF,       setErrorPDF]       = useState(null);
+
+  useEffect(() => {
+    fetchDeclaracionData(siniestro.id)
+      .then((raw) => setDeclaracionPDF(buildDeclaracionPDF(raw)))
+      .catch((err) => setErrorPDF(err.message ?? "Error al preparar el PDF"));
+  }, [siniestro.id]);
+
   return (
     <div className="flex flex-col items-center justify-center px-8 text-center py-16">
       <div className="w-20 h-20 rounded-full bg-emerald-50 border-4 border-emerald-100 flex items-center justify-center mb-5">
@@ -61,6 +77,29 @@ function Exito({ siniestro, onVolver }) {
       <p className="text-gray-400 text-sm mb-8">
         Los documentos fueron enviados al cabinero.
       </p>
+
+      <div className="flex flex-wrap justify-center gap-3 mb-3">
+        {declaracionPDF ? (
+          <PDFDownloadLink
+            document={<DeclaracionAccidentePDF data={declaracionPDF} />}
+            fileName={`declaracion-${siniestro.numero_siniestro ?? siniestro.folio ?? siniestro.id}.pdf`}
+            style={{ textDecoration: "none" }}
+          >
+            {({ loading: pdfLoading }) => (
+              <span className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-bold hover:bg-[#1e2a50] cursor-pointer select-none">
+                {pdfLoading ? "Preparando PDF..." : "Descargar Declaración (PDF)"}
+              </span>
+            )}
+          </PDFDownloadLink>
+        ) : errorPDF ? (
+          <p className="text-xs text-red-500">{errorPDF}</p>
+        ) : (
+          <span className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#13193a]/50 text-white text-sm font-bold cursor-wait select-none">
+            Preparando declaración...
+          </span>
+        )}
+      </div>
+
       <button
         onClick={onVolver}
         className="w-full max-w-xs py-3.5 rounded-2xl bg-[#13193a] text-white font-bold text-sm hover:bg-[#1e2a50] transition-all"
@@ -123,6 +162,12 @@ function PanelDetalle({ siniestro, paso, onVolver, onNext, onFinalizar }) {
           <CapturaDatosEvidencia siniestro={siniestro} onSiguiente={onNext} />
         )}
         {paso === 3 && (
+          <DatosAjuste siniestro={siniestro} onSiguiente={onNext} />
+        )}
+        {paso === 4 && (
+          <Encuesta siniestro={siniestro} onSiguiente={onNext} />
+        )}
+        {paso === 5 && (
           <GenerarDocumentos siniestro={siniestro} onFinalizar={onFinalizar} />
         )}
       </div>

@@ -6,7 +6,8 @@ import imageCompression from "browser-image-compression";
 import { supabase } from "../supabaseClient";
 import { getState } from "../auth";
 
-const BUCKET = "siniestros-evidencia";
+const BUCKET        = "siniestros-evidencia";
+const FIRMAS_BUCKET = "siniestros-firmas";
 
 const COMPRESSION_OPTS = {
   maxSizeMB:        0.4,     // objetivo 400 KB por foto
@@ -14,6 +15,16 @@ const COMPRESSION_OPTS = {
   useWebWorker:     true,
   fileType:         "image/webp",
 };
+
+// ── Convierte un dataURL (canvas.toDataURL) a Blob subible ────
+function dataUrlToBlob(dataUrl) {
+  const [header, base64] = dataUrl.split(",");
+  const mime   = header.match(/:(.*?);/)[1];
+  const binary = atob(base64);
+  const array  = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+  return new Blob([array], { type: mime });
+}
 
 // ── Comprime un File — devuelve el File comprimido ────────────
 export async function comprimirImagen(file) {
@@ -41,7 +52,7 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
     .from("siniestros")
     .select(`
       id, numero_siniestro, estatus, ubicacion, created_at,
-      fecha_siniestro, tipo_siniestro, descripcion,
+      fecha_siniestro, hora_siniestro, tipo_siniestro, circunstancia, descripcion,
       polizas(
         id, constancia, numero_poliza, placas, num_serie, anio, fecha_fin,
         clientes(nombre, apellido, rfc, curp, telefono, email,
@@ -109,6 +120,12 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
       ubicacion: s.ubicacion ?? null,
       coords:    null,
       telefono:  cl.telefono ?? null,
+      // Reportado por cabinero — para autorrellenar el paso 2 del ajustador
+      fechaSiniestroReportada: s.fecha_siniestro ?? null,
+      horaSiniestroReportada:  s.hora_siniestro  ?? null,
+      causaReportada:          s.tipo_siniestro  ?? null,
+      circunstanciaReportada:  s.circunstancia   ?? null,
+      descripcionReportada:    s.descripcion     ?? null,
       tiempo:    tiempoRelativo(s.created_at),
       estatus:   s.estatus ?? "Asignado",
       poliza:    polizaNum,
@@ -151,6 +168,38 @@ export async function subirEvidencia({ siniestroId, numeroSiniestro, participant
   if (dbErr) throw dbErr;
 
   return path;
+}
+
+// ── Sube una firma (dataURL de canvas) — bucket separado ──────
+// tipo: 'asegurado' | 'ajustador' | 'reclamante'
+export async function subirFirma({ numeroSiniestro, tipo, dataUrl }) {
+  const blob = dataUrlToBlob(dataUrl);
+  const path = `${numeroSiniestro}/${tipo}.png`;
+  const { error } = await supabase.storage
+    .from(FIRMAS_BUCKET)
+    .upload(path, blob, { contentType: "image/png", upsert: true });
+  if (error) throw error;
+  return path;
+}
+
+// ── Sube el croquis dibujado (dataURL de canvas) ──────────────
+export async function subirCroquis({ numeroSiniestro, dataUrl }) {
+  const blob = dataUrlToBlob(dataUrl);
+  const path = `${numeroSiniestro}/croquis.png`;
+  const { error } = await supabase.storage
+    .from(FIRMAS_BUCKET)
+    .upload(path, blob, { contentType: "image/png", upsert: true });
+  if (error) throw error;
+  return path;
+}
+
+// ── URL firmada temporal (1 hora) para una firma o croquis ────
+export async function getFirmaSignedUrl(storagePath) {
+  const { data, error } = await supabase.storage
+    .from(FIRMAS_BUCKET)
+    .createSignedUrl(storagePath, 3600);
+  if (error) throw error;
+  return data.signedUrl;
 }
 
 // ── Elimina una evidencia de Storage y de la tabla ────────────

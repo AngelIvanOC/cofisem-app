@@ -6,6 +6,7 @@
 import { useState, useRef, useCallback } from "react";
 import { Campo, CampoSistema, Sep, AfectadoTag } from "./shared";
 import { subirEvidencia, eliminarEvidencia } from "../../services/evidencias";
+import { guardarPartesInvolucradas } from "../../services/siniestros";
 // import ModeloDanos3D from "./ModeloDanos"; // temporalmente desactivado
 
 // ── Botón de evidencia con upload real ───────────────────────
@@ -323,6 +324,21 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
   const [activo,       setActivo]       = useState("NA");
   const [afectadosIds, setAfectadosIds] = useState(["AF1"]);
   const [afectados,    setAfectados]    = useState({ AF1: datosAfectadoVacio() });
+  const [guardando,    setGuardando]    = useState(false);
+  const [errorGuardar, setErrorGuardar] = useState(null);
+
+  const handleSiguiente = async () => {
+    setGuardando(true);
+    setErrorGuardar(null);
+    try {
+      await guardarPartesInvolucradas(siniestro.id, afectadosIds, afectados);
+      onSiguiente();
+    } catch (err) {
+      setErrorGuardar(err.message ?? "Error al guardar las partes involucradas");
+    } finally {
+      setGuardando(false);
+    }
+  };
 
   const agregarAfectado = () => {
     const n  = afectadosIds.length + 1;
@@ -392,10 +408,13 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
         </div>
       ))}
 
-      <div className="pt-2 pb-6">
-        <button onClick={onSiguiente}
-          className="w-full py-3.5 rounded-2xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-[#13193a]/15">
-          Continuar a Documentos →
+      <div className="pt-2 pb-6 space-y-2">
+        {errorGuardar && (
+          <p className="text-xs text-red-500 text-center font-medium">{errorGuardar}</p>
+        )}
+        <button onClick={handleSiguiente} disabled={guardando}
+          className="w-full py-3.5 rounded-2xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-[#13193a]/15 disabled:opacity-60 disabled:cursor-wait">
+          {guardando ? "Guardando..." : "Continuar a Documentos →"}
         </button>
       </div>
     </div>

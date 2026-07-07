@@ -18,6 +18,7 @@ import PaginaEnConstruccion from "./pages/PaginaEnConstruccion";
 // ── DEV — eliminar antes de producción ────────────────────────
 import PDFPreview    from "./pages/PDFPreview";
 import ReciboPreview from "./pages/ReciboPreview";
+import DeclaracionPreview from "./pages/DeclaracionPreview";
 
 // ── Verificación pública de pólizas ──────────────────────────
 import VerificarPoliza from "./pages/VerificarPoliza";
@@ -59,6 +60,7 @@ import SupervisorDashboard  from "./pages/supervisor/SupervisorDashboard";
 import SupervisorSiniestros from "./pages/supervisor/SupervisorSiniestros";
 import SupervisorAjustadores from "./pages/supervisor/SupervisorAjustadores";
 import SupervisorReportes   from "./pages/supervisor/SupervisorReportes";
+import SupervisorCostos     from "./features/supervisor/SupervisorCostos";
 
 // ── VENTAS ────────────────────────────────────────────────────
 import VentasDashboard    from "./pages/ventas/VentasDashboard";
@@ -104,6 +106,7 @@ const RUTAS_POR_ROL = {
   SUPERVISOR_SINIESTROS: [
     "/gaman/dashboard",
     "/gaman/siniestros",
+    "/gaman/costos-siniestros",
     "/gaman/ajustadores",
     "/gaman/reportes-siniestros",
   ],
@@ -245,6 +248,7 @@ export default function App() {
         {/* ── DEV ── */}
         <Route path="/gaman/pdf-preview"    element={<PDFPreview />} />
         <Route path="/gaman/recibo-preview" element={<ReciboPreview />} />
+        <Route path="/gaman/declaracion-preview" element={<DeclaracionPreview />} />
 
         {/* ── Verificación pública de pólizas ── */}
         <Route path="/gaman/verificar/:constancia" element={<VerificarPoliza />} />
@@ -394,6 +398,16 @@ export default function App() {
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/gaman/siniestros/nuevo">
                   <SiniestroNuevo usuario={usuario} />
+                </RutaProtegida>
+              }
+            />
+
+            {/* Supervisor — Costos */}
+            <Route
+              path="/gaman/costos-siniestros"
+              element={
+                <RutaProtegida rolNombre={rolNombre} path="/gaman/costos-siniestros">
+                  <SupervisorCostos />
                 </RutaProtegida>
               }
             />

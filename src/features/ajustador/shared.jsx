@@ -163,7 +163,7 @@ export const ESTATUS_CLS = {
   Cerrado:              "bg-emerald-50   text-emerald-700 border border-emerald-200",
 };
 
-export const STEP_LABELS_DEFAULT = ["Arribo", "Siniestro", "Partes", "Documentos"];
+export const STEP_LABELS_DEFAULT = ["Arribo", "Siniestro", "Partes", "Ajuste", "Encuesta", "Documentos"];
 
 export const TIPOS_SINIESTRO = [
   "Choque con tercero",

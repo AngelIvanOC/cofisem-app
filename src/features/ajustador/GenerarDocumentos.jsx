@@ -3,7 +3,8 @@
 // Paso 4: Pase taller + pase médico (con datos completos) + firmas
 // ============================================================
 import { useState, useRef } from "react";
-import { cerrarSiniestro } from "../../services/siniestros";
+import { cerrarSiniestro, guardarFirmas } from "../../services/siniestros";
+import { subirFirma } from "../../services/evidencias";
 import { Campo, CampoSistema, Sep, TALLERES_LISTA, CLINICAS_LISTA } from "./shared";
 
 const TIPOS_LESION = [
@@ -301,6 +302,12 @@ export default function GenerarDocumentos({ siniestro, onFinalizar }) {
     setCerrando(true);
     setErrorCierre(null);
     try {
+      const numeroSiniestro = siniestro.numero_siniestro ?? siniestro.folio;
+      const paths = {};
+      if (firmas.asegurado) paths.asegurado  = await subirFirma({ numeroSiniestro, tipo: "asegurado",  dataUrl: firmas.asegurado });
+      if (firmas.ajustador) paths.ajustador  = await subirFirma({ numeroSiniestro, tipo: "ajustador",  dataUrl: firmas.ajustador });
+      if (firmas.afectado)  paths.reclamante = await subirFirma({ numeroSiniestro, tipo: "reclamante", dataUrl: firmas.afectado });
+      await guardarFirmas(siniestro.id, paths);
       await cerrarSiniestro(siniestro.id);
       onFinalizar();
     } catch (err) {

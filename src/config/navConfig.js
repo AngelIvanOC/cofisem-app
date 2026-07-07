@@ -45,10 +45,11 @@ export const NAV_POR_ROL = {
 
   // ── SUPERVISOR SINIESTROS ─────────────────────────────────
   SUPERVISOR_SINIESTROS: [
-    { label: "Inicio",      path: "/gaman/dashboard",          icon: "home"      },
-    { label: "Siniestros",  path: "/gaman/siniestros",          icon: "clipboard" },
-    { label: "Ajustadores", path: "/gaman/ajustadores",         icon: "users"     },
-    { label: "Reportes",    path: "/gaman/reportes-siniestros", icon: "bar-chart" },
+    { label: "Inicio",      path: "/gaman/dashboard",          icon: "home"        },
+    { label: "Siniestros",  path: "/gaman/siniestros",          icon: "clipboard"   },
+    { label: "Costos",      path: "/gaman/costos-siniestros",   icon: "credit-card" },
+    { label: "Ajustadores", path: "/gaman/ajustadores",         icon: "users"       },
+    { label: "Reportes",    path: "/gaman/reportes-siniestros", icon: "bar-chart"   },
   ],
 
   // ── VENTAS ────────────────────────────────────────────────
