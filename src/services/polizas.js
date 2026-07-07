@@ -140,6 +140,9 @@ export async function generarCuotasPoliza(polizaId, formaPago, primaTotal, fecha
       fecha_vencimiento: d.toISOString().split('T')[0],
     });
   }
+  // Limpiar cuotas previas de esta póliza antes de regenerar (evita acumulación
+  // si se recalcula la forma de pago o se reactiva un folio antes cancelado).
+  await supabase.from('pagos').delete().eq('poliza_id', polizaId);
   const { error } = await supabase.from('pagos').insert(cuotas);
   if (error) throw error;
 }
@@ -597,8 +600,8 @@ export async function renovarPoliza(polizaId, creadoPor) {
 
   let nueva, e1;
   if (duplicado) {
-    // Limpiar cuotas de la captura anterior (cancelada) antes de reactivar el registro
-    await supabase.from('pagos').delete().eq('poliza_id', duplicado.id);
+    // Las cuotas de la captura anterior (cancelada) se limpian en generarCuotasPoliza
+    // al completar esta renovación.
     ({ data: nueva, error: e1 } = await supabase
       .from('polizas').update(datosRenovacion).eq('id', duplicado.id).select('id').single());
   } else {
