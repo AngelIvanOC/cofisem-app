@@ -3,71 +3,79 @@
 // Ruta raíz: página de inicio (selector de aseguradora)
 // Todas las rutas de GAMAN bajo /gaman/
 // ============================================================
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getState, subscribe } from "./auth.js";
 
 // ── Páginas públicas ──────────────────────────────────────────
+// Cargadas de inmediato: son la puerta de entrada de la app.
 import PaginaLanding    from "./pages/PaginaLanding";
-import PaginaInicio     from "./pages/PaginaInicio";
 import Login            from "./pages/Login";
-import AppLayout        from "./layouts/AppLayout";
-import CofisemLayout    from "./layouts/CofisemLayout";
 import PaginaEnConstruccion from "./pages/PaginaEnConstruccion";
 
+// ── Todo lo demás se carga bajo demanda (code-splitting) ───────
+// Antes App.jsx importaba estáticamente TODAS las páginas de TODOS
+// los roles, generando un único bundle de ~3.7MB descargado en cada
+// carga/refresh sin importar el rol del usuario.
+const PaginaInicio  = lazy(() => import("./pages/PaginaInicio"));
+const AppLayout     = lazy(() => import("./layouts/AppLayout"));
+const CofisemLayout = lazy(() => import("./layouts/CofisemLayout"));
+
 // ── DEV — eliminar antes de producción ────────────────────────
-import PDFPreview    from "./pages/PDFPreview";
-import ReciboPreview from "./pages/ReciboPreview";
-import DeclaracionPreview from "./pages/DeclaracionPreview";
+const PDFPreview    = lazy(() => import("./pages/PDFPreview"));
+const ReciboPreview = lazy(() => import("./pages/ReciboPreview"));
+const DeclaracionPreview = lazy(() => import("./pages/DeclaracionPreview"));
 
 // ── Verificación pública de pólizas ──────────────────────────
-import VerificarPoliza from "./pages/VerificarPoliza";
+const VerificarPoliza = lazy(() => import("./pages/VerificarPoliza"));
 
 // ── OPERADOR ──────────────────────────────────────────────────
-import OperadorDashboard  from "./pages/operador/OperadorDashboard";
-import OperadorClientes   from "./pages/operador/Clientes";
-import OperadorPolizas    from "./pages/operador/Polizas";
-import { Vendedores as OperadorVendedores } from "./pages/operador/Vendedores";
-import CorteOperador      from "./features/corte/CorteOperador";
-import CorteAnalista      from "./features/corte/CorteAnalista";
-import PoliciasDia        from "./features/cofisem/PoliciasDia";
+const OperadorDashboard  = lazy(() => import("./pages/operador/OperadorDashboard"));
+const OperadorClientes   = lazy(() => import("./pages/operador/Clientes"));
+const OperadorPolizas    = lazy(() => import("./pages/operador/Polizas"));
+const OperadorVendedores = lazy(() =>
+  import("./pages/operador/Vendedores").then((m) => ({ default: m.Vendedores }))
+);
+const CorteOperador      = lazy(() => import("./features/corte/CorteOperador"));
+const CorteAnalista      = lazy(() => import("./features/corte/CorteAnalista"));
+const PoliciasDia        = lazy(() => import("./features/cofisem/PoliciasDia"));
 
 // ── ANALISTA ──────────────────────────────────────────────────
-import AnalistaDashboard from "./pages/analista/AnalistaDashboard";
-import AnalistaPolizas   from "./pages/analista/AnalistaPolizas";
-import AnalistaPagos     from "./pages/analista/AnalistaPagos";
-import AnalistaReportes  from "./pages/analista/AnalistaReportes";
-import OperadorPagos     from "./pages/operador/Pagos";
+const AnalistaDashboard = lazy(() => import("./pages/analista/AnalistaDashboard"));
+const AnalistaPolizas   = lazy(() => import("./pages/analista/AnalistaPolizas"));
+const AnalistaPagos     = lazy(() => import("./pages/analista/AnalistaPagos"));
+const AnalistaReportes  = lazy(() => import("./pages/analista/AnalistaReportes"));
+const OperadorPagos     = lazy(() => import("./pages/operador/Pagos"));
 
 // ── ADMINISTRACIÓN ────────────────────────────────────────────
-import AdminDashboard       from "./pages/administracion/AdminDashboard";
-import AdminPolizas         from "./pages/administracion/AdminPolizas";
-import AdminPagos           from "./pages/administracion/AdminPagos";
-import AdminUsuarios        from "./pages/administracion/AdminUsuarios";
-import AdminConfiguracion   from "./pages/administracion/AdminConfiguracion";
-import AdminEstadoCuenta    from "./pages/administracion/EstadoDeCuenta";
+const AdminDashboard       = lazy(() => import("./pages/administracion/AdminDashboard"));
+const AdminPolizas         = lazy(() => import("./pages/administracion/AdminPolizas"));
+const AdminPagos           = lazy(() => import("./pages/administracion/AdminPagos"));
+const AdminUsuarios        = lazy(() => import("./pages/administracion/AdminUsuarios"));
+const AdminConfiguracion   = lazy(() => import("./pages/administracion/AdminConfiguracion"));
+const AdminEstadoCuenta    = lazy(() => import("./pages/administracion/EstadoDeCuenta"));
 
 // ── CABINERO SINIESTROS ───────────────────────────────────────
-import CabineroDashboard from "./pages/cabinero/CabineroDashboard";
-import Siniestros        from "./pages/cabinero/Siniestros.jsx";
-import SiniestroNuevo    from "./pages/cabinero/SiniestroNuevo.jsx";
+const CabineroDashboard = lazy(() => import("./pages/cabinero/CabineroDashboard"));
+const Siniestros        = lazy(() => import("./pages/cabinero/Siniestros.jsx"));
+const SiniestroNuevo    = lazy(() => import("./pages/cabinero/SiniestroNuevo.jsx"));
 
 // ── AJUSTADOR ─────────────────────────────────────────────────
-import AjustadorSiniestros from "./pages/ajustador/AjustadorSiniestros";
+const AjustadorSiniestros = lazy(() => import("./pages/ajustador/AjustadorSiniestros"));
 
 // ── SUPERVISOR SINIESTROS ─────────────────────────────────────
-import SupervisorDashboard  from "./pages/supervisor/SupervisorDashboard";
-import SupervisorSiniestros from "./pages/supervisor/SupervisorSiniestros";
-import SupervisorAjustadores from "./pages/supervisor/SupervisorAjustadores";
-import SupervisorReportes   from "./pages/supervisor/SupervisorReportes";
-import SupervisorCostos     from "./features/supervisor/SupervisorCostos";
+const SupervisorDashboard  = lazy(() => import("./pages/supervisor/SupervisorDashboard"));
+const SupervisorSiniestros = lazy(() => import("./pages/supervisor/SupervisorSiniestros"));
+const SupervisorAjustadores = lazy(() => import("./pages/supervisor/SupervisorAjustadores"));
+const SupervisorReportes   = lazy(() => import("./pages/supervisor/SupervisorReportes"));
+const SupervisorCostos     = lazy(() => import("./features/supervisor/SupervisorCostos"));
 
 // ── VENTAS ────────────────────────────────────────────────────
-import VentasDashboard    from "./pages/ventas/VentasDashboard";
-import VentasMetas        from "./pages/ventas/VentasMetas";
-import VentasReportes     from "./pages/ventas/VentasReportes";
-import VentasVendedores   from "./pages/ventas/VentasVendedores";
-import VentasCotizaciones from "./pages/ventas/VentasCotizaciones";
+const VentasDashboard    = lazy(() => import("./pages/ventas/VentasDashboard"));
+const VentasMetas        = lazy(() => import("./pages/ventas/VentasMetas"));
+const VentasReportes     = lazy(() => import("./pages/ventas/VentasReportes"));
+const VentasVendedores   = lazy(() => import("./pages/ventas/VentasVendedores"));
+const VentasCotizaciones = lazy(() => import("./pages/ventas/VentasCotizaciones"));
 
 // ── Rutas permitidas por rol (todas bajo /gaman/) ─────────────
 const RUTAS_POR_ROL = {
@@ -240,6 +248,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <Suspense fallback={<Spinner />}>
       <Routes>
         {/* ── Landing corporativa COFISEM ── */}
         <Route path="/" element={<PaginaLanding />} />
@@ -477,6 +486,7 @@ export default function App() {
         {/* Cualquier otra ruta → página de inicio */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
