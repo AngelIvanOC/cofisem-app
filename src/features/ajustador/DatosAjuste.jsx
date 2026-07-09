@@ -2,11 +2,12 @@
 // src/features/ajustador/DatosAjuste.jsx
 // Nuevo paso: "Datos de Ajuste" (sección Reverso) + Croquis
 // ============================================================
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Campo, CampoSistema, CampoSelect, Seccion, Sep } from "./shared";
 import { CAUSAS, CIRCUNSTANCIAS } from "../cabinero/constants/catalogos";
 import { guardarDatosAjuste, fetchTiemposSiniestro, horaLocal } from "../../services/siniestros";
 import { subirCroquis } from "../../services/evidencias";
+import CroquisEditor from "./croquis/CroquisEditor";
 
 const CULPABILIDAD_OPTS = ["Culpable", "Compartida", "Dudosa", "No culpable"];
 const RECUPERACION_OPTS = ["Si", "No", "Probable"];
@@ -31,83 +32,6 @@ function ToggleSiNo({ label, value, onChange }) {
           </button>
         ))}
       </div>
-    </div>
-  );
-}
-
-// ── Canvas de croquis (dibujo libre) ──────────────────────────
-function Croquis({ onDataUrlChange }) {
-  const canvasRef = useRef(null);
-  const dibujando = useRef(false);
-  const ultimoPto = useRef(null);
-  const [tieneTrazo, setTieneTrazo] = useState(false);
-
-  const getXY = (e, canvas) => {
-    const r = canvas.getBoundingClientRect();
-    const src = e.touches?.[0] ?? e;
-    return {
-      x: (src.clientX - r.left) * (canvas.width / r.width),
-      y: (src.clientY - r.top) * (canvas.height / r.height),
-    };
-  };
-  const draw = (from, to, ctx) => {
-    ctx.beginPath(); ctx.moveTo(from.x, from.y);
-    ctx.lineTo(to.x, to.y);
-    ctx.strokeStyle = "#13193a"; ctx.lineWidth = 2;
-    ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
-  };
-
-  const emit = () => {
-    const canvas = canvasRef.current;
-    onDataUrlChange(canvas.toDataURL());
-  };
-
-  const onDown = (e) => {
-    dibujando.current = true;
-    ultimoPto.current = getXY(e, canvasRef.current);
-    if (e.cancelable) e.preventDefault();
-  };
-  const onMove = (e) => {
-    if (!dibujando.current) return;
-    if (e.cancelable) e.preventDefault();
-    const to = getXY(e, canvasRef.current);
-    draw(ultimoPto.current, to, canvasRef.current.getContext("2d"));
-    ultimoPto.current = to;
-    setTieneTrazo(true);
-  };
-  const onUp = () => {
-    if (dibujando.current) emit();
-    dibujando.current = false;
-  };
-
-  const limpiar = () => {
-    const canvas = canvasRef.current;
-    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
-    setTieneTrazo(false);
-    onDataUrlChange(null);
-  };
-
-  return (
-    <div>
-      <p className="text-xs text-gray-400 mb-2">Dibuja el croquis del accidente con el dedo o el lápiz</p>
-      <canvas
-        ref={canvasRef}
-        width={600}
-        height={320}
-        className="w-full border-2 border-dashed border-gray-300 rounded-2xl touch-none bg-gray-50"
-        style={{ height: 260 }}
-        onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-        onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}
-      />
-      {tieneTrazo && (
-        <button
-          type="button"
-          onClick={limpiar}
-          className="mt-2 text-xs text-red-400 hover:text-red-600 font-semibold"
-        >
-          Limpiar croquis
-        </button>
-      )}
     </div>
   );
 }
@@ -246,7 +170,7 @@ export default function DatosAjuste({ siniestro, onSiguiente }) {
       </Seccion>
 
       <Seccion titulo="Croquis del Accidente">
-        <Croquis onDataUrlChange={setCroquisDataUrl} />
+        <CroquisEditor onDataUrlChange={setCroquisDataUrl} />
       </Seccion>
 
       <div className="pt-2 pb-6 space-y-2">
