@@ -1,17 +1,43 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../../supabaseClient";
 import { FileText, Loader2, Search, Download, Printer } from "lucide-react";
 
+// Oficina E. Zapata: única oficina con dos operadoras; se desglosa una fila por operadora.
+const OFICINA_EZAPATA_ID = 1;
+
 const MESES = [
-  "Enero","Febrero","Marzo","Abril","Mayo","Junio",
-  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre",
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
 ];
-const MESES_ABREV = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
+const MESES_ABREV = [
+  "ENE",
+  "FEB",
+  "MAR",
+  "ABR",
+  "MAY",
+  "JUN",
+  "JUL",
+  "AGO",
+  "SEP",
+  "OCT",
+  "NOV",
+  "DIC",
+];
 
 const PRECIO_CARRO = 100;
-const PRECIO_MOTO  = 50;
-const IVA_PCT      = 0.16;
+const PRECIO_MOTO = 50;
+const IVA_PCT = 0.16;
 
 function esMoto(nombre = "") {
   return /moto/i.test(nombre);
@@ -45,36 +71,57 @@ function fmt$(n) {
   return `$${Number(n).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-const CL_TH_DARK   = "bg-[#13193a] text-white";
-const CL_TH_MID    = "bg-[#1e2a50] text-white";
-const CL_TH_LIGHT  = "bg-[#2d3d6b] text-white";
-const CL_TH_SUB    = "bg-[#3d5080] text-white";
-const CL_BORDER    = "border border-[#dde3f0]";
+const CL_TH_DARK = "bg-[#13193a] text-white";
+const CL_TH_MID = "bg-[#1e2a50] text-white";
+const CL_TH_LIGHT = "bg-[#2d3d6b] text-white";
+const CL_TH_SUB = "bg-[#3d5080] text-white";
+const CL_BORDER = "border border-[#dde3f0]";
 
 export default function EstadoDeCuenta() {
-  const hoy      = new Date();
-  const anioAct  = hoy.getFullYear();
-  const mesAct   = hoy.getMonth() + 1;
+  const hoy = new Date();
+  const anioAct = hoy.getFullYear();
+  const mesAct = hoy.getMonth() + 1;
 
-  const [modo,       setModo]       = useState("mes");
-  const [selMes,     setSelMes]     = useState(mesAct);
-  const [selAnio,    setSelAnio]    = useState(anioAct);
-  const [fInicio,    setFInicio]    = useState("");
-  const [fFin,       setFFin]       = useState("");
-  const [cargando,   setCargando]   = useState(false);
-  const [datos,      setDatos]      = useState(null);
+  const [modo, setModo] = useState("mes");
+  const [selMes, setSelMes] = useState(mesAct);
+  const [selAnio, setSelAnio] = useState(anioAct);
+  const [fInicio, setFInicio] = useState("");
+  const [fFin, setFFin] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const [datos, setDatos] = useState(null);
   const [polizasRaw, setPolizasRaw] = useState([]);
-  const [rango,      setRango]      = useState({ s: "", e: "" });
+  const [rango, setRango] = useState({ s: "", e: "" });
+  const [oficinas, setOficinas] = useState([]);
+  const [usuariosZapata, setUsuariosZapata] = useState([]);
 
   const anios = Array.from({ length: 7 }, (_, i) => anioAct - 5 + i);
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: dOficinas }, { data: dUsuarios }] = await Promise.all([
+        supabase
+          .from("oficinas")
+          .select("id, nombre")
+          .order("nombre", { ascending: true }),
+        supabase
+          .from("usuarios")
+          .select("id, id_muestra, roles(nombre)")
+          .eq("oficina_id", OFICINA_EZAPATA_ID)
+          .eq("activo", true),
+      ]);
+      setOficinas(dOficinas || []);
+      setUsuariosZapata(
+        (dUsuarios || []).filter((u) => u.roles?.nombre === "OPERADOR"),
+      );
+    })();
+  }, []);
 
   const handleFechaInicio = (v) => {
     setFInicio(v);
     if (v) setFFin(sumarUnMes(v));
   };
 
-  const puedeConsultar =
-    modo === "mes" || (fInicio && fFin && fFin >= fInicio);
+  const puedeConsultar = modo === "mes" || (fInicio && fFin && fFin >= fInicio);
 
   const calcRango = () => {
     if (modo === "mes") {
@@ -95,7 +142,9 @@ export default function EstadoDeCuenta() {
     try {
       const { data, error } = await supabase
         .from("polizas")
-        .select("id, constancia, created_at, forma_pago, oficina_id, oficinas(id, nombre), coberturas(nombre, prima_total)")
+        .select(
+          "id, constancia, created_at, forma_pago, oficina_id, creado_por, oficinas(id, nombre), coberturas(nombre, prima_total), usuarios!polizas_creado_por_fkey(id_muestra)",
+        )
         .gte("created_at", `${r.s}T00:00:00`)
         .lte("created_at", `${r.e}T23:59:59`)
         .order("created_at", { ascending: true });
@@ -110,28 +159,59 @@ export default function EstadoDeCuenta() {
     }
   };
 
+  const claveYNombre = (p) => {
+    if (p.oficina_id === OFICINA_EZAPATA_ID) {
+      const nombreOficina = p.oficinas?.nombre ?? "COFISEM AV. E.ZAPATA";
+      const idMuestra = p.usuarios?.id_muestra;
+      return {
+        key: p.creado_por ? `z-${p.creado_por}` : "z-sin-operador",
+        nombre:
+          idMuestra != null ? `${nombreOficina} OP${idMuestra}` : nombreOficina,
+      };
+    }
+    return {
+      key: p.oficina_id ?? "sin-oficina",
+      nombre: p.oficinas?.nombre ?? "Sin Oficina",
+    };
+  };
+
   const procesarPolizas = (polizas) => {
     const mapa = new Map();
+
+    // Siembra todas las oficinas en 0 (E. Zapata desglosada por operadora)
+    for (const of_ of oficinas) {
+      if (of_.id === OFICINA_EZAPATA_ID) {
+        for (const u of usuariosZapata) {
+          mapa.set(`z-${u.id}`, {
+            nombre: `${of_.nombre} OP${u.id_muestra}`,
+            carros: 0,
+            motos: 0,
+          });
+        }
+      } else {
+        mapa.set(of_.id, { nombre: of_.nombre, carros: 0, motos: 0 });
+      }
+    }
+
     for (const p of polizas) {
-      const key    = p.oficina_id ?? "sin-oficina";
-      const nombre = p.oficinas?.nombre ?? "Sin Oficina";
-      const cob    = p.coberturas?.nombre ?? "";
+      const { key, nombre } = claveYNombre(p);
+      const cob = p.coberturas?.nombre ?? "";
       if (!mapa.has(key)) mapa.set(key, { nombre, carros: 0, motos: 0 });
       const entry = mapa.get(key);
       if (esMoto(cob)) entry.motos++;
-      else              entry.carros++;
+      else entry.carros++;
     }
     return [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
   };
 
-  const totCarros   = datos ? datos.reduce((s, o) => s + o.carros, 0) : 0;
-  const totMotos    = datos ? datos.reduce((s, o) => s + o.motos,  0) : 0;
-  const stCarros    = totCarros * PRECIO_CARRO;
-  const stMotos     = totMotos  * PRECIO_MOTO;
-  const grandTotal  = stCarros + stMotos;
-  const iva         = grandTotal * IVA_PCT;
+  const totCarros = datos ? datos.reduce((s, o) => s + o.carros, 0) : 0;
+  const totMotos = datos ? datos.reduce((s, o) => s + o.motos, 0) : 0;
+  const stCarros = totCarros * PRECIO_CARRO;
+  const stMotos = totMotos * PRECIO_MOTO;
+  const grandTotal = stCarros + stMotos;
+  const iva = grandTotal * IVA_PCT;
   const totalConIva = grandTotal + iva;
-  const periodo     = rango.s ? formatPeriodo(rango.s, rango.e) : "";
+  const periodo = rango.s ? formatPeriodo(rango.s, rango.e) : "";
 
   const exportarExcel = () => {
     if (!datos || datos.length === 0) return;
@@ -167,43 +247,54 @@ export default function EstadoDeCuenta() {
 
     // — Tabla resumen —
     const filasDatos = datos
-      .map((o, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
+      .map(
+        (o, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
           ${td(o.nombre)}
           ${td(o.carros, "text-align:center")}
           ${td(fmt$(o.carros * PRECIO_CARRO), "text-align:center")}
           ${td(o.motos, "text-align:center")}
           ${td(fmt$(o.motos * PRECIO_MOTO), "text-align:center")}
-        </tr>`)
+        </tr>`,
+      )
       .join("");
 
     // — Detalle por oficina —
     const mapaOficinas = new Map();
     for (const p of polizasRaw) {
-      const key    = p.oficina_id ?? "sin-oficina";
-      const nombre = p.oficinas?.nombre ?? "Sin Oficina";
-      if (!mapaOficinas.has(key)) mapaOficinas.set(key, { nombre, polizas: [] });
+      const { key, nombre } = claveYNombre(p);
+      if (!mapaOficinas.has(key))
+        mapaOficinas.set(key, { nombre, polizas: [] });
       mapaOficinas.get(key).polizas.push(p);
     }
     const oficinasOrdenadas = [...mapaOficinas.values()].sort((a, b) =>
-      a.nombre.localeCompare(b.nombre)
+      a.nombre.localeCompare(b.nombre),
     );
 
     const fmtFecha = (str) => {
       if (!str) return "—";
       const d = new Date(str);
-      return d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+      return d.toLocaleDateString("es-MX", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
     };
 
     const seccionesOficinas = oficinasOrdenadas
       .map((of) => {
         const filas = of.polizas
-          .map((p, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
+          .map(
+            (
+              p,
+              i,
+            ) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
               ${td(p.constancia || "—")}
               ${td(p.coberturas?.nombre || "—")}
               ${td(fmt$(p.coberturas?.prima_total ?? 0), "text-align:right")}
               ${td(p.forma_pago || "—", "text-align:center")}
               ${td(fmtFecha(p.created_at), "text-align:center")}
-            </tr>`)
+            </tr>`,
+          )
           .join("");
         return `
           <h3 style="margin:24px 0 6px;font-size:13px;color:#13193a;border-bottom:2px solid #13193a;padding-bottom:4px">
@@ -280,10 +371,11 @@ export default function EstadoDeCuenta() {
     w.document.close();
   };
 
-  const inp = "px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
+  const inp =
+    "px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
 
   return (
-    <div className="p-4 md:p-6 space-y-5 max-w-5xl mx-auto">
+    <div className="p-4 md:p-6 space-y-2 max-w-5xl mx-auto">
       {/* Encabezado */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-[#13193a] flex items-center justify-center shrink-0">
@@ -291,7 +383,9 @@ export default function EstadoDeCuenta() {
         </div>
         <div>
           <h1 className="text-lg font-bold text-[#13193a]">Estado de Cuenta</h1>
-          <p className="text-xs text-gray-500">Resumen de pólizas emitidas por periodo</p>
+          <p className="text-xs text-gray-500">
+            Resumen de pólizas emitidas por periodo
+          </p>
         </div>
       </div>
 
@@ -299,10 +393,12 @@ export default function EstadoDeCuenta() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
         {/* Toggle modo */}
         <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-gray-500">Consultar por:</span>
+          <span className="text-xs font-medium text-gray-500">
+            Consultar por:
+          </span>
           <div className="flex rounded-xl border border-gray-200 overflow-hidden">
             {[
-              { id: "mes",      label: "Mes" },
+              { id: "mes", label: "Mes" },
               { id: "intervalo", label: "Intervalo de fechas" },
             ].map((opt) => (
               <button
@@ -332,7 +428,9 @@ export default function EstadoDeCuenta() {
                   className={inp}
                 >
                   {MESES.map((m, i) => (
-                    <option key={i} value={i + 1}>{m}</option>
+                    <option key={i} value={i + 1}>
+                      {m}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -344,7 +442,9 @@ export default function EstadoDeCuenta() {
                   className={inp}
                 >
                   {anios.map((y) => (
-                    <option key={y} value={y}>{y}</option>
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -352,7 +452,9 @@ export default function EstadoDeCuenta() {
           ) : (
             <>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500 font-medium">Desde</label>
+                <label className="text-xs text-gray-500 font-medium">
+                  Desde
+                </label>
                 <input
                   type="date"
                   value={fInicio}
@@ -361,7 +463,9 @@ export default function EstadoDeCuenta() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500 font-medium">Hasta</label>
+                <label className="text-xs text-gray-500 font-medium">
+                  Hasta
+                </label>
                 <input
                   type="date"
                   value={fFin}
@@ -483,20 +587,33 @@ export default function EstadoDeCuenta() {
                   </tr>
                 ) : (
                   datos.map((o, i) => (
-                    <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                      <td className={`${CL_BORDER} px-4 py-2 font-medium text-gray-700`}>
+                    <tr
+                      key={i}
+                      className={i % 2 === 0 ? "bg-white" : "bg-slate-50"}
+                    >
+                      <td
+                        className={`${CL_BORDER} px-4 py-2 font-medium text-gray-700`}
+                      >
                         {o.nombre}
                       </td>
-                      <td className={`${CL_BORDER} px-3 py-2 text-center text-gray-700`}>
+                      <td
+                        className={`${CL_BORDER} px-3 py-2 text-center text-gray-700`}
+                      >
                         {o.carros}
                       </td>
-                      <td className={`${CL_BORDER} px-3 py-2 text-center text-gray-700`}>
+                      <td
+                        className={`${CL_BORDER} px-3 py-2 text-center text-gray-700`}
+                      >
                         {fmt$(o.carros * PRECIO_CARRO)}
                       </td>
-                      <td className={`${CL_BORDER} px-3 py-2 text-center text-gray-700`}>
+                      <td
+                        className={`${CL_BORDER} px-3 py-2 text-center text-gray-700`}
+                      >
                         {o.motos}
                       </td>
-                      <td className={`${CL_BORDER} px-3 py-2 text-center text-gray-700`}>
+                      <td
+                        className={`${CL_BORDER} px-3 py-2 text-center text-gray-700`}
+                      >
                         {fmt$(o.motos * PRECIO_MOTO)}
                       </td>
                     </tr>
@@ -505,11 +622,29 @@ export default function EstadoDeCuenta() {
 
                 {/* CONSTANCIAS — totales por columna */}
                 <tr className="bg-gray-100 font-semibold">
-                  <td className={`${CL_BORDER} px-4 py-2 text-gray-800`}>CONSTANCIAS</td>
-                  <td className={`${CL_BORDER} px-3 py-2 text-center text-gray-800`}>{totCarros}</td>
-                  <td className={`${CL_BORDER} px-3 py-2 text-center text-gray-800`}>{fmt$(stCarros)}</td>
-                  <td className={`${CL_BORDER} px-3 py-2 text-center text-gray-800`}>{totMotos}</td>
-                  <td className={`${CL_BORDER} px-3 py-2 text-center text-gray-800`}>{fmt$(stMotos)}</td>
+                  <td className={`${CL_BORDER} px-4 py-2 text-gray-800`}>
+                    CONSTANCIAS
+                  </td>
+                  <td
+                    className={`${CL_BORDER} px-3 py-2 text-center text-gray-800`}
+                  >
+                    {totCarros}
+                  </td>
+                  <td
+                    className={`${CL_BORDER} px-3 py-2 text-center text-gray-800`}
+                  >
+                    {fmt$(stCarros)}
+                  </td>
+                  <td
+                    className={`${CL_BORDER} px-3 py-2 text-center text-gray-800`}
+                  >
+                    {totMotos}
+                  </td>
+                  <td
+                    className={`${CL_BORDER} px-3 py-2 text-center text-gray-800`}
+                  >
+                    {fmt$(stMotos)}
+                  </td>
                 </tr>
 
                 {/* TOTAL PENDIENTE DE PAGO */}
@@ -520,7 +655,9 @@ export default function EstadoDeCuenta() {
                   >
                     TOTAL PENDIENTE DE PAGO
                   </td>
-                  <td className={`${CL_BORDER} px-3 py-2.5 text-center text-[#13193a]`}>
+                  <td
+                    className={`${CL_BORDER} px-3 py-2.5 text-center text-[#13193a]`}
+                  >
                     {fmt$(grandTotal)}
                   </td>
                 </tr>
@@ -533,7 +670,9 @@ export default function EstadoDeCuenta() {
                   >
                     IVA (16%)
                   </td>
-                  <td className={`${CL_BORDER} px-3 py-2 text-center text-gray-600 bg-blue-50`}>
+                  <td
+                    className={`${CL_BORDER} px-3 py-2 text-center text-gray-600 bg-blue-50`}
+                  >
                     {fmt$(iva)}
                   </td>
                 </tr>
@@ -546,7 +685,9 @@ export default function EstadoDeCuenta() {
                   >
                     TOTAL + IVA
                   </td>
-                  <td className={`${CL_BORDER} px-3 py-2.5 text-center font-bold text-white bg-[#13193a]`}>
+                  <td
+                    className={`${CL_BORDER} px-3 py-2.5 text-center font-bold text-white bg-[#13193a]`}
+                  >
                     {fmt$(totalConIva)}
                   </td>
                 </tr>

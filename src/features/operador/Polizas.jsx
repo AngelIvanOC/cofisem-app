@@ -38,6 +38,9 @@ import {
   X,
 } from "lucide-react";
 
+// Oficina E. Zapata: única oficina con dos operadoras; cada una ve solo lo que ella registró.
+const OFICINA_EZAPATA_ID = 1;
+
 export default function Polizas({ usuario }) {
   const [tab, setTab] = useState("polizas");
   const [polizas, setPolizas] = useState([]);
@@ -63,7 +66,9 @@ export default function Polizas({ usuario }) {
   const cargar = async () => {
     try {
       setLoading(true);
-      setPolizas(await fetchPolizas(usuario?.oficinas?.id ?? null));
+      const oficinaId = usuario?.oficinas?.id ?? null;
+      const creadoPorId = oficinaId === OFICINA_EZAPATA_ID ? (usuario?.id ?? null) : null;
+      setPolizas(await fetchPolizas(oficinaId, creadoPorId));
       setError(null);
     } catch (e) {
       setError("Error cargando pólizas: " + e.message);

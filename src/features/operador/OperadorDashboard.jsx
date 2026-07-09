@@ -5,6 +5,9 @@ import { SPARK_POLIZAS, SPARK_COBRO } from "./data/dashboardData";
 import SparkBar from "./components/SparkBar";
 import { AlertTriangle, ChevronRight, ClipboardList, FileText, Plus } from "lucide-react";
 
+// Oficina E. Zapata: única oficina con dos operadoras; cada una ve solo lo que ella registró.
+const OFICINA_EZAPATA_ID = 1;
+
 const HOY = new Date().toLocaleDateString("es-MX", {
   weekday: "long",
   day: "2-digit",
@@ -48,10 +51,13 @@ export default function OperadorDashboard({ usuario }) {
     const load = async () => {
       const oid = usuario?.oficinas?.id;
       if (!oid) { setLoading(false); return; }
+      const propias = oid === OFICINA_EZAPATA_ID && usuario?.id;
 
       const today    = new Date().toISOString().split("T")[0];
       const en7      = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
       const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0];
+
+      const conAutor = (q) => propias ? q.eq("creado_por", usuario.id) : q;
 
       try {
         const [
@@ -61,24 +67,24 @@ export default function OperadorDashboard({ usuario }) {
           { data: dVencen },
           { count: cClientes },
         ] = await Promise.all([
-          supabase.from("polizas").select("id", { count: "exact", head: true })
+          conAutor(supabase.from("polizas").select("id", { count: "exact", head: true })
             .eq("oficina_id", oid).neq("estatus", "COTIZACION")
-            .gte("created_at", today + "T00:00:00").lte("created_at", today + "T23:59:59"),
+            .gte("created_at", today + "T00:00:00").lte("created_at", today + "T23:59:59")),
 
-          supabase.from("polizas").select("id", { count: "exact", head: true })
+          conAutor(supabase.from("polizas").select("id", { count: "exact", head: true })
             .eq("oficina_id", oid).in("estatus", ["VIGENTE", "POR VENCER"])
-            .gte("fecha_fin", today).lte("fecha_fin", en7),
+            .gte("fecha_fin", today).lte("fecha_fin", en7)),
 
-          supabase.from("polizas")
+          conAutor(supabase.from("polizas")
             .select("id, constancia, numero_poliza, estatus, tipo_poliza, clientes(nombre, apellido), created_at, coberturas(prima_total)")
             .eq("oficina_id", oid).neq("estatus", "COTIZACION")
-            .order("created_at", { ascending: false }).limit(5),
+            .order("created_at", { ascending: false }).limit(5)),
 
-          supabase.from("polizas")
+          conAutor(supabase.from("polizas")
             .select("id, constancia, numero_poliza, fecha_fin, clientes(nombre, apellido)")
             .eq("oficina_id", oid).in("estatus", ["VIGENTE", "POR VENCER"])
             .gte("fecha_fin", today).lte("fecha_fin", en7)
-            .order("fecha_fin", { ascending: true }).limit(5),
+            .order("fecha_fin", { ascending: true }).limit(5)),
 
           supabase.from("clientes").select("id", { count: "exact", head: true })
             .eq("creado_por", usuario?.id)

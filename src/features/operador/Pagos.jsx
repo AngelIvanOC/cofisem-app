@@ -23,6 +23,9 @@ import {
   X,
 } from "lucide-react";
 
+// Oficina E. Zapata: única oficina con dos operadoras; cada una ve solo lo que ella registró.
+const OFICINA_EZAPATA_ID = 1;
+
 // Devuelve true si la fecha "dd/mm/yyyy" corresponde al mes/año dados
 function enMes(fechaDDMMYYYY, anio, mes) {
   if (!fechaDDMMYYYY) return false;
@@ -597,6 +600,7 @@ export default function OperadorPagos({ usuario }) {
         .neq("estatus", "COTIZACION")
         .order("fecha_inicio", { ascending: false });
       if (oid) polizasQuery = polizasQuery.eq("oficina_id", oid);
+      if (oid === OFICINA_EZAPATA_ID && usuario?.id) polizasQuery = polizasQuery.eq("creado_por", usuario.id);
 
       const [versionesConfig, { data: polizasDB, error }] = await Promise.all([
         fetchTodasVersionesConfig(),

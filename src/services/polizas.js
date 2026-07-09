@@ -695,7 +695,7 @@ export async function contarPolizasConcesionario(concesionarioId) {
 }
 
 // ── Cargar pólizas de la lista ─────────────────────────────────────────────
-export async function fetchPolizas(oficinaId = null) {
+export async function fetchPolizas(oficinaId = null, creadoPorId = null) {
   let q = supabase
     .from('polizas')
     .select(`
@@ -708,6 +708,7 @@ export async function fetchPolizas(oficinaId = null) {
     .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA','ANULADA'])
     .order('fecha_inicio', { ascending: false });
   if (oficinaId) q = q.eq('oficina_id', oficinaId);
+  if (creadoPorId) q = q.eq('creado_por', creadoPorId);
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []).map(p => ({ ...p, estatus: calcularEstatus(p.estatus, p.fecha_fin) }));
