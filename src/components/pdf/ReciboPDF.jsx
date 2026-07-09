@@ -282,9 +282,6 @@ function SeccionRecibo({
 
           {/* Detalle de cuota */}
           <View style={{ paddingHorizontal: 0, paddingTop: 0 }}>
-            <Text style={{ ...T, lineHeight: 1 }}>
-              Vto. P.Gracia: {vencimiento}
-            </Text>
             <View
               style={{ flexDirection: "row", justifyContent: "space-between" }}
             >
