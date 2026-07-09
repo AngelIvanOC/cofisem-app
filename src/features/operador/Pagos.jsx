@@ -7,6 +7,7 @@ import {
 // generarCuotasPoliza ya no se llama aquí — los pagos se insertan por migración
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
+import { isoAMX, abrirRecibo } from "../../utils/recibo";
 import {
   Banknote,
   Check,
@@ -21,135 +22,6 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
-
-function isoAMX(str) {
-  if (!str) return "";
-  const [y, m, d] = str.split("-");
-  return `${d}/${m}/${y}`;
-}
-
-function isoAMXCorto(str) {
-  if (!str) return "";
-  const [y, m, d] = str.split("-");
-  return `${d}/${m}/${y.slice(-2)}`;
-}
-
-function nCuotasDeFormaPago(formaPago) {
-  if (formaPago === "CONTADO") return 1;
-  const m = (formaPago ?? "").match(/(\d+)/);
-  return m ? parseInt(m[1], 10) : 1;
-}
-
-function calcularImportesRecibo(poliza, cuota) {
-  if (poliza.formaPago === "CONTADO") {
-    return {
-      primaNeta:        poliza.primaNeta,
-      gastosExpedicion: poliza.derechos,
-      iva:              poliza.iva,
-      total:            poliza.primaTotal,
-      importe:          cuota.monto,
-    };
-  }
-
-  const n   = nCuotasDeFormaPago(poliza.formaPago);
-  const iva = poliza.ivaPct ?? 16;
-
-  // COSTOS_DIVIDIDOS: prima neta, derechos e IVA se dividen entre N cuotas
-  if (poliza.reglaPago === "COSTOS_DIVIDIDOS") {
-    const pnParcial  = +(poliza.primaNeta / n).toFixed(2);
-    const derParcial = +(poliza.derechos  / n).toFixed(2);
-    const ivaParcial = +((pnParcial + derParcial) * (iva / 100)).toFixed(2);
-    const total      = +(pnParcial + derParcial + ivaParcial).toFixed(2);
-    return { primaNeta: pnParcial, gastosExpedicion: derParcial, iva: ivaParcial, total, importe: total };
-  }
-
-  // PROGRESIVO: cuota.monto es el pago total (PT); se desglosa hacia atrás
-  if (poliza.reglaPago === "PROGRESIVO" && poliza.primaBase) {
-    const pt       = cuota.monto;
-    const subtot   = +(pt / (1 + iva / 100)).toFixed(2);
-    const emision  = +(poliza.derechos / n).toFixed(2);
-    const pn       = +(subtot - emision).toFixed(2);
-    const ivaCalc  = +(subtot * (iva / 100)).toFixed(2);
-    return { primaNeta: pn, gastosExpedicion: emision, iva: ivaCalc, total: pt, importe: pt };
-  }
-
-  // ESTANDAR: cuota 1 lleva todos los gastos de expedición e IVA
-  if (cuota.num === 1) {
-    const total = cuota.monto + poliza.derechos + poliza.iva;
-    return { primaNeta: cuota.monto, gastosExpedicion: poliza.derechos, iva: poliza.iva, total, importe: total };
-  }
-  return { primaNeta: cuota.monto, gastosExpedicion: 0, iva: 0, total: cuota.monto, importe: cuota.monto };
-}
-
-function abrirRecibo(poliza, cuota, operador) {
-  const hoy = new Date().toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-  const importes = calcularImportesRecibo(poliza, cuota);
-  const cl = poliza.clienteData ?? {};
-  const ultimaCuota = poliza.cuotas
-    ? [...poliza.cuotas].sort((a, b) => b.num - a.num)[0]
-    : null;
-  const vencPGracia =
-    ultimaCuota?.vigencia ?? ultimaCuota?.vto ?? isoAMX(poliza.fechaFin);
-  const saldo = (poliza.cuotas ?? [])
-    .filter((c) => c.num > cuota.num)
-    .reduce((s, c) => s + c.monto, 0);
-  const siguienteCuota = (poliza.cuotas ?? []).find((c) => c.num === cuota.num + 1);
-  const vigenciaSiguiente = siguienteCuota?.vigencia ?? siguienteCuota?.vto ?? "";
-
-  const cuotasOrdenadas = [...(poliza.cuotas ?? [])].sort((a, b) => a.num - b.num);
-  const idxActual = cuotasOrdenadas.findIndex((c) => c.num === cuota.num);
-  const esUltimaCuota = idxActual === cuotasOrdenadas.length - 1;
-  const periodoDesde =
-    idxActual === 0
-      ? isoAMX(poliza.fechaInicio)
-      : (cuotasOrdenadas[idxActual - 1].vigencia ?? cuotasOrdenadas[idxActual - 1].vto ?? "");
-  const periodoHasta = esUltimaCuota
-    ? isoAMX(poliza.fechaFin)
-    : (cuota.vigencia ?? cuota.vto ?? "");
-
-  const datos = {
-    constancia: poliza.id,
-    oficina: poliza.oficina,
-    noRecibo: cuota.id,
-    asegurado: poliza.asegurado,
-    calle: cl.calle ?? cl.direccion ?? "",
-    numExt: cl.numero_ext ?? "",
-    numInt: cl.numero_int ?? "",
-    colonia: cl.colonia ?? "",
-    municipio: cl.ciudad ?? "",
-    estado: cl.estado ?? "",
-    cp: cl.cp ?? "",
-    rfc: cl.rfc ?? "",
-    curp: cl.curp ?? "",
-    ...importes,
-    vencimiento: vencPGracia,
-    primaTotal: poliza.primaTotal,
-    saldo,
-    vtoActual: cuota.vigencia ?? cuota.vto,
-    vigenciaSiguiente,
-    periodoDesde,
-    periodoHasta,
-    pagoDe: cuota.num,
-    pagoTotal: poliza.formaPago === "CONTADO" ? 1 : 4,
-    formaPago: poliza.formaPago,
-    fechaRecibo: hoy,
-    vigenciaDesde: poliza.fechaInicio
-      ? `${isoAMX(poliza.fechaInicio)} ${poliza.horaInicio}`
-      : "",
-    vigenciaHasta: poliza.fechaFin
-      ? `${isoAMXCorto(poliza.fechaFin)} ${poliza.horaFin}`
-      : "",
-    conducto: poliza.conducto,
-    operador: operador ?? "",
-  };
-  supabase.from("pagos").update({ descargado: true }).eq("id", cuota.id).then();
-  localStorage.setItem("recibo_data", JSON.stringify(datos));
-  window.open("/gaman/recibo-preview", "_blank");
-}
 
 // Devuelve true si la fecha "dd/mm/yyyy" corresponde al mes/año dados
 function enMes(fechaDDMMYYYY, anio, mes) {

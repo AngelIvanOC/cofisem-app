@@ -1,8 +1,13 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
-import { Check, Loader2, Search } from "lucide-react";
+import { Check, Clock, Loader2, Receipt, Search, X } from "lucide-react";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
+import {
+  fetchTodasVersionesConfig,
+  configParaFecha,
+} from "../../services/configuracion";
+import { mapCuota, construirPolizaRecibo, abrirRecibo } from "../../utils/recibo";
 
 // Puntos de progreso de cuotas
 function CuotaDots({ numCuota, totalCuotas, estatus }) {
@@ -32,6 +37,158 @@ function fmtFecha(str) {
   });
 }
 
+function estatusEfectivoCuota(cuota) {
+  if (cuota.estatus === "PAGADO") return "PAGADO";
+  if (cuota.estatus === "ADEUDO") return "ADEUDO";
+  const vto = new Date(cuota.vto.split("/").reverse().join("-") + "T12:00:00");
+  if (vto < new Date()) return "VENCIDO";
+  return "PENDIENTE";
+}
+
+function CuotaBadge({ cuota }) {
+  const est = estatusEfectivoCuota(cuota);
+  const map = {
+    PAGADO: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    ADEUDO: "bg-amber-50 text-amber-700 border-amber-200",
+    VENCIDO: "bg-red-50 text-red-600 border-red-200",
+    PENDIENTE: "bg-gray-100 text-gray-500 border-gray-200",
+  };
+  const labels = {
+    PAGADO: "Pagado",
+    ADEUDO: "Por aplicar",
+    VENCIDO: "Vencida",
+    PENDIENTE: "Pendiente",
+  };
+  return (
+    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${map[est]}`}>
+      {labels[est]}
+    </span>
+  );
+}
+
+// ── Modal: cuotas de una póliza (se abre desde el botón "Recibo") ──
+function ModalCuotas({ poliza, onClose, onAplicar, onVerRecibo, aplicando, generandoRecibo }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.55)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+          <div>
+            <h2 className="text-sm font-bold text-[#13193a]">{poliza.asegurado}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Póliza <span className="font-mono">{poliza.id}</span> · {poliza.oficina}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-2">
+          {poliza.cuotas === null ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
+            </div>
+          ) : (
+            poliza.cuotas.map((c) => {
+              const est = estatusEfectivoCuota(c);
+              const mostrarRecibo = c.estatus === "PAGADO" || c.estatus === "ADEUDO";
+              return (
+                <div
+                  key={c.id}
+                  className={[
+                    "flex items-center justify-between gap-3 p-4 rounded-2xl border transition-all",
+                    c.estatus === "PAGADO"
+                      ? "bg-emerald-50/50 border-emerald-100"
+                      : c.estatus === "ADEUDO"
+                        ? "bg-amber-50/50 border-amber-100"
+                        : est === "VENCIDO"
+                          ? "bg-red-50/50 border-red-100"
+                          : "bg-white border-gray-200",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={[
+                        "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
+                        c.estatus === "PAGADO"
+                          ? "bg-emerald-500 text-white"
+                          : c.estatus === "ADEUDO"
+                            ? "bg-amber-500 text-white"
+                            : est === "VENCIDO"
+                              ? "bg-red-500 text-white"
+                              : "bg-gray-100 text-gray-600",
+                      ].join(" ")}
+                    >
+                      {c.estatus === "PAGADO" ? (
+                        <Check className="w-4 h-4" />
+                      ) : c.estatus === "ADEUDO" ? (
+                        <Clock className="w-4 h-4" />
+                      ) : (
+                        c.num
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[#13193a]">${c.monto.toFixed(2)}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <p className="text-xs text-gray-400">Vto. {c.vigencia ?? c.vto}</p>
+                        {(c.estatus === "PAGADO" || c.estatus === "ADEUDO") && c.fechaPago && (
+                          <>
+                            <span className="text-gray-300">·</span>
+                            <p className="text-xs text-blue-600">Recibido {c.fechaPago}</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <CuotaBadge cuota={c} />
+                    {c.estatus === "ADEUDO" && (
+                      <button
+                        onClick={() => onAplicar(c.id)}
+                        disabled={aplicando === c.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-all"
+                      >
+                        {aplicando === c.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Check className="w-3.5 h-3.5" />
+                        }
+                        Aplicar
+                      </button>
+                    )}
+                    {mostrarRecibo && (
+                      <button
+                        onClick={() => onVerRecibo(c)}
+                        disabled={generandoRecibo === c.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-50 transition-all"
+                      >
+                        {generandoRecibo === c.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Receipt className="w-3.5 h-3.5" />
+                        }
+                        Recibo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPagos({ usuario }) {
   const [pagos,      setPagos]      = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -39,6 +196,9 @@ export default function AdminPagos({ usuario }) {
   const [busqueda,   setBusqueda]   = useState("");
   const [filtroOf,   setFiltroOf]   = useState("Todas");
   const [filtroEst,  setFiltroEst]  = useState("ADEUDO");
+  const [polizaSel,  setPolizaSel]  = useState(null);
+  const [aplicandoModal,   setAplicandoModal]   = useState(null);
+  const [generandoRecibo,  setGenerandoRecibo]  = useState(null);
 
   const cargar = async () => {
     setLoading(true);
@@ -67,6 +227,7 @@ export default function AdminPagos({ usuario }) {
             : "—";
           return {
             id:          a.id,
+            polizaId:    a.poliza_id,
             constancia:  pol?.constancia || pol?.numero_poliza || "—",
             asegurado:   pol ? `${pol.clientes?.nombre ?? ""} ${pol.clientes?.apellido ?? ""}`.trim() : "—",
             oficina:     pol?.oficinas?.nombre ?? "—",
@@ -103,6 +264,98 @@ export default function AdminPagos({ usuario }) {
       console.error(e);
     } finally {
       setProcesando(null);
+    }
+  };
+
+  // Se dispara desde el botón "Recibo" de una fila: trae la póliza completa
+  // y todas sus cuotas, y abre el modal (igual que "Ver cuotas" en operador).
+  const verCuotas = async (pago) => {
+    setPolizaSel({
+      polizaId: pago.polizaId,
+      id: pago.constancia,
+      asegurado: pago.asegurado,
+      oficina: pago.oficina,
+      cuotas: null,
+    });
+    try {
+      const [versionesConfig, { data: pol, error: errPol }, { data: cuotasDB, error: errCuotas }] = await Promise.all([
+        fetchTodasVersionesConfig(),
+        supabase
+          .from("polizas")
+          .select(`
+            id, constancia, numero_poliza, forma_pago,
+            fecha_inicio, fecha_fin, hora_inicio, hora_fin, estatus,
+            clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
+            oficinas(id, nombre),
+            vendedores(nombre, apellido, codigo),
+            coberturas(id, nombre, prima_neta, prima_total, regla_pago, prima_base)
+          `)
+          .eq("id", pago.polizaId)
+          .single(),
+        supabase
+          .from("pagos")
+          .select("*, recibido_por:usuarios!pagos_recibido_por_fkey(id_muestra)")
+          .eq("poliza_id", pago.polizaId)
+          .order("fecha_vencimiento", { ascending: true }),
+      ]);
+      if (errPol) throw errPol;
+      if (errCuotas) throw errCuotas;
+
+      const cfg = configParaFecha(versionesConfig, pol.fecha_inicio);
+      const cuotas = (cuotasDB ?? []).map((c, idx) => ({
+        ...mapCuota(c, idx),
+        operadorCodigo: c.recibido_por?.id_muestra ?? "",
+      }));
+
+      setPolizaSel((prev) =>
+        prev?.polizaId === pago.polizaId
+          ? { ...construirPolizaRecibo(pol, cfg), cuotas }
+          : prev,
+      );
+    } catch (e) {
+      console.error(e);
+      alert("Error al cargar las cuotas: " + e.message);
+      setPolizaSel(null);
+    }
+  };
+
+  const aplicarDesdeModal = async (cuotaId) => {
+    setAplicandoModal(cuotaId);
+    try {
+      const { error } = await supabase
+        .from("pagos")
+        .update({ estatus: "PAGADO", aplicado_por: usuario?.id ?? null })
+        .eq("id", cuotaId);
+      if (error) throw error;
+      await cargar();
+      if (polizaSel) {
+        const { data: cuotasDB, error: errCuotas } = await supabase
+          .from("pagos")
+          .select("*, recibido_por:usuarios!pagos_recibido_por_fkey(id_muestra)")
+          .eq("poliza_id", polizaSel.polizaId)
+          .order("fecha_vencimiento", { ascending: true });
+        if (errCuotas) throw errCuotas;
+        const cuotas = (cuotasDB ?? []).map((c, idx) => ({
+          ...mapCuota(c, idx),
+          operadorCodigo: c.recibido_por?.id_muestra ?? "",
+        }));
+        setPolizaSel((prev) => (prev ? { ...prev, cuotas } : prev));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error al aplicar el pago: " + e.message);
+    } finally {
+      setAplicandoModal(null);
+    }
+  };
+
+  const verRecibo = (cuota) => {
+    if (!polizaSel) return;
+    setGenerandoRecibo(cuota.id);
+    try {
+      abrirRecibo(polizaSel, cuota, cuota.operadorCodigo);
+    } finally {
+      setGenerandoRecibo(null);
     }
   };
 
@@ -218,7 +471,7 @@ export default function AdminPagos({ usuario }) {
                 </tr>
               ) : filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-sm text-gray-400">
+                  <td colSpan={9} className="text-center py-12 text-sm text-gray-400">
                     No se encontraron pagos.
                   </td>
                 </tr>
@@ -265,19 +518,28 @@ export default function AdminPagos({ usuario }) {
                       </span>
                     </td>
                     <td className="px-5 py-2">
-                      {p.estatus === "ADEUDO" && (
+                      <div className="flex items-center gap-2">
+                        {p.estatus === "ADEUDO" && (
+                          <button
+                            onClick={() => aplicar(p.id)}
+                            disabled={procesando === p.id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-all"
+                          >
+                            {procesando === p.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Check className="w-3.5 h-3.5" />
+                            }
+                            Aplicar
+                          </button>
+                        )}
                         <button
-                          onClick={() => aplicar(p.id)}
-                          disabled={procesando === p.id}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-all"
+                          onClick={() => verCuotas(p)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-all"
                         >
-                          {procesando === p.id
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <Check className="w-3.5 h-3.5" />
-                          }
-                          Aplicar
+                          <Receipt className="w-3.5 h-3.5" />
+                          Recibo
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -294,6 +556,17 @@ export default function AdminPagos({ usuario }) {
           onPage={setPage}
         />
       </div>
+
+      {polizaSel && (
+        <ModalCuotas
+          poliza={polizaSel}
+          onClose={() => setPolizaSel(null)}
+          onAplicar={aplicarDesdeModal}
+          onVerRecibo={verRecibo}
+          aplicando={aplicandoModal}
+          generandoRecibo={generandoRecibo}
+        />
+      )}
     </div>
   );
 }
