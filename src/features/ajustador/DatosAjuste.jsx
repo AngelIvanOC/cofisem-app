@@ -7,7 +7,7 @@ import { Campo, CampoSistema, CampoSelect, Seccion, Sep } from "./shared";
 import { CAUSAS, CIRCUNSTANCIAS } from "../cabinero/constants/catalogos";
 import { guardarDatosAjuste, fetchTiemposSiniestro, horaLocal } from "../../services/siniestros";
 import { subirCroquis } from "../../services/evidencias";
-import CroquisEditor from "./croquis/CroquisEditor";
+import CroquisSection from "./croquis/CroquisSection";
 
 const CULPABILIDAD_OPTS = ["Culpable", "Compartida", "Dudosa", "No culpable"];
 const RECUPERACION_OPTS = ["Si", "No", "Probable"];
@@ -170,7 +170,7 @@ export default function DatosAjuste({ siniestro, onSiguiente }) {
       </Seccion>
 
       <Seccion titulo="Croquis del Accidente">
-        <CroquisEditor onDataUrlChange={setCroquisDataUrl} />
+        <CroquisSection croquisDataUrl={croquisDataUrl} onDataUrlChange={setCroquisDataUrl} />
       </Seccion>
 
       <div className="pt-2 pb-6 space-y-2">

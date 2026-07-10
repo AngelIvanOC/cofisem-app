@@ -57,4 +57,5 @@ export const CATALOGO_POR_TIPO = Object.fromEntries(
 export const PLANTILLAS = [
   { id: "cruce", label: "Cruce" },
   { id: "recta", label: "Recta" },
+  { id: "original", label: "Mi diseño" },
 ];

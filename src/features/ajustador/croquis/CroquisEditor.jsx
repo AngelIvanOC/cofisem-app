@@ -2,17 +2,16 @@
 // src/features/ajustador/croquis/CroquisEditor.jsx
 // Editor de croquis por arrastre de iconos (vehículos, señales,
 // elementos de vía y efectos) sobre una plantilla esquemática.
-// Reemplaza el dibujo libre a mano alzada.
+// Llena por completo el contenedor donde se monta (pensado para
+// usarse dentro de un modal de pantalla completa) y no gestiona
+// su propia persistencia: expone exportPNG() por ref.
 // ============================================================
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Stage, Layer, Transformer, Group } from "react-konva";
 import { Trash2, Copy, RotateCcw, RotateCw, Eraser } from "lucide-react";
 import { CATEGORIAS, CATALOGO_POR_TIPO, PLANTILLAS } from "./iconCatalog";
 import { ICON_COMPONENTS } from "./CroquisIcons";
 import { Plantilla, RosaDeLosVientos } from "./CroquisPlantillas";
-
-const DESIGN_W = 720;
-const DESIGN_H = 420;
 
 function nuevoId(tipo) {
   return `${tipo}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -46,22 +45,16 @@ function ElementoCroquis({ el, isSelected, onSelect, onChange, shapeRef }) {
       }}
     >
       <Icono color={el.color} texto={el.texto} />
-      {isSelected && (
-        <Group listening={false}>
-          {/* halo de selección sutil */}
-        </Group>
-      )}
+      {isSelected && <Group listening={false} />}
     </Group>
   );
 }
 
-export default function CroquisEditor({ onDataUrlChange }) {
-  const [plantilla, setPlantilla] = useState("cruce");
-  const [elements, setElements] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [norte, setNorte] = useState(0);
-  const [containerWidth, setContainerWidth] = useState(DESIGN_W);
-  const [guardadoOk, setGuardadoOk] = useState(false);
+const CroquisEditor = forwardRef(function CroquisEditor(
+  { plantilla, setPlantilla, norte, setNorte, elements, setElements, selectedId, setSelectedId },
+  ref
+) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
 
   const containerRef = useRef(null);
   const stageRef = useRef(null);
@@ -72,14 +65,12 @@ export default function CroquisEditor({ onDataUrlChange }) {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
-      const w = entries[0].contentRect.width;
-      if (w > 0) setContainerWidth(w);
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) setSize({ w: width, h: height });
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  const scale = containerWidth / DESIGN_W;
 
   useEffect(() => {
     const tr = trRef.current;
@@ -89,19 +80,31 @@ export default function CroquisEditor({ onDataUrlChange }) {
     tr.getLayer()?.batchDraw();
   }, [selectedId, elements]);
 
+  useImperativeHandle(ref, () => ({
+    exportPNG: () =>
+      new Promise((resolve) => {
+        setSelectedId(null);
+        requestAnimationFrame(() => {
+          resolve(stageRef.current.toDataURL({ pixelRatio: 2 }));
+        });
+      }),
+  }));
+
   const seleccionado = elements.find((e) => e.id === selectedId) ?? null;
   const catalogoSeleccionado = seleccionado ? CATALOGO_POR_TIPO[seleccionado.tipo] : null;
 
   const agregarElemento = useCallback((item) => {
     const id = nuevoId(item.tipo);
+    const cx = size.w / 2 || 300;
+    const cy = size.h / 2 || 200;
     const cascade = (elements.length % 6) * 16;
     setElements((els) => [
       ...els,
       {
         id,
         tipo: item.tipo,
-        x: DESIGN_W / 2 - 60 + cascade,
-        y: DESIGN_H / 2 - 40 + cascade,
+        x: cx - 60 + cascade,
+        y: cy - 40 + cascade,
         rotation: 0,
         scaleX: 1,
         scaleY: 1,
@@ -110,28 +113,24 @@ export default function CroquisEditor({ onDataUrlChange }) {
       },
     ]);
     setSelectedId(id);
-    setGuardadoOk(false);
-  }, [elements.length]);
+  }, [elements.length, size.w, size.h, setElements, setSelectedId]);
 
   const actualizarElemento = useCallback((actualizado) => {
     setElements((els) => els.map((e) => (e.id === actualizado.id ? actualizado : e)));
-    setGuardadoOk(false);
-  }, []);
+  }, [setElements]);
 
   const eliminarSeleccionado = useCallback(() => {
     if (!selectedId) return;
     setElements((els) => els.filter((e) => e.id !== selectedId));
     setSelectedId(null);
-    setGuardadoOk(false);
-  }, [selectedId]);
+  }, [selectedId, setElements, setSelectedId]);
 
   const duplicarSeleccionado = useCallback(() => {
     if (!seleccionado) return;
     const id = nuevoId(seleccionado.tipo);
     setElements((els) => [...els, { ...seleccionado, id, x: seleccionado.x + 20, y: seleccionado.y + 20 }]);
     setSelectedId(id);
-    setGuardadoOk(false);
-  }, [seleccionado]);
+  }, [seleccionado, setElements, setSelectedId]);
 
   const cambiarColorSeleccionado = useCallback((color) => {
     if (!seleccionado) return;
@@ -146,8 +145,6 @@ export default function CroquisEditor({ onDataUrlChange }) {
   const limpiarTodo = () => {
     setElements([]);
     setSelectedId(null);
-    setGuardadoOk(false);
-    onDataUrlChange(null);
   };
 
   const deseleccionarSiFondo = (e) => {
@@ -155,19 +152,12 @@ export default function CroquisEditor({ onDataUrlChange }) {
     if (clickedOnBackground) setSelectedId(null);
   };
 
-  const guardar = () => {
-    setSelectedId(null);
-    requestAnimationFrame(() => {
-      const uri = stageRef.current.toDataURL({ pixelRatio: 2 });
-      onDataUrlChange(uri);
-      setGuardadoOk(true);
-    });
-  };
+  const usaPlantillaOriginal = plantilla === "original";
 
   return (
-    <div className="rounded-2xl border-2 border-gray-200 overflow-hidden bg-white">
+    <div className="h-full w-full flex flex-col bg-white">
       {/* Plantilla + norte */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 shrink-0">
         <div className="flex gap-1.5">
           {PLANTILLAS.map((p) => (
             <button
@@ -183,126 +173,123 @@ export default function CroquisEditor({ onDataUrlChange }) {
           ))}
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-[11px] text-gray-400 font-semibold mr-1">Norte</span>
-          <button type="button" onClick={() => setNorte((n) => n - 15)}
-            className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500">
-            <RotateCcw size={14} />
-          </button>
-          <button type="button" onClick={() => setNorte((n) => n + 15)}
-            className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500">
-            <RotateCw size={14} />
-          </button>
+          {!usaPlantillaOriginal && (
+            <>
+              <span className="text-[11px] text-gray-400 font-semibold mr-1">Norte</span>
+              <button type="button" onClick={() => setNorte(norte - 15)}
+                className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500">
+                <RotateCcw size={14} />
+              </button>
+              <button type="button" onClick={() => setNorte(norte + 15)}
+                className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500">
+                <RotateCw size={14} />
+              </button>
+            </>
+          )}
+          {elements.length > 0 && (
+            <button type="button" onClick={limpiarTodo}
+              className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-400 ml-1">
+              <Eraser size={14} />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Categorías */}
       <CategoriasYPaleta onAgregar={agregarElemento} />
 
-      {/* Lienzo */}
-      <div ref={containerRef} className="relative w-full bg-gray-100" style={{ height: DESIGN_H * scale }}>
-        <Stage
-          ref={stageRef}
-          width={DESIGN_W * scale}
-          height={DESIGN_H * scale}
-          scaleX={scale}
-          scaleY={scale}
-          onMouseDown={deseleccionarSiFondo}
-          onTouchStart={deseleccionarSiFondo}
-        >
-          <Layer>
-            <Plantilla tipo={plantilla} w={DESIGN_W} h={DESIGN_H} />
-            <RosaDeLosVientos x={DESIGN_W - 44} y={44} rotation={norte} />
-          </Layer>
-          <Layer>
-            {elements.map((el) => (
-              <ElementoCroquis
-                key={el.id}
-                el={el}
-                isSelected={el.id === selectedId}
-                onSelect={() => setSelectedId(el.id)}
-                onChange={actualizarElemento}
-                shapeRef={(node) => { shapeRefs.current[el.id] = node; }}
-              />
-            ))}
-            <Transformer
-              ref={trRef}
-              keepRatio
-              rotateEnabled
-              enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
-              boundBoxFunc={(oldBox, newBox) => (newBox.width < 10 || newBox.height < 10 ? oldBox : newBox)}
-            />
-          </Layer>
-        </Stage>
-      </div>
-
-      {/* Panel del elemento seleccionado */}
-      {seleccionado && (
-        <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 border-t border-gray-200 flex-wrap">
-          <span className="text-xs font-bold text-gray-500 mr-1">{catalogoSeleccionado?.label}</span>
-
-          {seleccionado.tipo === "texto" && (
-            <input
-              type="text"
-              value={seleccionado.texto ?? ""}
-              onChange={(e) => cambiarTextoSeleccionado(e.target.value)}
-              className="flex-1 min-w-[120px] px-2 py-1 rounded-lg border border-gray-200 text-xs"
-              placeholder="Texto del croquis..."
-            />
-          )}
-
-          {catalogoSeleccionado?.colores && (
-            <div className="flex gap-1">
-              {catalogoSeleccionado.colores.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => cambiarColorSeleccionado(c)}
-                  className={`w-6 h-6 rounded-full border-2 ${seleccionado.color === c ? "border-[#13193a]" : "border-white"}`}
-                  style={{ backgroundColor: c, boxShadow: "0 0 0 1px #e5e7eb" }}
+      {/* Lienzo — ocupa todo el espacio restante, sin scroll */}
+      <div ref={containerRef} className="relative w-full flex-1 min-h-0 bg-gray-100 overflow-hidden">
+        {size.w > 0 && (
+          <Stage
+            ref={stageRef}
+            width={size.w}
+            height={size.h}
+            onMouseDown={deseleccionarSiFondo}
+            onTouchStart={deseleccionarSiFondo}
+          >
+            <Layer>
+              <Plantilla tipo={plantilla} w={size.w} h={size.h} />
+              {!usaPlantillaOriginal && <RosaDeLosVientos x={size.w - 44} y={44} rotation={norte} />}
+            </Layer>
+            <Layer>
+              {elements.map((el) => (
+                <ElementoCroquis
+                  key={el.id}
+                  el={el}
+                  isSelected={el.id === selectedId}
+                  onSelect={() => setSelectedId(el.id)}
+                  onChange={actualizarElemento}
+                  shapeRef={(node) => { shapeRefs.current[el.id] = node; }}
                 />
               ))}
+              <Transformer
+                ref={trRef}
+                keepRatio
+                rotateEnabled
+                enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
+                boundBoxFunc={(oldBox, newBox) => (newBox.width < 10 || newBox.height < 10 ? oldBox : newBox)}
+              />
+            </Layer>
+          </Stage>
+        )}
+
+        {/* Panel del elemento seleccionado — flota sobre el lienzo, nunca
+            cambia el tamaño medido del contenedor (evita el "brinco" al
+            seleccionar/deseleccionar). */}
+        {seleccionado && (
+          <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center gap-2 px-3 py-2.5 bg-white/95 backdrop-blur-sm border-t border-gray-200 flex-wrap shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
+            <span className="text-xs font-bold text-gray-500 mr-1">{catalogoSeleccionado?.label}</span>
+
+            {seleccionado.tipo === "texto" && (
+              <input
+                type="text"
+                value={seleccionado.texto ?? ""}
+                onChange={(e) => cambiarTextoSeleccionado(e.target.value)}
+                className="flex-1 min-w-[120px] px-2 py-1 rounded-lg border border-gray-200 text-xs"
+                placeholder="Texto del croquis..."
+              />
+            )}
+
+            {catalogoSeleccionado?.colores && (
+              <div className="flex gap-1">
+                {catalogoSeleccionado.colores.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => cambiarColorSeleccionado(c)}
+                    className={`w-6 h-6 rounded-full border-2 ${seleccionado.color === c ? "border-[#13193a]" : "border-white"}`}
+                    style={{ backgroundColor: c, boxShadow: "0 0 0 1px #e5e7eb" }}
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-1 ml-auto">
+              <button type="button" onClick={duplicarSeleccionado}
+                className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500">
+                <Copy size={14} />
+              </button>
+              <button type="button" onClick={eliminarSeleccionado}
+                className="p-1.5 rounded-lg bg-white border border-red-200 text-red-500">
+                <Trash2 size={14} />
+              </button>
             </div>
-          )}
-
-          <div className="flex gap-1 ml-auto">
-            <button type="button" onClick={duplicarSeleccionado}
-              className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500">
-              <Copy size={14} />
-            </button>
-            <button type="button" onClick={eliminarSeleccionado}
-              className="p-1.5 rounded-lg bg-white border border-red-200 text-red-500">
-              <Trash2 size={14} />
-            </button>
           </div>
-        </div>
-      )}
-
-      {/* Guardar / limpiar */}
-      <div className="flex items-center gap-2 p-3">
-        <button
-          type="button"
-          onClick={guardar}
-          className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-[#13193a] text-white"
-        >
-          {guardadoOk ? "Croquis guardado ✓" : "Guardar croquis"}
-        </button>
-        {elements.length > 0 && (
-          <button type="button" onClick={limpiarTodo}
-            className="p-2.5 rounded-xl border border-gray-200 text-gray-400">
-            <Eraser size={16} />
-          </button>
         )}
       </div>
     </div>
   );
-}
+});
+
+export default CroquisEditor;
 
 function CategoriasYPaleta({ onAgregar }) {
   const [categoriaActiva, setCategoriaActiva] = useState(CATEGORIAS[0].id);
   const categoria = CATEGORIAS.find((c) => c.id === categoriaActiva);
 
   return (
-    <div className="border-b border-gray-200">
+    <div className="border-b border-gray-200 shrink-0">
       <div className="flex gap-1 px-2 py-2 overflow-x-auto bg-white">
         {CATEGORIAS.map((c) => (
           <button

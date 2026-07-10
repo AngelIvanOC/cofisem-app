@@ -3,7 +3,9 @@
 // Fondo esquemático del croquis (vialidad) dibujado en vectores,
 // más la rosa de los vientos orientable ("Indique el Norte").
 // ============================================================
-import { Group, Rect, Line, Circle, Text } from "react-konva";
+import { Group, Rect, Line, Circle, Text, Image as KonvaImage } from "react-konva";
+import useImage from "use-image";
+import croquisOriginalSrc from "../../../assets/croquisOriginal.png";
 
 const ASFALTO = "#cbd5e1";
 const BORDE = "#94a3b8";
@@ -60,7 +62,33 @@ function PlantillaRecta({ w, h }) {
   );
 }
 
+// Imagen original del croquis proporcionada por el usuario. Es una tira
+// panorámica (mucho más ancha que alta), así que se rota 90° para que
+// ocupe el alto de la pantalla en vez de aparecer como una franja
+// delgada — ajuste "contain" sobre las dimensiones ya rotadas, sin
+// recorte ni distorsión.
+function PlantillaOriginal({ w, h }) {
+  const [img] = useImage(croquisOriginalSrc);
+  return (
+    <Group listening={false} name="plantilla-fondo">
+      <Rect x={0} y={0} width={w} height={h} fill="#f8fafc" />
+      {img && (() => {
+        // Tras rotar 90°, el ancho de la imagen pasa a ocupar el alto
+        // del lienzo y viceversa — por eso la comparación va cruzada.
+        const escala = Math.min(h / img.width, w / img.height);
+        const iw = img.width * escala, ih = img.height * escala;
+        return (
+          <Group x={w / 2} y={h / 2} rotation={90}>
+            <KonvaImage image={img} x={-iw / 2} y={-ih / 2} width={iw} height={ih} />
+          </Group>
+        );
+      })()}
+    </Group>
+  );
+}
+
 export function Plantilla({ tipo, w, h }) {
+  if (tipo === "original") return <PlantillaOriginal w={w} h={h} />;
   return tipo === "recta" ? <PlantillaRecta w={w} h={h} /> : <PlantillaCruce w={w} h={h} />;
 }
 
