@@ -53,6 +53,7 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
     .select(`
       id, numero_siniestro, estatus, ubicacion, created_at,
       fecha_siniestro, hora_siniestro, tipo_siniestro, circunstancia, descripcion,
+      croquis_data,
       polizas(
         id, constancia, numero_poliza, placas, num_serie, anio, fecha_fin,
         clientes(nombre, apellido, rfc, curp, telefono, email,
@@ -126,6 +127,7 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
       causaReportada:          s.tipo_siniestro  ?? null,
       circunstanciaReportada:  s.circunstancia   ?? null,
       descripcionReportada:    s.descripcion     ?? null,
+      croquisData:             s.croquis_data    ?? null,
       tiempo:    tiempoRelativo(s.created_at),
       estatus:   s.estatus ?? "Asignado",
       poliza:    polizaNum,

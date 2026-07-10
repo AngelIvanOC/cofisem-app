@@ -84,6 +84,28 @@ function ImgBox({ rect, url, placeholder }) {
     </View>
   );
 }
+// react-pdf con solo maxWidth/maxHeight no hace "contain" limpio: llena
+// el ancho y recorta el sobrante de alto en vez de encajar la imagen
+// completa. Para el croquis eso puede cortar un vehículo que el
+// ajustador dejó cerca del borde, así que aquí calculamos el ancho/alto
+// exactos (con la proporción real de la imagen) para que quepa completa.
+function tamanoContain(boxW, boxH, aspecto) {
+  if (!aspecto) return { width: boxW, height: boxH };
+  return aspecto > boxW / boxH
+    ? { width: boxW, height: boxW / aspecto }
+    : { width: boxH * aspecto, height: boxH };
+}
+function ImgBoxContain({ rect, url, aspecto, placeholder }) {
+  if (!rect) return null;
+  const { width, height } = tamanoContain(rect.w - 4, rect.h - 4, aspecto);
+  return (
+    <View style={boxStyle(rect, { alignItems: "center", justifyContent: "center" })}>
+      {url
+        ? <Image src={url} style={{ width, height }} />
+        : placeholder ? <Text style={{ fontSize: 4.6, color: "#999999" }}>{placeholder}</Text> : null}
+    </View>
+  );
+}
 function Check({ rect, active, label }) {
   if (!rect) return null;
   return (
@@ -385,7 +407,7 @@ function ReversoOverlay({ d }) {
       {V(38, 10, d.ajuste.objetoGarantiaImporte)}
       <TextBox rect={bbox(RC, 40, 0, 45, 0)} value={d.ajuste.conclusiones} />
       {d.croquisUrl ? (
-        <ImgBox rect={R(RC, 47, 0)} url={d.croquisUrl} />
+        <ImgBoxContain rect={R(RC, 47, 0)} url={d.croquisUrl} aspecto={d.croquisAspecto} />
       ) : (
         <>
           <View style={boxStyle(R(RC, 47, 0))} />

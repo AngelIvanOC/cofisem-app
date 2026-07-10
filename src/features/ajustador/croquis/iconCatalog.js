@@ -15,6 +15,7 @@ export const CATEGORIAS = [
       { tipo: "camion", label: "Camión de carga", colores: ["#4b5563", "#1d4ed8", "#b91c1c"] },
       { tipo: "autobus", label: "Autobús", colores: ["#0ea5e9", "#16a34a", "#f97316"] },
       { tipo: "ambulancia", label: "Ambulancia", colores: null },
+      { tipo: "taxi", label: "Taxi", colores: null },
     ],
   },
   {
@@ -53,9 +54,3 @@ export const CATEGORIAS = [
 export const CATALOGO_POR_TIPO = Object.fromEntries(
   CATEGORIAS.flatMap((cat) => cat.items.map((item) => [item.tipo, item]))
 );
-
-export const PLANTILLAS = [
-  { id: "cruce", label: "Cruce" },
-  { id: "recta", label: "Recta" },
-  { id: "original", label: "Mi diseño" },
-];

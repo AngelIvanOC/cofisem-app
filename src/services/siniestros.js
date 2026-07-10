@@ -452,6 +452,7 @@ export async function guardarDatosAjuste(siniestroId, datos) {
       objeto_garantia_importe: datos.objetoGarantiaImporte   || null,
       conclusiones:            datos.conclusiones            || null,
       croquis_url:             datos.croquisUrl              || null,
+      croquis_data:            datos.croquisData             || null,
     })
     .eq("id", siniestroId);
   if (error) throw error;

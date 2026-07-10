@@ -17,6 +17,21 @@ function fmtHora(t) {
   return t ? t.slice(0, 5) : null;
 }
 
+// react-pdf's <Image> con solo maxWidth/maxHeight NO hace un "contain"
+// limpio: prioriza llenar el ancho y recorta lo que sobra de alto (o
+// viceversa), en vez de encajar la imagen completa. Para el croquis eso
+// puede cortar un vehículo que el ajustador dejó cerca del borde — por
+// eso medimos la proporción real de la imagen aquí, para poder pedirle
+// al PDF un ancho/alto exactos que sí quepan completos en la caja.
+function medirAspecto(url) {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => resolve(img.naturalWidth / img.naturalHeight || null);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 const SEL_DECLARACION = `
   *,
   polizas(
@@ -46,6 +61,7 @@ export async function fetchDeclaracionData(siniestroId) {
     data.firma_ajustador_url ? getFirmaSignedUrl(data.firma_ajustador_url) : null,
     data.croquis_url         ? getFirmaSignedUrl(data.croquis_url)         : null,
   ]);
+  const croquisAspecto = croquisUrl ? await medirAspecto(croquisUrl) : null;
 
   const terceros = await Promise.all(
     (data.siniestros_terceros ?? []).map(async (t) => ({
@@ -54,7 +70,7 @@ export async function fetchDeclaracionData(siniestroId) {
     })),
   );
 
-  return { ...data, firmaAseguradoUrl, firmaAjustadorUrl, croquisUrl, terceros };
+  return { ...data, firmaAseguradoUrl, firmaAjustadorUrl, croquisUrl, croquisAspecto, terceros };
 }
 
 // ── 2. Da forma a los props que consume DeclaracionAccidentePDF ───
@@ -186,6 +202,7 @@ export function buildDeclaracionPDF(data) {
       conclusiones:          data.conclusiones,
     },
     croquisUrl:        data.croquisUrl,
+    croquisAspecto:    data.croquisAspecto,
     firmaAseguradoUrl: data.firmaAseguradoUrl,
     firmaAjustadorUrl: data.firmaAjustadorUrl,
     encuesta: encuesta && {

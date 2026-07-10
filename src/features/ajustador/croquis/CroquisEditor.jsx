@@ -8,10 +8,11 @@
 // ============================================================
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Stage, Layer, Transformer, Group } from "react-konva";
-import { Trash2, Copy, RotateCcw, RotateCw, Eraser } from "lucide-react";
-import { CATEGORIAS, CATALOGO_POR_TIPO, PLANTILLAS } from "./iconCatalog";
+import { Trash2, Copy, Plus } from "lucide-react";
+import { CATEGORIAS, CATALOGO_POR_TIPO } from "./iconCatalog";
 import { ICON_COMPONENTS } from "./CroquisIcons";
-import { Plantilla, RosaDeLosVientos } from "./CroquisPlantillas";
+import { Plantilla } from "./CroquisPlantillas";
+import "./forzarRotacionKonva";
 
 function nuevoId(tipo) {
   return `${tipo}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -51,10 +52,11 @@ function ElementoCroquis({ el, isSelected, onSelect, onChange, shapeRef }) {
 }
 
 const CroquisEditor = forwardRef(function CroquisEditor(
-  { plantilla, setPlantilla, norte, setNorte, elements, setElements, selectedId, setSelectedId },
+  { elements, setElements, selectedId, setSelectedId, rotadoPorCSS },
   ref
 ) {
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [paletaAbierta, setPaletaAbierta] = useState(false);
 
   const containerRef = useRef(null);
   const stageRef = useRef(null);
@@ -71,6 +73,13 @@ const CroquisEditor = forwardRef(function CroquisEditor(
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Le avisa al parche de forzarRotacionKonva.js si este Stage vive
+  // dentro del contenedor rotado 90° por CSS (ver CroquisSection), para
+  // que corrija el cálculo de la posición del puntero.
+  useEffect(() => {
+    if (stageRef.current) stageRef.current.__rotado90ViaCSS = !!rotadoPorCSS;
+  }, [rotadoPorCSS, size.w]);
 
   useEffect(() => {
     const tr = trRef.current;
@@ -90,24 +99,13 @@ const CroquisEditor = forwardRef(function CroquisEditor(
       }),
   }));
 
-  // El lienzo siempre dibuja su contenido en horizontal, sin importar
-  // cómo esté físicamente el dispositivo: si el contenedor real es más
-  // alto que ancho (teléfono parado), el contenido se rota 90° dentro
-  // del propio Konva (no con CSS) para que el arrastre/rotación/escala
-  // de los elementos se sigan calculando correctamente.
-  const rotado = size.h > size.w;
-  const logical = rotado ? { w: size.h, h: size.w } : { w: size.w, h: size.h };
-  const rotGroupProps = rotado
-    ? { x: size.w, y: 0, rotation: 90 }
-    : { x: 0, y: 0, rotation: 0 };
-
   const seleccionado = elements.find((e) => e.id === selectedId) ?? null;
   const catalogoSeleccionado = seleccionado ? CATALOGO_POR_TIPO[seleccionado.tipo] : null;
 
   const agregarElemento = useCallback((item) => {
     const id = nuevoId(item.tipo);
-    const cx = logical.w / 2 || 300;
-    const cy = logical.h / 2 || 200;
+    const cx = size.w / 2 || 300;
+    const cy = size.h / 2 || 200;
     const cascade = (elements.length % 6) * 16;
     setElements((els) => [
       ...els,
@@ -124,7 +122,8 @@ const CroquisEditor = forwardRef(function CroquisEditor(
       },
     ]);
     setSelectedId(id);
-  }, [elements.length, logical.w, logical.h, setElements, setSelectedId]);
+    setPaletaAbierta(false);
+  }, [elements.length, size.w, size.h, setElements, setSelectedId]);
 
   const actualizarElemento = useCallback((actualizado) => {
     setElements((els) => els.map((e) => (e.id === actualizado.id ? actualizado : e)));
@@ -153,63 +152,14 @@ const CroquisEditor = forwardRef(function CroquisEditor(
     actualizarElemento({ ...seleccionado, texto });
   }, [seleccionado, actualizarElemento]);
 
-  const limpiarTodo = () => {
-    setElements([]);
-    setSelectedId(null);
-  };
-
   const deseleccionarSiFondo = (e) => {
     const clickedOnBackground = e.target === e.target.getStage() || e.target.name?.() === "plantilla-fondo";
     if (clickedOnBackground) setSelectedId(null);
   };
 
-  const usaPlantillaOriginal = plantilla === "original";
-
   return (
     <div className="h-full w-full flex flex-col bg-white">
-      {/* Plantilla + norte */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 shrink-0">
-        <div className="flex gap-1.5">
-          {PLANTILLAS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setPlantilla(p.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                plantilla === p.id ? "bg-[#13193a] text-white" : "bg-white text-gray-500 border border-gray-200"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1">
-          {!usaPlantillaOriginal && (
-            <>
-              <span className="text-[11px] text-gray-400 font-semibold mr-1">Norte</span>
-              <button type="button" onClick={() => setNorte(norte - 15)}
-                className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500">
-                <RotateCcw size={14} />
-              </button>
-              <button type="button" onClick={() => setNorte(norte + 15)}
-                className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500">
-                <RotateCw size={14} />
-              </button>
-            </>
-          )}
-          {elements.length > 0 && (
-            <button type="button" onClick={limpiarTodo}
-              className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-400 ml-1">
-              <Eraser size={14} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Categorías */}
-      <CategoriasYPaleta onAgregar={agregarElemento} />
-
-      {/* Lienzo — ocupa todo el espacio restante, sin scroll */}
+      {/* Lienzo — ocupa todo el espacio disponible, sin scroll */}
       <div ref={containerRef} className="relative w-full flex-1 min-h-0 bg-gray-100 overflow-hidden">
         {size.w > 0 && (
           <Stage
@@ -220,31 +170,26 @@ const CroquisEditor = forwardRef(function CroquisEditor(
             onTouchStart={deseleccionarSiFondo}
           >
             <Layer>
-              <Group {...rotGroupProps}>
-                <Plantilla tipo={plantilla} w={logical.w} h={logical.h} />
-                {!usaPlantillaOriginal && <RosaDeLosVientos x={logical.w - 44} y={44} rotation={norte} />}
-              </Group>
+              <Plantilla w={size.w} h={size.h} />
             </Layer>
             <Layer>
-              <Group {...rotGroupProps}>
-                {elements.map((el) => (
-                  <ElementoCroquis
-                    key={el.id}
-                    el={el}
-                    isSelected={el.id === selectedId}
-                    onSelect={() => setSelectedId(el.id)}
-                    onChange={actualizarElemento}
-                    shapeRef={(node) => { shapeRefs.current[el.id] = node; }}
-                  />
-                ))}
-                <Transformer
-                  ref={trRef}
-                  keepRatio
-                  rotateEnabled
-                  enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
-                  boundBoxFunc={(oldBox, newBox) => (newBox.width < 10 || newBox.height < 10 ? oldBox : newBox)}
+              {elements.map((el) => (
+                <ElementoCroquis
+                  key={el.id}
+                  el={el}
+                  isSelected={el.id === selectedId}
+                  onSelect={() => setSelectedId(el.id)}
+                  onChange={actualizarElemento}
+                  shapeRef={(node) => { shapeRefs.current[el.id] = node; }}
                 />
-              </Group>
+              ))}
+              <Transformer
+                ref={trRef}
+                keepRatio
+                rotateEnabled
+                enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
+                boundBoxFunc={(oldBox, newBox) => (newBox.width < 10 || newBox.height < 10 ? oldBox : newBox)}
+              />
             </Layer>
           </Stage>
         )}
@@ -292,6 +237,39 @@ const CroquisEditor = forwardRef(function CroquisEditor(
             </div>
           </div>
         )}
+
+        {/* Botón "+" flotante — abre el panel de elementos. Oculto mientras
+            hay algo seleccionado (ese panel ya ocupa esa esquina). */}
+        {!seleccionado && !paletaAbierta && (
+          <button
+            type="button"
+            onClick={() => setPaletaAbierta(true)}
+            className="absolute left-4 bottom-4 z-20 w-14 h-14 rounded-full bg-[#13193a] text-white shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+          >
+            <Plus size={26} />
+          </button>
+        )}
+
+        {/* Telón de fondo del panel de elementos */}
+        <div
+          className={`absolute inset-0 z-20 bg-black/30 transition-opacity duration-300 ${
+            paletaAbierta ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+          onClick={() => setPaletaAbierta(false)}
+        />
+
+        {/* Panel deslizable de categorías + paleta */}
+        <div
+          className={`absolute left-0 right-0 bottom-0 z-30 bg-white rounded-t-2xl shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${
+            paletaAbierta ? "translate-y-0" : "translate-y-full pointer-events-none"
+          }`}
+          style={{ maxHeight: "48%" }}
+        >
+          <div className="flex justify-center pt-2 pb-1 shrink-0">
+            <div className="w-10 h-1 rounded-full bg-gray-300" />
+          </div>
+          <CategoriasYPaleta onAgregar={agregarElemento} />
+        </div>
       </div>
     </div>
   );
@@ -304,8 +282,8 @@ function CategoriasYPaleta({ onAgregar }) {
   const categoria = CATEGORIAS.find((c) => c.id === categoriaActiva);
 
   return (
-    <div className="border-b border-gray-200 shrink-0">
-      <div className="flex gap-1 px-2 py-2 overflow-x-auto bg-white">
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex gap-1 px-3 py-2 overflow-x-auto bg-white">
         {CATEGORIAS.map((c) => (
           <button
             key={c.id}

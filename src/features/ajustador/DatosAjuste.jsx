@@ -59,6 +59,7 @@ export default function DatosAjuste({ siniestro, onSiguiente }) {
   const set = (k, v) => setD((s) => ({ ...s, [k]: v }));
 
   const [croquisDataUrl, setCroquisDataUrl] = useState(null);
+  const [croquisEscena,  setCroquisEscena]  = useState(siniestro.croquisData ?? null);
   const [guardando,      setGuardando]      = useState(false);
   const [errorGuardar,   setErrorGuardar]   = useState(null);
 
@@ -82,6 +83,7 @@ export default function DatosAjuste({ siniestro, onSiguiente }) {
       await guardarDatosAjuste(siniestro.id, {
         ...d,
         croquisUrl,
+        croquisData: croquisEscena,
         horaTomado:  horaLocal(tiempos?.hora_inicio_reporte),
         horaPasado:  horaLocal(tiempos?.created_at),
         horaLlegada: horaLocal(tiempos?.arribo_fecha),
@@ -170,7 +172,10 @@ export default function DatosAjuste({ siniestro, onSiguiente }) {
       </Seccion>
 
       <Seccion titulo="Croquis del Accidente">
-        <CroquisSection croquisDataUrl={croquisDataUrl} onDataUrlChange={setCroquisDataUrl} />
+        <CroquisSection
+          croquisDataUrl={croquisDataUrl} onDataUrlChange={setCroquisDataUrl}
+          croquisEscena={croquisEscena} onEscenaChange={setCroquisEscena}
+        />
       </Seccion>
 
       <div className="pt-2 pb-6 space-y-2">

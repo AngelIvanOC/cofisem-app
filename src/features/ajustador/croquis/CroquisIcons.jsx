@@ -81,8 +81,25 @@ export function Ambulancia() {
     </>
   );
 }
+export function Taxi() {
+  const largo = 58, ancho = 26, l2 = largo / 2, a2 = ancho / 2;
+  const nCuadros = 6;
+  const anchoFranja = largo * 0.6;
+  const cw = anchoFranja / nCuadros;
+  return (
+    <>
+      <Rect x={-l2} y={-a2} width={largo} height={ancho} cornerRadius={ancho * 0.35} fill="#facc15" stroke={TRAZO} strokeWidth={1.5} />
+      <Rect x={-largo * 0.45 / 2} y={-a2 + 3} width={largo * 0.45} height={ancho - 6} cornerRadius={4} fill="#0f172a" opacity={0.28} />
+      {Array.from({ length: nCuadros }).map((_, i) => (
+        <Rect key={i} x={-anchoFranja / 2 + i * cw} y={-2.5} width={cw} height={5}
+          fill={i % 2 === 0 ? "#111827" : "#f8fafc"} />
+      ))}
+      <Rect x={-6} y={-4} width={12} height={8} cornerRadius={1.5} fill="#111827" />
+    </>
+  );
+}
 
-export const VEHICULOS = { sedan: Sedan, suv: Suv, pickup: Pickup, moto: Moto, camion: Camion, autobus: Autobus, ambulancia: Ambulancia };
+export const VEHICULOS = { sedan: Sedan, suv: Suv, pickup: Pickup, moto: Moto, camion: Camion, autobus: Autobus, ambulancia: Ambulancia, taxi: Taxi };
 
 // ── Señalamientos (formas y colores oficiales SICT) ────────
 export function SenalAlto() {
