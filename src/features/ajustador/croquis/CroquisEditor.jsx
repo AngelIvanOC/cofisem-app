@@ -90,13 +90,24 @@ const CroquisEditor = forwardRef(function CroquisEditor(
       }),
   }));
 
+  // El lienzo siempre dibuja su contenido en horizontal, sin importar
+  // cómo esté físicamente el dispositivo: si el contenedor real es más
+  // alto que ancho (teléfono parado), el contenido se rota 90° dentro
+  // del propio Konva (no con CSS) para que el arrastre/rotación/escala
+  // de los elementos se sigan calculando correctamente.
+  const rotado = size.h > size.w;
+  const logical = rotado ? { w: size.h, h: size.w } : { w: size.w, h: size.h };
+  const rotGroupProps = rotado
+    ? { x: size.w, y: 0, rotation: 90 }
+    : { x: 0, y: 0, rotation: 0 };
+
   const seleccionado = elements.find((e) => e.id === selectedId) ?? null;
   const catalogoSeleccionado = seleccionado ? CATALOGO_POR_TIPO[seleccionado.tipo] : null;
 
   const agregarElemento = useCallback((item) => {
     const id = nuevoId(item.tipo);
-    const cx = size.w / 2 || 300;
-    const cy = size.h / 2 || 200;
+    const cx = logical.w / 2 || 300;
+    const cy = logical.h / 2 || 200;
     const cascade = (elements.length % 6) * 16;
     setElements((els) => [
       ...els,
@@ -113,7 +124,7 @@ const CroquisEditor = forwardRef(function CroquisEditor(
       },
     ]);
     setSelectedId(id);
-  }, [elements.length, size.w, size.h, setElements, setSelectedId]);
+  }, [elements.length, logical.w, logical.h, setElements, setSelectedId]);
 
   const actualizarElemento = useCallback((actualizado) => {
     setElements((els) => els.map((e) => (e.id === actualizado.id ? actualizado : e)));
@@ -209,27 +220,31 @@ const CroquisEditor = forwardRef(function CroquisEditor(
             onTouchStart={deseleccionarSiFondo}
           >
             <Layer>
-              <Plantilla tipo={plantilla} w={size.w} h={size.h} />
-              {!usaPlantillaOriginal && <RosaDeLosVientos x={size.w - 44} y={44} rotation={norte} />}
+              <Group {...rotGroupProps}>
+                <Plantilla tipo={plantilla} w={logical.w} h={logical.h} />
+                {!usaPlantillaOriginal && <RosaDeLosVientos x={logical.w - 44} y={44} rotation={norte} />}
+              </Group>
             </Layer>
             <Layer>
-              {elements.map((el) => (
-                <ElementoCroquis
-                  key={el.id}
-                  el={el}
-                  isSelected={el.id === selectedId}
-                  onSelect={() => setSelectedId(el.id)}
-                  onChange={actualizarElemento}
-                  shapeRef={(node) => { shapeRefs.current[el.id] = node; }}
+              <Group {...rotGroupProps}>
+                {elements.map((el) => (
+                  <ElementoCroquis
+                    key={el.id}
+                    el={el}
+                    isSelected={el.id === selectedId}
+                    onSelect={() => setSelectedId(el.id)}
+                    onChange={actualizarElemento}
+                    shapeRef={(node) => { shapeRefs.current[el.id] = node; }}
+                  />
+                ))}
+                <Transformer
+                  ref={trRef}
+                  keepRatio
+                  rotateEnabled
+                  enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
+                  boundBoxFunc={(oldBox, newBox) => (newBox.width < 10 || newBox.height < 10 ? oldBox : newBox)}
                 />
-              ))}
-              <Transformer
-                ref={trRef}
-                keepRatio
-                rotateEnabled
-                enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
-                boundBoxFunc={(oldBox, newBox) => (newBox.width < 10 || newBox.height < 10 ? oldBox : newBox)}
-              />
+              </Group>
             </Layer>
           </Stage>
         )}
