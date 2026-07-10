@@ -2,16 +2,18 @@
 // src/features/ajustador/croquis/CroquisSection.jsx
 // Disparador (miniatura / estado vacío) + editor de croquis en
 // modal de pantalla completa, sin header ni navegación de la app.
+// El editor exige orientación horizontal: en vertical se bloquea
+// con una pantalla que pide girar el dispositivo.
 // ============================================================
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, PenLine, RotateCw as IconoGirar } from "lucide-react";
+import { X, PenLine, Smartphone } from "lucide-react";
 import CroquisEditor from "./CroquisEditor";
 
-function useSugerirGirarDispositivo() {
-  const calc = () => typeof window !== "undefined" && window.innerWidth < window.innerHeight && window.innerWidth < 768;
-  const [portrait, setPortrait] = useState(calc);
+function useEsVertical() {
+  const calc = () => typeof window !== "undefined" && window.innerWidth < window.innerHeight;
+  const [vertical, setVertical] = useState(calc);
   useEffect(() => {
-    const onResize = () => setPortrait(calc());
+    const onResize = () => setVertical(calc());
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
     return () => {
@@ -19,7 +21,22 @@ function useSugerirGirarDispositivo() {
       window.removeEventListener("orientationchange", onResize);
     };
   }, []);
-  return portrait;
+  return vertical;
+}
+
+function BloqueoGirarDispositivo() {
+  return (
+    <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
+      <style>{`
+        @keyframes croquis-girar { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-90deg); } }
+      `}</style>
+      <Smartphone size={56} className="text-[#13193a]" style={{ animation: "croquis-girar 1.6s ease-in-out infinite" }} />
+      <p className="text-base font-bold text-[#13193a]">Gira tu dispositivo</p>
+      <p className="text-sm text-gray-500 max-w-xs">
+        El croquis se diseña en horizontal para tener más espacio. Acuesta tu teléfono para continuar.
+      </p>
+    </div>
+  );
 }
 
 export default function CroquisSection({ croquisDataUrl, onDataUrlChange }) {
@@ -28,10 +45,9 @@ export default function CroquisSection({ croquisDataUrl, onDataUrlChange }) {
   const [norte, setNorte] = useState(0);
   const [elements, setElements] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [avisoGirarOculto, setAvisoGirarOculto] = useState(false);
 
   const editorRef = useRef(null);
-  const sugerirGirar = useSugerirGirarDispositivo() && !avisoGirarOculto;
+  const esVertical = useEsVertical();
 
   useEffect(() => {
     if (!modalAbierto) return;
@@ -77,32 +93,26 @@ export default function CroquisSection({ croquisDataUrl, onDataUrlChange }) {
             <button
               type="button"
               onClick={guardarCambios}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-white text-[#13193a]"
+              disabled={esVertical}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-white text-[#13193a] disabled:opacity-40"
             >
               Guardar cambios
             </button>
           </div>
 
-          {sugerirGirar && (
-            <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-1.5 bg-amber-50 border-b border-amber-200">
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700">
-                <IconoGirar size={13} /> Gira tu dispositivo para más espacio
-              </span>
-              <button type="button" onClick={() => setAvisoGirarOculto(true)} className="text-amber-500 text-xs font-bold">
-                <X size={13} />
-              </button>
+          {esVertical ? (
+            <BloqueoGirarDispositivo />
+          ) : (
+            <div className="flex-1 min-h-0">
+              <CroquisEditor
+                ref={editorRef}
+                plantilla={plantilla} setPlantilla={setPlantilla}
+                norte={norte} setNorte={setNorte}
+                elements={elements} setElements={setElements}
+                selectedId={selectedId} setSelectedId={setSelectedId}
+              />
             </div>
           )}
-
-          <div className="flex-1 min-h-0">
-            <CroquisEditor
-              ref={editorRef}
-              plantilla={plantilla} setPlantilla={setPlantilla}
-              norte={norte} setNorte={setNorte}
-              elements={elements} setElements={setElements}
-              selectedId={selectedId} setSelectedId={setSelectedId}
-            />
-          </div>
         </div>
       )}
     </>
