@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { PDFViewer } from "@react-pdf/renderer";
-import { CheckCircle2, Clock, UserCheck, Car, ArrowRight, Plus, FileText, X, Loader2 } from "lucide-react";
+import { pdf } from "@react-pdf/renderer";
+import { CheckCircle2, Clock, UserCheck, Car, ArrowRight, Plus, FileText, Loader2 } from "lucide-react";
 import PolizaPDF from "../../../components/pdf/PolizaPDF";
 import { fetchPolizaById, buildPolizaPDF } from "../../../services/polizas";
 import { fetchConfigCostos } from "../../../services/configuracion";
@@ -12,18 +12,28 @@ export default function ReporteExito({ folio, ajustador, horaInicio, horaFin, mi
 
   const [pdfData,    setPdfData]    = useState(null);
   const [loadingPDF, setLoadingPDF] = useState(false);
-  const [showViewer, setShowViewer] = useState(false);
 
+  // Abre el PDF como documento propio en una pestaña nueva (no embebido en un
+  // iframe dentro de la página) — los navegadores móviles solo renderizan PDFs
+  // con su visor nativo cuando es la navegación de nivel superior de la pestaña.
   const handleVerPoliza = async () => {
-    if (pdfData) { setShowViewer(true); return; }
+    const nuevaVentana = window.open("", "_blank");
     setLoadingPDF(true);
     try {
-      const [full, config] = await Promise.all([fetchPolizaById(polizaId), fetchConfigCostos()]);
-      const base      = buildPolizaPDF(full, usuario?.oficinas, config);
-      const qrDataUrl = await generateQR(`${window.location.origin}/gaman/verificar/${full.constancia}`);
-      setPdfData({ ...base, qrDataUrl });
-      setShowViewer(true);
+      let datos = pdfData;
+      if (!datos) {
+        const [full, config] = await Promise.all([fetchPolizaById(polizaId), fetchConfigCostos()]);
+        const base      = buildPolizaPDF(full, usuario?.oficinas, config);
+        const qrDataUrl = await generateQR(`${window.location.origin}/gaman/verificar/${full.constancia}`);
+        datos = { ...base, qrDataUrl };
+        setPdfData(datos);
+      }
+      const blob = await pdf(<PolizaPDF poliza={datos} />).toBlob();
+      const url  = URL.createObjectURL(blob);
+      if (nuevaVentana) nuevaVentana.location.href = url;
+      else window.open(url, "_blank");
     } catch (e) {
+      nuevaVentana?.close();
       alert("No se pudo cargar la póliza: " + e.message);
     } finally {
       setLoadingPDF(false);
@@ -166,30 +176,6 @@ export default function ReporteExito({ folio, ajustador, horaInicio, horaFin, mi
 
         </div>
       </div>
-
-      {/* ── Modal visor PDF ── */}
-      {showViewer && pdfData && (
-        <div className="fixed inset-0 z-50 bg-[#13193a]/90 flex flex-col">
-          <div className="flex items-center justify-between px-5 py-3 shrink-0 border-b border-white/10">
-            <div>
-              <p className="text-white font-bold text-sm">Póliza — {constancia}</p>
-              <p className="text-white/40 text-xs mt-0.5">Reporte #{folio}</p>
-            </div>
-            <button
-              onClick={() => setShowViewer(false)}
-              className="flex items-center gap-1.5 text-white/50 hover:text-white text-xs font-semibold transition-colors px-3 py-1.5 rounded-lg hover:bg-white/10"
-            >
-              <X className="w-4 h-4" />
-              Cerrar
-            </button>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <PDFViewer width="100%" height="100%" style={{ border: "none" }}>
-              <PolizaPDF poliza={pdfData} />
-            </PDFViewer>
-          </div>
-        </div>
-      )}
     </>
   );
 }
