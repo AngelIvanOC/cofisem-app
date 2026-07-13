@@ -203,17 +203,17 @@ function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
 }
 
 // ── Modal historial de póliza ─────────────────────────────────
-function ModalHistorial({ poliza, onClose, onAplicar, operador }) {
+function ModalHistorial({ poliza, onClose, onAplicar, operador, usuarioId }) {
   const [cuotaSel, setCuotaSel] = useState(null);
   const [descargadosLocal, setDescargadosLocal] = useState(() => new Set());
 
   const handleAbrirRecibo = (pol, c, op) => {
-    abrirRecibo(pol, c, op);
+    abrirRecibo(pol, c, op, { usuarioId });
     setDescargadosLocal((prev) => new Set([...prev, String(c.id)]));
   };
 
   // Póliza bloqueada: VENCIDA o ANULADA — no se pueden registrar ni aplicar pagos
-  const polizaBloq = ["VENCIDA", "ANULADA"].includes(poliza.estatusPoliza);
+  const polizaBloq = ["VENCIDA", "ANULADA", "CANCELADA"].includes(poliza.estatusPoliza);
 
   const totalCuotas = poliza.formaPago === "CONTADO" ? 1 : 4;
   const pagadas = poliza.cuotas.filter((c) => c.estatus === "PAGADO").length;
@@ -1019,7 +1019,7 @@ export default function OperadorPagos({ usuario }) {
                         c.vto.split("/").reverse().join("-") + "T12:00:00",
                       ) < hoy,
                   );
-                  const polizaBloq = ["VENCIDA", "ANULADA"].includes(
+                  const polizaBloq = ["VENCIDA", "ANULADA", "CANCELADA"].includes(
                     p.estatusPoliza,
                   );
                   return (
@@ -1129,6 +1129,7 @@ export default function OperadorPagos({ usuario }) {
           onClose={() => setPolizaSel(null)}
           onAplicar={aplicarPago}
           operador={operador}
+          usuarioId={usuario?.id}
         />
       )}
     </div>

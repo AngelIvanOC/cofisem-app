@@ -7,6 +7,9 @@ import {
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 import { mapCuota, construirPolizaRecibo, abrirRecibo } from "../../utils/recibo";
+import StatusBadge from "../operador/components/StatusBadge";
+
+const ESTATUS_BLOQUEADOS = ["CANCELADA", "VENCIDA", "ANULADA"];
 import {
   Banknote,
   Check,
@@ -182,7 +185,7 @@ function ModalRecibirPago({ poliza, cuota, onClose, onRecibir }) {
 function ModalCuotasPoliza({ poliza, onClose, onRecibir, onAplicar, onVerRecibo, aplicando }) {
   const [cuotaSel, setCuotaSel] = useState(null);
 
-  const polizaBloq = ["VENCIDA", "ANULADA"].includes(poliza.estatusPoliza);
+  const polizaBloq = ESTATUS_BLOQUEADOS.includes(poliza.estatusPoliza);
 
   const cuotasCargadas = poliza.cuotas !== null;
   const totalCuotas = poliza.formaPago === "CONTADO" ? 1 : 4;
@@ -381,10 +384,16 @@ function ModalCuotasPoliza({ poliza, onClose, onRecibir, onAplicar, onVerRecibo,
                           {mostrarRecibo && !polizaBloq && (
                             <button
                               onClick={() => onVerRecibo(poliza, c)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-all"
+                              className={[
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                                c.descargado
+                                  ? "text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+                                  : "text-gray-600 border border-gray-200 hover:bg-gray-50",
+                              ].join(" ")}
                             >
                               <Receipt className="w-3.5 h-3.5" />
                               Recibo
+                              {c.descargado && <Check className="w-3 h-3" />}
                             </button>
                           )}
                         </div>
@@ -565,8 +574,10 @@ export default function AdminPagos({ usuario }) {
     }
   };
 
+  // El admin solo audita/consulta el recibo — no lo entrega al cliente,
+  // así que no debe marcarse como "descargado" (eso lo hace el operador).
   const verRecibo = (poliza, cuota) => {
-    abrirRecibo(poliza, cuota, operador);
+    abrirRecibo(poliza, cuota, operador, { marcarDescargado: false });
   };
 
   // Filtrado
@@ -577,6 +588,7 @@ export default function AdminPagos({ usuario }) {
       const mOf = filtroOf === "Todas" || r.oficina === filtroOf;
       if (!mQ || !mOf) return false;
       if (filtroEst === "Todas") return true;
+      if (ESTATUS_BLOQUEADOS.includes(r.estatusPoliza)) return false; // canceladas/vencidas/anuladas no son accionables
       if (r.cuotas === null) return true; // aún cargando: no ocultar mientras llega
       const nAdeudo = r.cuotas.filter((c) => c.estatus === "ADEUDO").length;
       const nPend   = r.cuotas.filter((c) => c.estatus === "PENDIENTE").length;
@@ -589,13 +601,16 @@ export default function AdminPagos({ usuario }) {
 
   const { page, setPage, paginated, totalPages, total } = usePagination(filtrados, 10);
 
-  // Stats globales (sobre cuotas ya cargadas)
+  // Stats globales (sobre cuotas ya cargadas). Las pólizas canceladas/vencidas/
+  // anuladas no cuentan para "por recibir"/"por aplicar" — ya no son accionables.
   const cargadas = rows.filter((r) => r.cuotas !== null);
+  const cargadasActivas = cargadas.filter((r) => !ESTATUS_BLOQUEADOS.includes(r.estatusPoliza));
   const todasCuotas = cargadas.flatMap((r) => r.cuotas);
-  const nAdeudo   = todasCuotas.filter((c) => c.estatus === "ADEUDO").length;
-  const nPend     = todasCuotas.filter((c) => c.estatus === "PENDIENTE").length;
+  const todasCuotasActivas = cargadasActivas.flatMap((r) => r.cuotas);
+  const nAdeudo   = todasCuotasActivas.filter((c) => c.estatus === "ADEUDO").length;
+  const nPend     = todasCuotasActivas.filter((c) => c.estatus === "PENDIENTE").length;
   const nPagado   = todasCuotas.filter((c) => c.estatus === "PAGADO").length;
-  const montoPend = todasCuotas.filter((c) => c.estatus === "ADEUDO").reduce((s, c) => s + c.monto, 0);
+  const montoPend = todasCuotasActivas.filter((c) => c.estatus === "ADEUDO").reduce((s, c) => s + c.monto, 0);
 
   const selCls = "px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] bg-white";
 
@@ -700,6 +715,7 @@ export default function AdminPagos({ usuario }) {
                   const nAdeudoR = cuotasCargadas ? r.cuotas.filter((c) => c.estatus === "ADEUDO").length : 0;
                   const nPagadoR = cuotasCargadas ? r.cuotas.filter((c) => c.estatus === "PAGADO").length : 0;
                   const nPendR   = cuotasCargadas ? r.cuotas.filter((c) => c.estatus === "PENDIENTE").length : 0;
+                  const polizaBloqR = ESTATUS_BLOQUEADOS.includes(r.estatusPoliza);
                   return (
                     <tr key={r.polizaId} className={`hover:bg-gray-50/60 transition-colors ${nAdeudoR > 0 ? "bg-blue-50/30" : ""}`}>
                       <td className="px-5 py-2 font-mono text-xs font-bold text-[#13193a]">{r.id}</td>
@@ -725,7 +741,9 @@ export default function AdminPagos({ usuario }) {
                         )}
                       </td>
                       <td className="px-5 py-2">
-                        {!cuotasCargadas ? (
+                        {polizaBloqR ? (
+                          <StatusBadge estatus={r.estatusPoliza} />
+                        ) : !cuotasCargadas ? (
                           <span className="text-[11px] text-gray-300">—</span>
                         ) : (
                           <span className={`inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full border ${

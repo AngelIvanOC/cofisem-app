@@ -86,8 +86,12 @@ export function calcularImportesRecibo(poliza, cuota) {
 }
 
 // Construye el objeto "datos" del recibo, lo guarda en localStorage y abre
-// la vista previa en una pestaña nueva. Marca la cuota como descargada.
-export function abrirRecibo(poliza, cuota, operador) {
+// la vista previa en una pestaña nueva. Por defecto marca la cuota como
+// descargada (entregada al cliente), registrando cuándo y quién — pasa
+// marcarDescargado: false cuando quien abre el recibo no es quien lo
+// entrega (p. ej. un admin auditando), y usuarioId con el id del usuario
+// que sí lo entrega para dejarlo registrado en descargado_por.
+export function abrirRecibo(poliza, cuota, operador, { marcarDescargado = true, usuarioId = null } = {}) {
   const hoy = new Date().toLocaleDateString("es-MX", {
     day: "2-digit",
     month: "2-digit",
@@ -152,7 +156,17 @@ export function abrirRecibo(poliza, cuota, operador) {
     conducto: poliza.conducto,
     operador: operador ?? "",
   };
-  supabase.from("pagos").update({ descargado: true }).eq("id", cuota.id).then();
+  if (marcarDescargado) {
+    supabase
+      .from("pagos")
+      .update({
+        descargado: true,
+        descargado_en: new Date().toISOString(),
+        descargado_por: usuarioId,
+      })
+      .eq("id", cuota.id)
+      .then();
+  }
   localStorage.setItem("recibo_data", JSON.stringify(datos));
   window.open("/gaman/recibo-preview", "_blank");
 }
