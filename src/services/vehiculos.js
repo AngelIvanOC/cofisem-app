@@ -131,3 +131,32 @@ export async function getVehiculoAmisRecord(anio, marca, modelo, version) {
     return data;
   });
 }
+
+// ── "Modo manual" (independiente de año) — mismas RPC que ya usa
+// FormCotizacion.jsx para vehículos que no van a quedar ligados a una
+// póliza/año específico (ej. el vehículo de un tercero en un siniestro).
+export async function getTodasMarcas() {
+  return cached("rpc|todasMarcas", async () => {
+    const { data, error } = await supabase.rpc("get_todas_marcas");
+    if (error) throw error;
+    return (data ?? []).map((r) => r.marca).sort();
+  });
+}
+
+export async function getTiposPorMarca(marca) {
+  if (!marca) return [];
+  return cached(`rpc|tipos|${marca}`, async () => {
+    const { data, error } = await supabase.rpc("get_tipos_por_marca", { p_marca: marca });
+    if (error) throw error;
+    return (data ?? []).map((r) => r.tipo).sort();
+  });
+}
+
+export async function getVersionesPorMarcaTipo(marca, tipo) {
+  if (!marca || !tipo) return [];
+  return cached(`rpc|versiones|${marca}|${tipo}`, async () => {
+    const { data, error } = await supabase.rpc("get_versiones_por_marca_tipo", { p_marca: marca, p_tipo: tipo });
+    if (error) throw error;
+    return (data ?? []).map((r) => r.dc).sort();
+  });
+}

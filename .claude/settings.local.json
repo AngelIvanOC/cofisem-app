@@ -5,7 +5,10 @@
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\angel\\\\Pictures\\\\Cofisem\\\\cofisem-app\" -Directory)",
       "Bash(Select-Object Name)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(rm -f archivos_apoyo/declaracion_accidente/OUTPUT_TEST.pdf archivos_apoyo/declaracion_accidente/out_test-1.png archivos_apoyo/declaracion_accidente/out_test-2.png)",
+      "Bash(rm -rf .scratch_build .scratch_vite_test.config.js)",
+      "Bash(rm -f scripts/_render-declaracion-test.jsx)"
     ]
   }
 }

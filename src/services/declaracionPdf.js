@@ -5,7 +5,8 @@
 // por cabinero y ajustador durante el proceso del siniestro.
 // ============================================================
 import { supabase } from "../supabaseClient";
-import { getFirmaSignedUrl } from "./evidencias";
+import { getFirmaSignedUrl, fetchEvidencias, getSignedUrl } from "./evidencias";
+import { horaLocal } from "./siniestros";
 
 function fmtFecha(str) {
   if (!str) return null;
@@ -17,21 +18,6 @@ function fmtHora(t) {
   return t ? t.slice(0, 5) : null;
 }
 
-// react-pdf's <Image> con solo maxWidth/maxHeight NO hace un "contain"
-// limpio: prioriza llenar el ancho y recorta lo que sobra de alto (o
-// viceversa), en vez de encajar la imagen completa. Para el croquis eso
-// puede cortar un vehículo que el ajustador dejó cerca del borde — por
-// eso medimos la proporción real de la imagen aquí, para poder pedirle
-// al PDF un ancho/alto exactos que sí quepan completos en la caja.
-function medirAspecto(url) {
-  return new Promise((resolve) => {
-    const img = new window.Image();
-    img.onload = () => resolve(img.naturalWidth / img.naturalHeight || null);
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
-}
-
 const SEL_DECLARACION = `
   *,
   polizas(
@@ -39,11 +25,13 @@ const SEL_DECLARACION = `
     placas, num_serie, num_motor, anio,
     clientes(nombre, apellido, telefono, calle, colonia, ciudad, estado, cp),
     vehiculos_amis(marca, tipo, dc, dl, anio),
-    coberturas(nombre)
+    coberturas(nombre),
+    vendedores(nombre, apellido),
+    pagos(estatus)
   ),
   ajustador:usuarios!siniestros_ajustador_id_fkey(nombre, apellido),
   siniestros_terceros(*),
-  siniestros_lesionados(*),
+  siniestros_lesionados!siniestro_id(*),
   siniestros_encuesta(*)
 `;
 
@@ -61,16 +49,32 @@ export async function fetchDeclaracionData(siniestroId) {
     data.firma_ajustador_url ? getFirmaSignedUrl(data.firma_ajustador_url) : null,
     data.croquis_url         ? getFirmaSignedUrl(data.croquis_url)         : null,
   ]);
-  const croquisAspecto = croquisUrl ? await medirAspecto(croquisUrl) : null;
+
+  // Foto de placa/número de serie por participante ("NA", "AF1", "AF2"...)
+  // para reemplazar el placeholder "Sin diagrama" de cada bloque del PDF —
+  // se queda con la más reciente si se subió más de una.
+  const evidencias = await fetchEvidencias(siniestroId);
+  const serieFotos = evidencias.filter((e) => e.tipo === "numero_serie");
+  const ultimaSerieDe = (participante) => {
+    const de = serieFotos.filter((e) => e.participante === participante);
+    return de[de.length - 1] ?? null;
+  };
+  const serieUrlDe = async (participante) => {
+    const foto = ultimaSerieDe(participante);
+    return foto ? await getSignedUrl(foto.storage_path) : null;
+  };
+
+  const serieUrlNA = await serieUrlDe("NA");
 
   const terceros = await Promise.all(
-    (data.siniestros_terceros ?? []).map(async (t) => ({
+    (data.siniestros_terceros ?? []).map(async (t, i) => ({
       ...t,
       firmaUrl: t.firma_reclamante_url ? await getFirmaSignedUrl(t.firma_reclamante_url) : null,
+      serieUrl: await serieUrlDe(`AF${i + 1}`),
     })),
   );
 
-  return { ...data, firmaAseguradoUrl, firmaAjustadorUrl, croquisUrl, croquisAspecto, terceros };
+  return { ...data, firmaAseguradoUrl, firmaAjustadorUrl, croquisUrl, serieUrlNA, terceros };
 }
 
 // ── 2. Da forma a los props que consume DeclaracionAccidentePDF ───
@@ -81,6 +85,16 @@ export function buildDeclaracionPDF(data) {
   const encuesta = data.siniestros_encuesta?.[0] ?? null;
 
   const fechaAccidente = data.fecha_siniestro ? new Date(data.fecha_siniestro + "T12:00:00") : null;
+
+  // "Pagada"/"Pendiente de pago" del PDF son sobre PAGOS (cuotas), no sobre
+  // polizas.estatus (que es VIGENTE/POR VENCER/CANCELADA/etc., el ciclo de
+  // vida de la póliza, no si ya se cobró) — por eso antes nunca se marcaba
+  // nada: "VIGENTE" no es igual a "PAGADA" ni a "PENDIENTE". Pagada = hay
+  // al menos una cuota y todas están en PAGADO; pendiente = alguna cuota
+  // sigue en PENDIENTE o ADEUDO (mismos valores que usa AdminPagos.jsx).
+  const pagos = p.pagos ?? [];
+  const polizaPagada          = pagos.length > 0 && pagos.every((pg) => pg.estatus === "PAGADO");
+  const polizaPendientePago   = pagos.some((pg) => pg.estatus === "PENDIENTE" || pg.estatus === "ADEUDO");
 
   return {
     encabezado: {
@@ -96,8 +110,12 @@ export function buildDeclaracionPDF(data) {
       fechaInicio:    fmtFecha(p.fecha_inicio),
       fechaFin:       fmtFecha(p.fecha_fin),
       estatus:        p.estatus,
+      pagada:         polizaPagada,
+      pendientePago:  polizaPendientePago,
       moneda:         data.moneda,
-      personaVerifico: data.persona_verifico,
+      // No se captura en el proceso del ajustador — es el operador que
+      // emitió/vendió la póliza, se jala directo de BD al generar el PDF.
+      personaVerifico: [p.vendedores?.nombre, p.vendedores?.apellido].filter(Boolean).join(" ") || null,
     },
     asegurado: {
       nombre:    [cl.nombre, cl.apellido].filter(Boolean).join(" "),
@@ -105,8 +123,15 @@ export function buildDeclaracionPDF(data) {
       telefono:  cl.telefono,
     },
     accidente: {
-      conductorNombre:    data.conductor_nombre,
-      conductorTelefono:  data.conductor_telefono,
+      // Si el conductor es el mismo contratante (conductor_es_tercero
+      // === false), se usa el nombre/domicilio/teléfono del asegurado EN
+      // VIVO — no la copia que el ajustador guardó en conductor_* cuando
+      // contestó la pregunta. Si esos datos del cliente se actualizan
+      // después (ej. se le agrega el teléfono que le faltaba), el PDF ya
+      // lo refleja sin que alguien tenga que volver a guardar el paso 1.
+      conductorNombre:    data.conductor_es_tercero === false ? [cl.nombre, cl.apellido].filter(Boolean).join(" ") : data.conductor_nombre,
+      conductorDomicilio: data.conductor_es_tercero === false ? [cl.calle, cl.colonia, cl.ciudad, cl.estado, cl.cp].filter(Boolean).join(", ") : data.conductor_domicilio,
+      conductorTelefono:  data.conductor_es_tercero === false ? cl.telefono : data.conductor_telefono,
       licenciaTipo:       data.licencia_tipo,
       licenciaNumero:     data.licencia_numero,
       licenciaFechaExp:   fmtFecha(data.licencia_fecha_exp),
@@ -120,8 +145,15 @@ export function buildDeclaracionPDF(data) {
       cp:                 data.cp,
       zona:               data.zona_accidente,
       sentido:            data.sentido_circulacion,
-      narracion:          data.descripcion,
-      versionAsegurado:   data.version_asegurado,
+      // El cuadro de "narración de los hechos" del PDF usa la versión que
+      // captura el ajustador (último input del paso 1, "Declaración según
+      // el Asegurado") — no la descripción general que llena el cabinero
+      // al reportar, que es otro campo (data.descripcion) sin caja propia
+      // en este formato.
+      narracion:          data.version_asegurado,
+      // No viene de BD — es la hora real en la que se generó/descargó
+      // este PDF, no un dato capturado antes en el proceso.
+      horaLlenado:        horaLocal(new Date().toISOString())?.slice(0, 5),
     },
     vehiculo: {
       marca:            veh.marca,
@@ -133,7 +165,11 @@ export function buildDeclaracionPDF(data) {
       descripcionDano:   data.vehiculo_descripcion_dano,
       abrirReserva:      data.vehiculo_abrir_reserva,
       montoEstimado:     data.vehiculo_monto_estimado_dano,
-      lugarEnvio:        data.vehiculo_lugar_envio,
+      // "Dónde se envió el vehículo" se deriva de si ya se generó un Pase
+      // Taller para este siniestro (nombre del taller asignado) en vez de
+      // un texto libre capturado aparte.
+      lugarEnvio:        data.pase_taller_taller_nombre || "N/A",
+      serieUrl:          data.serieUrlNA,
     },
     terceros: (data.terceros ?? []).map((t) => ({
       propietarioNombre:    t.propietario_nombre,
@@ -164,6 +200,7 @@ export function buildDeclaracionPDF(data) {
       montoEstimado:        t.monto_estimado_dano,
       declaracion:          t.declaracion,
       firmaUrl:             t.firmaUrl,
+      serieUrl:             t.serieUrl,
     })),
     lesionados: (data.siniestros_lesionados ?? []).map((l) => ({
       nombre:           l.nombre,
@@ -202,7 +239,6 @@ export function buildDeclaracionPDF(data) {
       conclusiones:          data.conclusiones,
     },
     croquisUrl:        data.croquisUrl,
-    croquisAspecto:    data.croquisAspecto,
     firmaAseguradoUrl: data.firmaAseguradoUrl,
     firmaAjustadorUrl: data.firmaAjustadorUrl,
     encuesta: encuesta && {

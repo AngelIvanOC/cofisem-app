@@ -1,17 +1,23 @@
 // ============================================================
-// src/features/ajustador/DatosAjuste.jsx
-// Nuevo paso: "Datos de Ajuste" (sección Reverso) + Croquis
+// src/features/ajustador/CierreCaso.jsx
+// Paso "Cierre del Caso": fusiona lo que antes eran 2 pasos —
+// Encuesta de satisfacción (se le pregunta al asegurado en el
+// momento) + Datos de Ajuste (calificación, averiguación,
+// recuperación, conclusiones, croquis). Van juntos porque ambos son
+// lo último que se hace antes de generar documentos, y comparten las
+// mismas "Horas del proceso" de referencia (antes se mostraban
+// repetidas en los 2 pasos por separado).
 // ============================================================
 import { useState, useEffect } from "react";
 import { Campo, CampoSistema, CampoSelect, Seccion, Sep } from "./shared";
-import { CAUSAS, CIRCUNSTANCIAS } from "../cabinero/constants/catalogos";
-import { guardarDatosAjuste, fetchTiemposSiniestro, horaLocal } from "../../services/siniestros";
+import { guardarDatosAjuste, guardarEncuesta, fetchTiemposSiniestro, horaLocal } from "../../services/siniestros";
 import { subirCroquis } from "../../services/evidencias";
 import CroquisSection from "./croquis/CroquisSection";
 
 const CULPABILIDAD_OPTS = ["Culpable", "Compartida", "Dudosa", "No culpable"];
 const RECUPERACION_OPTS = ["Si", "No", "Probable"];
 const TIPO_RECUPERACION_OPTS = ["Efectivo", "Cheque", "T. de Crédito", "Objeto en garantía"];
+const CALIFICACIONES = ["Excelente", "Bien", "Deficiente"];
 
 // ── Toggle Si/No reutilizable ─────────────────────────────────
 function ToggleSiNo({ label, value, onChange }) {
@@ -36,10 +42,36 @@ function ToggleSiNo({ label, value, onChange }) {
   );
 }
 
-export default function DatosAjuste({ siniestro, onSiguiente }) {
+function CalificacionTag({ value, onChange }) {
+  return (
+    <div className="flex gap-2">
+      {CALIFICACIONES.map((c) => (
+        <button
+          key={c}
+          type="button"
+          onClick={() => onChange(c)}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
+            value === c ? "bg-[#13193a] text-white border-[#13193a]" : "bg-white text-gray-500 border-gray-200"
+          }`}
+        >
+          {c}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default function CierreCaso({ siniestro, onSiguiente }) {
+  const [encuesta, setEncuesta] = useState({
+    calificacionReporte:   "",
+    motivoReporte:         "",
+    calificacionAjustador: "",
+    motivoAjustador:       "",
+    comentarios:           "",
+  });
+  const setE = (k, v) => setEncuesta((s) => ({ ...s, [k]: v }));
+
   const [d, setD] = useState({
-    causa:                  siniestro.causaReportada ?? "",
-    circunstancia:          siniestro.circunstanciaReportada ?? "",
     culpabilidad:           "",
     solicitoGrua:           null,
     calificacionSiniestro:  "",
@@ -64,6 +96,9 @@ export default function DatosAjuste({ siniestro, onSiguiente }) {
   const [errorGuardar,   setErrorGuardar]   = useState(null);
 
   // Horas oficiales — vienen del sistema, nunca las escribe el ajustador.
+  // Se muestran una sola vez arriba de todo el paso (antes se repetían:
+  // "Hora tomado/pasado/llegada" en Datos de Ajuste y "Hora del
+  // reporte/llegada" en Encuesta, con los mismos valores).
   const [tiempos, setTiempos] = useState(null);
   useEffect(() => {
     fetchTiemposSiniestro(siniestro.id).then(setTiempos).catch(() => setTiempos({}));
@@ -88,9 +123,14 @@ export default function DatosAjuste({ siniestro, onSiguiente }) {
         horaPasado:  horaLocal(tiempos?.created_at),
         horaLlegada: horaLocal(tiempos?.arribo_fecha),
       });
+      await guardarEncuesta(siniestro.id, {
+        ...encuesta,
+        horaReporte: horaLocal(tiempos?.hora_inicio_reporte),
+        horaLlegada: horaLocal(tiempos?.arribo_fecha),
+      });
       onSiguiente();
     } catch (err) {
-      setErrorGuardar(err.message ?? "Error al guardar los datos de ajuste");
+      setErrorGuardar(err.message ?? "Error al guardar el cierre del caso");
     } finally {
       setGuardando(false);
     }
@@ -99,25 +139,48 @@ export default function DatosAjuste({ siniestro, onSiguiente }) {
   return (
     <div className="px-4 py-4 space-y-4">
 
-      <Seccion titulo="Causa y Circunstancia">
-        <div className="space-y-3">
-          <CampoSelect label="Causa del siniestro" value={d.causa} onChange={(v) => set("causa", v)}
-            options={CAUSAS} placeholder="Selecciona la causa..." />
-          <CampoSelect label="Circunstancias del accidente" value={d.circunstancia} onChange={(v) => set("circunstancia", v)}
-            options={CIRCUNSTANCIAS} placeholder="Selecciona la circunstancia..." />
+      <Seccion titulo="Horas del Proceso">
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Registradas automáticamente por el sistema</p>
+          <div className="grid grid-cols-3 gap-3">
+            <CampoSistema label="Hora del reporte" value={horaLocal(tiempos?.hora_inicio_reporte)?.slice(0, 5)} />
+            <CampoSistema label="Hora pasado"      value={horaLocal(tiempos?.created_at)?.slice(0, 5)} />
+            <CampoSistema label="Hora de llegada"  value={horaLocal(tiempos?.arribo_fecha)?.slice(0, 5)} />
+          </div>
         </div>
+      </Seccion>
+
+      <Seccion titulo="Servicio del Reporte Telefónico">
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Calificación del servicio</label>
+            <CalificacionTag value={encuesta.calificacionReporte} onChange={(v) => setE("calificacionReporte", v)} />
+          </div>
+          {encuesta.calificacionReporte && encuesta.calificacionReporte !== "Excelente" && (
+            <Campo label="Motivo de su calificación" rows={2} value={encuesta.motivoReporte} onChange={(v) => setE("motivoReporte", v)} />
+          )}
+        </div>
+      </Seccion>
+
+      <Seccion titulo="Servicio del Ajustador">
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Calificación del servicio</label>
+            <CalificacionTag value={encuesta.calificacionAjustador} onChange={(v) => setE("calificacionAjustador", v)} />
+          </div>
+          {encuesta.calificacionAjustador && encuesta.calificacionAjustador !== "Excelente" && (
+            <Campo label="Motivo de su calificación" rows={2} value={encuesta.motivoAjustador} onChange={(v) => setE("motivoAjustador", v)} />
+          )}
+        </div>
+      </Seccion>
+
+      <Seccion titulo="Comentarios">
+        <Sep label="Comentarios del asegurado" />
+        <Campo label="Comentarios" rows={3} placeholder="Comentarios adicionales..." value={encuesta.comentarios} onChange={(v) => setE("comentarios", v)} />
       </Seccion>
 
       <Seccion titulo="Datos de Ajuste">
         <div className="space-y-3">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
-            Horas del proceso — registradas automáticamente por el sistema
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            <CampoSistema label="Hora tomado"  value={horaLocal(tiempos?.hora_inicio_reporte)?.slice(0, 5)} />
-            <CampoSistema label="Hora pasado"  value={horaLocal(tiempos?.created_at)?.slice(0, 5)} />
-            <CampoSistema label="Hora llegada" value={horaLocal(tiempos?.arribo_fecha)?.slice(0, 5)} />
-          </div>
           <Campo label="Artículo infringido" placeholder="Si aplica" value={d.articuloInfringido} onChange={(v) => set("articuloInfringido", v)} />
 
           <Sep label="Calificación" />
@@ -187,7 +250,7 @@ export default function DatosAjuste({ siniestro, onSiguiente }) {
           disabled={guardando}
           className="w-full py-3.5 rounded-2xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-[#13193a]/15 disabled:opacity-60 disabled:cursor-wait"
         >
-          {guardando ? "Guardando..." : "Continuar a Encuesta →"}
+          {guardando ? "Guardando..." : "Continuar a Documentos →"}
         </button>
       </div>
     </div>

@@ -3,11 +3,13 @@
 // Paso 3: Partes involucradas + evidencia + modelo de daños
 //   Cada foto se comprime y sube a Supabase Storage en tiempo real
 // ============================================================
-import { useState, useRef, useCallback } from "react";
-import { Campo, CampoSistema, Sep, AfectadoTag } from "./shared";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Campo, CampoSistema, Sep, AfectadoTag, combinarDireccion, sumaMontosDanos, formatMonto } from "./shared";
 import { subirEvidencia, eliminarEvidencia } from "../../services/evidencias";
 import { guardarPartesInvolucradas } from "../../services/siniestros";
-// import ModeloDanos3D from "./ModeloDanos"; // temporalmente desactivado
+import DireccionCascada from "../../shared/components/DireccionCascada";
+import { getTodasMarcas, getTiposPorMarca } from "../../services/vehiculos";
+import DanosMarcadores from "./danos/DanosMarcadores";
 
 // ── Botón de evidencia con upload real ───────────────────────
 // Cada item: { localUrl, storagePath, uploading, error }
@@ -145,16 +147,25 @@ function useEvidencias(siniestroId, numeroSiniestro, participante, tipo) {
 }
 
 // ── Panel Nuestro Asegurado ───────────────────────────────────
-function PanelNA({ siniestro }) {
+function PanelNA({ siniestro, datos, onDatos }) {
   const sid  = siniestro.id;
   const num  = siniestro.numero_siniestro ?? siniestro.folio;
   const a    = siniestro.aseguradoInfo ?? { nombre: siniestro.asegurado };
   const v    = siniestro.vehiculoInfo  ?? {};
 
-  const sin = useEvidencias(sid, num, "NA", "siniestro");
-  const veh = useEvidencias(sid, num, "NA", "vehiculo");
-  const doc = useEvidencias(sid, num, "NA", "documentacion");
-  const dan = useEvidencias(sid, num, "NA", "danos");
+  const sin  = useEvidencias(sid, num, "NA", "siniestro");
+  const veh  = useEvidencias(sid, num, "NA", "vehiculo");
+  const doc  = useEvidencias(sid, num, "NA", "documentacion");
+  const dan  = useEvidencias(sid, num, "NA", "danos");
+  const serie = useEvidencias(sid, num, "NA", "numero_serie");
+
+  // "Monto estimado del daño" se calcula solo, sumando el monto que se
+  // le puso a cada punto marcado en "Daños del Siniestro" (los de
+  // "Daños Preexistentes" no llevan monto, solo nota) — se muestra en
+  // vivo con este valor derivado y se guarda en cuanto cambian los
+  // marcadores (ver onChange de DanosMarcadores más abajo), no hace
+  // falta un useEffect.
+  const sumaDanos = sumaMontosDanos(datos.danosSiniestro);
 
   return (
     <div className="border-2 border-gray-100 rounded-2xl overflow-hidden">
@@ -190,11 +201,92 @@ function PanelNA({ siniestro }) {
             items={doc.items} onAdd={doc.agregar} onRemove={doc.eliminar} />
           <BtnEvidencia label="Daños" icon="🔍"
             items={dan.items} onAdd={dan.agregar} onRemove={dan.eliminar} />
+          <BtnEvidencia label="Núm. de serie" icon="🔢"
+            items={serie.items} onAdd={serie.agregar} onRemove={serie.eliminar} />
         </div>
 
-        {/* <Sep label="Mapa de daños" />
-        <p className="text-[11px] text-gray-400 -mt-2">Arrastra para girar · Toca la carrocería para marcar zonas dañadas</p>
-        <ModeloDanos3D instanceKey="NA" /> */}
+        <Sep label="Mapa de daños" />
+        <div className="space-y-3">
+          <DanosMarcadores
+            titulo="Daños del Siniestro"
+            value={datos.danosSiniestro}
+            onChange={(v) => { onDatos("danosSiniestro", v); onDatos("montoEstimado", sumaMontosDanos(v)); }}
+          />
+          <DanosMarcadores titulo="Daños Preexistentes" value={datos.danosPreexistente} onChange={(v) => onDatos("danosPreexistente", v)} soloNota />
+        </div>
+
+        <Sep label="Daños del vehículo asegurado" />
+        <div className="space-y-3">
+          <Campo label="Descripción de daños" placeholder="Describe los daños del vehículo..." rows={2}
+            value={datos.descripcionDano} onChange={(v) => onDatos("descripcionDano", v)} />
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">¿Abrir reserva?</label>
+            <div className="flex gap-2">
+              {["Sí", "No"].map((op) => (
+                <button key={op} onClick={() => onDatos("abrirReserva", op === "Sí")}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                    (datos.abrirReserva === true  && op === "Sí") ? "bg-red-500 text-white border-red-500" :
+                    (datos.abrirReserva === false && op === "No") ? "bg-[#13193a] text-white border-[#13193a]" :
+                    "bg-white text-gray-500 border-gray-200"
+                  }`}>
+                  {op}
+                </button>
+              ))}
+            </div>
+          </div>
+          <CampoSistema label="Monto estimado del daño" value={formatMonto(sumaDanos)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Selects Marca → Submarca del catálogo AMIS (modo manual, sin año —
+// el vehículo de un tercero no está ligado a ninguna póliza GAMAN) ──
+function SelectVehiculoAmis({ marca, submarca, onMarca, onSubmarca }) {
+  const [marcas,    setMarcas]    = useState([]);
+  const [submarcas, setSubmarcas] = useState([]);
+  const [submarcasDe, setSubmarcasDe] = useState(null); // marca a la que pertenece `submarcas`
+
+  useEffect(() => {
+    getTodasMarcas().then(setMarcas).catch(() => setMarcas([]));
+  }, []);
+
+  useEffect(() => {
+    if (!marca) return;
+    let cancelado = false;
+    getTiposPorMarca(marca)
+      .then((s) => { if (!cancelado) { setSubmarcas(s); setSubmarcasDe(marca); } })
+      .catch(() => { if (!cancelado) { setSubmarcas([]); setSubmarcasDe(marca); } });
+    return () => { cancelado = true; };
+  }, [marca]);
+
+  const opcionesSubmarca = submarcasDe === marca ? submarcas : [];
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Marca</label>
+        <select
+          value={marca ?? ""}
+          onChange={(e) => onMarca(e.target.value)}
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all"
+        >
+          <option value="">Selecciona</option>
+          {marcas.map((m) => <option key={m}>{m}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Submarca</label>
+        <select
+          value={submarca ?? ""}
+          onChange={(e) => onSubmarca(e.target.value)}
+          disabled={!marca}
+          className={`w-full border rounded-xl px-3 py-2.5 text-sm transition-all ${marca ? "border-gray-200 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]" : "border-gray-100 text-gray-400 bg-gray-50 cursor-not-allowed"}`}
+        >
+          <option value="">{marca ? "Selecciona" : "Primero marca"}</option>
+          {opcionesSubmarca.map((s) => <option key={s}>{s}</option>)}
+        </select>
       </div>
     </div>
   );
@@ -205,10 +297,16 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
   const sid  = siniestro.id;
   const num  = siniestro.numero_siniestro ?? siniestro.folio;
 
-  const sin = useEvidencias(sid, num, afId, "siniestro");
-  const veh = useEvidencias(sid, num, afId, "vehiculo");
-  const doc = useEvidencias(sid, num, afId, "documentacion");
-  const dan = useEvidencias(sid, num, afId, "danos");
+  const sin  = useEvidencias(sid, num, afId, "siniestro");
+  const veh  = useEvidencias(sid, num, afId, "vehiculo");
+  const doc  = useEvidencias(sid, num, afId, "documentacion");
+  const dan  = useEvidencias(sid, num, afId, "danos");
+  const serie = useEvidencias(sid, num, afId, "numero_serie");
+
+  // "Monto estimado del daño" se calcula solo, sumando el monto de cada
+  // punto marcado en "Daños del Siniestro" (ver onChange de
+  // DanosMarcadores más abajo).
+  const sumaDanos = sumaMontosDanos(datos.danosSiniestro);
 
   return (
     <div className="border-2 border-gray-100 rounded-2xl overflow-hidden">
@@ -243,36 +341,97 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
             <Campo label="RFC"  placeholder="RFC con homoclave" value={datos.rfc}  onChange={(v) => onDatos("rfc", v)}  />
             <Campo label="CURP" placeholder="CURP"              value={datos.curp} onChange={(v) => onDatos("curp", v)} />
           </div>
-          <Campo label="Dirección" placeholder="Calle, número, colonia, ciudad..." value={datos.direccion} onChange={(v) => onDatos("direccion", v)} />
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Dirección</label>
+            <DireccionCascada
+              values={{ estado: datos.direccionEstado, municipio: datos.direccionMunicipio, colonia: datos.direccionColonia, cp: datos.direccionCp }}
+              onChange={(patch) => {
+                const next = { estado: datos.direccionEstado, municipio: datos.direccionMunicipio, colonia: datos.direccionColonia, cp: datos.direccionCp, calle: datos.direccionCalle, numero: datos.direccionNumero, ...patch };
+                onDatos("direccionEstado", next.estado);
+                onDatos("direccionMunicipio", next.municipio);
+                onDatos("direccionColonia", next.colonia);
+                onDatos("direccionCp", next.cp);
+                onDatos("direccion", combinarDireccion(next));
+              }}
+            />
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <Campo label="Calle" placeholder="Av. Emiliano Zapata" value={datos.direccionCalle} onChange={(v) => {
+                onDatos("direccionCalle", v);
+                onDatos("direccion", combinarDireccion({ estado: datos.direccionEstado, municipio: datos.direccionMunicipio, colonia: datos.direccionColonia, cp: datos.direccionCp, calle: v, numero: datos.direccionNumero }));
+              }} />
+              <Campo label="Número" placeholder="145" value={datos.direccionNumero} onChange={(v) => {
+                onDatos("direccionNumero", v);
+                onDatos("direccion", combinarDireccion({ estado: datos.direccionEstado, municipio: datos.direccionMunicipio, colonia: datos.direccionColonia, cp: datos.direccionCp, calle: datos.direccionCalle, numero: v }));
+              }} />
+            </div>
+          </div>
         </div>
 
         <Sep label="Datos del vehículo afectado" />
         <div className="space-y-3">
+          <SelectVehiculoAmis
+            marca={datos.vehiculoMarca}
+            submarca={datos.vehiculoSubmarca}
+            onMarca={(v) => {
+              onDatos("vehiculoMarca", v);
+              onDatos("vehiculoSubmarca", "");
+              onDatos("vehiculo", v);
+            }}
+            onSubmarca={(v) => {
+              onDatos("vehiculoSubmarca", v);
+              onDatos("vehiculo", [datos.vehiculoMarca, v].filter(Boolean).join(" "));
+            }}
+          />
           <div className="grid grid-cols-2 gap-3">
-            <Campo label="Marca / Modelo" placeholder="Ej. Nissan Tsuru" value={datos.vehiculo} onChange={(v) => onDatos("vehiculo", v)} />
-            <Campo label="Año"            placeholder="2020"              value={datos.anio}     onChange={(v) => onDatos("anio", v)}     />
+            <Campo label="Año" placeholder="2020" value={datos.anio} onChange={(v) => onDatos("anio", v)} />
+            <Campo label="Color" placeholder="Color" value={datos.color} onChange={(v) => onDatos("color", v)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Campo label="Color"  placeholder="Color"    value={datos.color}  onChange={(v) => onDatos("color", v)}  />
             <Campo label="Placas" placeholder="ABC-123X" value={datos.placas} onChange={(v) => onDatos("placas", v)} />
+            <Campo label="Número de serie" placeholder="17 dígitos" value={datos.serie} onChange={(v) => onDatos("serie", v)} />
           </div>
-          <Campo label="Número de serie" placeholder="17 dígitos" value={datos.serie} onChange={(v) => onDatos("serie", v)} />
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Tipo"  placeholder="Sedán, Pickup..." value={datos.vehiculoTipo}  onChange={(v) => onDatos("vehiculoTipo", v)}  />
+            <Campo label="Motor" placeholder="No. de motor"     value={datos.vehiculoMotor} onChange={(v) => onDatos("vehiculoMotor", v)} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Campo label="Aseguradora"    placeholder="Si aplica" value={datos.aseguradora}   onChange={(v) => onDatos("aseguradora", v)}   />
             <Campo label="Póliza tercero" placeholder="Si aplica" value={datos.polizaTercero} onChange={(v) => onDatos("polizaTercero", v)} />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="No. de reporte" value={datos.reporteTercero}   onChange={(v) => onDatos("reporteTercero", v)}   />
+            <Campo label="Cobertura"      value={datos.coberturaTercero} onChange={(v) => onDatos("coberturaTercero", v)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Vencimiento" type="date" value={datos.vencimientoTercero} onChange={(v) => onDatos("vencimientoTercero", v)} />
+            <Campo label="Ajustador del tercero" value={datos.ajustadorTercero} onChange={(v) => onDatos("ajustadorTercero", v)} />
+          </div>
         </div>
 
-        <Sep label="Lesiones" />
+        <Sep label="Licencia del conductor" />
         <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Tipo de licencia"   placeholder="Ej. Tipo A" value={datos.licenciaTipo}   onChange={(v) => onDatos("licenciaTipo", v)}   />
+            <Campo label="Número de licencia" value={datos.licenciaNumero} onChange={(v) => onDatos("licenciaNumero", v)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Fecha de expedición" type="date" value={datos.licenciaFechaExp} onChange={(v) => onDatos("licenciaFechaExp", v)} />
+            <Campo label="Lugar de expedición" value={datos.licenciaLugarExp} onChange={(v) => onDatos("licenciaLugarExp", v)} />
+          </div>
+        </div>
+
+        <Sep label="Daños del vehículo del tercero" />
+        <div className="space-y-3">
+          <Campo label="Descripción de daños" placeholder="Describe los daños del vehículo..." rows={2}
+            value={datos.descripcionDano} onChange={(v) => onDatos("descripcionDano", v)} />
           <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">¿Hay lesiones reportadas?</label>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">¿Abrir reserva?</label>
             <div className="flex gap-2">
               {["Sí", "No"].map((op) => (
-                <button key={op} onClick={() => onDatos("lesiones", op === "Sí")}
+                <button key={op} onClick={() => onDatos("abrirReserva", op === "Sí")}
                   className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
-                    (datos.lesiones === true  && op === "Sí") ? "bg-red-500 text-white border-red-500" :
-                    (datos.lesiones === false && op === "No") ? "bg-[#13193a] text-white border-[#13193a]" :
+                    (datos.abrirReserva === true  && op === "Sí") ? "bg-red-500 text-white border-red-500" :
+                    (datos.abrirReserva === false && op === "No") ? "bg-[#13193a] text-white border-[#13193a]" :
                     "bg-white text-gray-500 border-gray-200"
                   }`}>
                   {op}
@@ -280,10 +439,7 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
               ))}
             </div>
           </div>
-          {datos.lesiones === true && (
-            <Campo label="Descripción de lesiones" placeholder="Describe el tipo y alcance..." rows={2}
-              value={datos.descripcionLesiones} onChange={(v) => onDatos("descripcionLesiones", v)} />
-          )}
+          <CampoSistema label="Monto estimado del daño" value={formatMonto(sumaDanos)} />
         </div>
 
         <Sep label="Versión de los hechos" />
@@ -301,11 +457,19 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
             items={doc.items} onAdd={doc.agregar} onRemove={doc.eliminar} />
           <BtnEvidencia label="Daños" icon="🔍"
             items={dan.items} onAdd={dan.agregar} onRemove={dan.eliminar} />
+          <BtnEvidencia label="Núm. de serie" icon="🔢"
+            items={serie.items} onAdd={serie.agregar} onRemove={serie.eliminar} />
         </div>
 
-        {/* <Sep label="Mapa de daños" />
-        <p className="text-[11px] text-gray-400 -mt-2">Arrastra para girar · Toca la carrocería para marcar zonas dañadas</p>
-        <ModeloDanos3D instanceKey={afId} /> */}
+        <Sep label="Mapa de daños" />
+        <div className="space-y-3">
+          <DanosMarcadores
+            titulo="Daños del Siniestro"
+            value={datos.danosSiniestro}
+            onChange={(v) => { onDatos("danosSiniestro", v); onDatos("montoEstimado", sumaMontosDanos(v)); }}
+          />
+          <DanosMarcadores titulo="Daños Preexistentes" value={datos.danosPreexistente} onChange={(v) => onDatos("danosPreexistente", v)} soloNota />
+        </div>
       </div>
     </div>
   );
@@ -314,16 +478,27 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
 const datosAfectadoVacio = () => ({
   nombre: "", edad: "", sexo: "", telefono: "", email: "",
   rfc: "", curp: "", direccion: "",
-  vehiculo: "", anio: "", color: "", placas: "", serie: "",
+  direccionEstado: "", direccionMunicipio: "", direccionColonia: "", direccionCp: "", direccionCalle: "", direccionNumero: "",
+  vehiculo: "", vehiculoMarca: "", vehiculoSubmarca: "", anio: "", color: "", placas: "", serie: "",
+  vehiculoTipo: "", vehiculoMotor: "",
   aseguradora: "", polizaTercero: "",
-  lesiones: null, descripcionLesiones: "",
+  reporteTercero: "", coberturaTercero: "", vencimientoTercero: "", ajustadorTercero: "",
+  licenciaTipo: "", licenciaNumero: "", licenciaFechaExp: "", licenciaLugarExp: "",
+  descripcionDano: "", abrirReserva: null, montoEstimado: "",
+  danosSiniestro: {}, danosPreexistente: {},
   declaracion: "",
+});
+
+const datosNAVacio = () => ({
+  descripcionDano: "", abrirReserva: null, montoEstimado: "",
+  danosSiniestro: {}, danosPreexistente: {},
 });
 
 export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
   const [activo,       setActivo]       = useState("NA");
   const [afectadosIds, setAfectadosIds] = useState(["AF1"]);
   const [afectados,    setAfectados]    = useState({ AF1: datosAfectadoVacio() });
+  const [datosNA,      setDatosNA]      = useState(datosNAVacio());
   const [guardando,    setGuardando]    = useState(false);
   const [errorGuardar, setErrorGuardar] = useState(null);
 
@@ -331,7 +506,7 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
     setGuardando(true);
     setErrorGuardar(null);
     try {
-      await guardarPartesInvolucradas(siniestro.id, afectadosIds, afectados);
+      await guardarPartesInvolucradas(siniestro.id, afectadosIds, afectados, datosNA);
       onSiguiente();
     } catch (err) {
       setErrorGuardar(err.message ?? "Error al guardar las partes involucradas");
@@ -339,6 +514,10 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
       setGuardando(false);
     }
   };
+
+  const actualizarDatoNA = useCallback((campo, valor) => {
+    setDatosNA((d) => ({ ...d, [campo]: valor }));
+  }, []);
 
   const agregarAfectado = () => {
     const n  = afectadosIds.length + 1;
@@ -395,7 +574,7 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
       {todos.map((id) => (
         <div key={id} className={id === activo ? "block" : "hidden"}>
           {id === "NA" ? (
-            <PanelNA siniestro={siniestro} />
+            <PanelNA siniestro={siniestro} datos={datosNA} onDatos={actualizarDatoNA} />
           ) : (
             <PanelAfectado
               idx={id.replace("AF", "")}
@@ -414,7 +593,7 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
         )}
         <button onClick={handleSiguiente} disabled={guardando}
           className="w-full py-3.5 rounded-2xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-[#13193a]/15 disabled:opacity-60 disabled:cursor-wait">
-          {guardando ? "Guardando..." : "Continuar a Documentos →"}
+          {guardando ? "Guardando..." : "Continuar a Lesionados →"}
         </button>
       </div>
     </div>

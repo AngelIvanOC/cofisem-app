@@ -22,8 +22,10 @@ const AppLayout     = lazy(() => import("./layouts/AppLayout"));
 const CofisemLayout = lazy(() => import("./layouts/CofisemLayout"));
 
 // ── DEV — eliminar antes de producción ────────────────────────
-const PDFPreview    = lazy(() => import("./pages/PDFPreview"));
-const ReciboPreview = lazy(() => import("./pages/ReciboPreview"));
+const PDFPreview         = lazy(() => import("./pages/PDFPreview"));
+const ReciboPreview      = lazy(() => import("./pages/ReciboPreview"));
+const PaseTallerPreview  = lazy(() => import("./pages/PaseTallerPreview"));
+const PaseMedicoPreview  = lazy(() => import("./pages/PaseMedicoPreview"));
 const DeclaracionPreview = lazy(() => import("./pages/DeclaracionPreview"));
 
 // ── Verificación pública de pólizas ──────────────────────────
@@ -255,8 +257,10 @@ export default function App() {
 
 
         {/* ── DEV ── */}
-        <Route path="/gaman/pdf-preview"    element={<PDFPreview />} />
-        <Route path="/gaman/recibo-preview" element={<ReciboPreview />} />
+        <Route path="/gaman/pdf-preview"         element={<PDFPreview />} />
+        <Route path="/gaman/recibo-preview"      element={<ReciboPreview />} />
+        <Route path="/gaman/pase-taller-preview" element={<PaseTallerPreview />} />
+        <Route path="/gaman/pase-medico-preview" element={<PaseMedicoPreview />} />
         <Route path="/gaman/declaracion-preview" element={<DeclaracionPreview />} />
 
         {/* ── Verificación pública de pólizas ── */}

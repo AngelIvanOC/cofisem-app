@@ -7,7 +7,7 @@
 // ============================================================
 import { useState, useRef, useEffect } from "react";
 import { parse as parseExif } from "exifr";
-import { subirEvidencia, registrarArribo } from "../../services/evidencias";
+import { subirEvidencia, registrarArribo, fetchEvidencias, getSignedUrl, eliminarEvidencia } from "../../services/evidencias";
 
 // ── Haversine: distancia en metros entre dos puntos GPS ───────
 function distanciaMetros(lat1, lng1, lat2, lng2) {
@@ -265,11 +265,40 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
 
   const [confirmado,  setConfirmado]  = useState(false);
   const [fotoLocal,   setFotoLocal]   = useState(null);
+  const [fotoLocalPath, setFotoLocalPath] = useState(null); // storage path de la foto recién subida esta sesión
   const [fotoGPS,     setFotoGPS]     = useState(null);  // { lat, lng } del EXIF
   const [uploading,   setUploading]   = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [guardando,   setGuardando]   = useState(false);
   const fileRef = useRef(null);
+
+  // Foto de llegada ya subida en un intento anterior (el ajustador salió
+  // del proceso a mitad de camino y regresó) — se jala de BD al montar en
+  // vez de pedir tomar otra, para que nunca haya más de una.
+  const [fotoExistente,    setFotoExistente]    = useState(null); // { storagePath, url }
+  const [cargandoExistente, setCargandoExistente] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchEvidencias(siniestro.id)
+      .then(async (rows) => {
+        const deLlegada = rows.filter((r) => r.tipo === "llegada" && r.participante === "NA");
+        const ultima = deLlegada[deLlegada.length - 1];
+        if (!ultima) return;
+        const url = await getSignedUrl(ultima.storage_path);
+        if (mounted) setFotoExistente({ storagePath: ultima.storage_path, url });
+      })
+      .catch(() => {})
+      .finally(() => mounted && setCargandoExistente(false));
+    return () => { mounted = false; };
+  }, [siniestro.id]);
+
+  const handleCambiarFoto = async () => {
+    if (!fotoExistente) return;
+    const path = fotoExistente.storagePath;
+    setFotoExistente(null);
+    eliminarEvidencia(path).catch(() => {});
+  };
 
   const fecha = new Date().toLocaleDateString("es-MX", {
     day: "2-digit", month: "2-digit", year: "numeric",
@@ -281,6 +310,7 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
     if (!f) return;
 
     setFotoLocal(URL.createObjectURL(f));
+    setFotoLocalPath(null);
     setUploadError(null);
     setFotoGPS(null);
 
@@ -294,7 +324,9 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
       // sin EXIF GPS — es normal en muchos dispositivos
     }
 
-    // 2. Subir (comprimida) a Storage
+    // 2. Subir (comprimida) a Storage — se guarda el storagePath para que
+    // el botón de "quitar" pueda borrarla de verdad (si no, al tomar otra
+    // foto se sube encima y quedan dos fotos de llegada en BD/Storage).
     setUploading(true);
     subirEvidencia({
       siniestroId:     siniestro.id,
@@ -303,8 +335,17 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
       tipo:            "llegada",
       file:            f,
     })
+      .then((path) => setFotoLocalPath(path))
       .catch((err) => setUploadError(err.message ?? "Error al subir foto"))
       .finally(() => setUploading(false));
+  };
+
+  const handleQuitarFotoLocal = () => {
+    if (fotoLocalPath) eliminarEvidencia(fotoLocalPath).catch(() => {});
+    setFotoLocal(null);
+    setFotoLocalPath(null);
+    setFotoGPS(null);
+    setUploadError(null);
   };
 
   const handleConfirmar = async () => {
@@ -445,12 +486,32 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
             )}
 
             <button
-              onClick={() => { setFotoLocal(null); setFotoGPS(null); setUploadError(null); }}
+              onClick={handleQuitarFotoLocal}
               className="absolute top-2 left-2 w-7 h-7 bg-black/50 rounded-full flex items-center justify-center"
             >
               <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
+            </button>
+          </div>
+        ) : cargandoExistente ? (
+          <div className="w-full h-24 border-2 border-dashed border-gray-200 rounded-2xl flex items-center justify-center gap-2 text-gray-400">
+            <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
+            <span className="text-xs font-semibold">Buscando foto ya subida...</span>
+          </div>
+        ) : fotoExistente ? (
+          <div className="relative rounded-2xl overflow-hidden" style={{ height: 160 }}>
+            <img src={fotoExistente.url} alt="Foto de llegada" className="w-full h-full object-cover" />
+            <div className="absolute top-2 right-2 bg-emerald-500 rounded-full p-1 shadow">
+              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <button
+              onClick={handleCambiarFoto}
+              className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm rounded-lg px-2.5 py-1.5 text-white text-[11px] font-semibold hover:bg-black/75 transition-colors"
+            >
+              Cambiar foto
             </button>
           </div>
         ) : (
@@ -468,7 +529,7 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
       </div>
 
       {/* Hint cuando no hay foto */}
-      {!fotoLocal && !confirmado && (
+      {!fotoLocal && !fotoExistente && !cargandoExistente && !confirmado && (
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200">
           <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
@@ -482,7 +543,7 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
       <div className="pb-6">
         <button
           onClick={handleConfirmar}
-          disabled={!fotoLocal || confirmado || uploading || guardando}
+          disabled={(!fotoLocal && !fotoExistente) || confirmado || uploading || guardando}
           className={[
             "w-full py-3.5 rounded-2xl text-sm font-bold transition-all duration-300",
             !fotoLocal

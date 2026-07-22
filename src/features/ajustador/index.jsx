@@ -11,24 +11,28 @@
 //   simplemente fluyen dentro del único overflow-y-auto.
 // ============================================================
 import { useState, useCallback, useEffect } from "react";
-import { PDFDownloadLink } from "@react-pdf/renderer";
+import { PDFDownloadLink, pdf } from "@react-pdf/renderer";
 import { StepBar } from "./shared";
 import ListaSiniestros from "./ListaSiniestros";
 import ConfirmarArribo from "./ConfirmarArribo";
 import DatosSiniestro from "./DatosSiniestro";
 import CapturaDatosEvidencia from "./CapturaEvidencia";
-import DatosAjuste from "./DatosAjuste";
-import Encuesta from "./Encuesta";
-import GenerarDocumentos from "./GenerarDocumentos";
+import Lesionados from "./Lesionados";
+import CierreCaso from "./CierreCaso";
+import Documentos from "./Documentos";
 import DeclaracionAccidentePDF from "../../components/pdf/DeclaracionAccidentePDF";
 import { fetchDeclaracionData, buildDeclaracionPDF } from "../../services/declaracionPdf";
+import PaseTallerPDF from "../../components/pdf/PaseTallerPDF";
+import { fetchPaseTallerData, buildPaseTallerPDF } from "../../services/pasePdf";
+import PaseMedicoPDF from "../../components/pdf/PaseMedicoPDF";
+import { fetchPaseMedicoData, buildPaseMedicoPDF } from "../../services/paseMedicoPdf";
 
 const NOMBRE_PASO = [
   "Confirmar Arribo",
   "Datos del Siniestro",
   "Partes y Evidencia",
-  "Datos de Ajuste",
-  "Encuesta",
+  "Lesionados",
+  "Cierre del Caso",
   "Documentos",
 ];
 
@@ -37,15 +41,71 @@ const NOMBRE_PASO = [
 // Usamos h-full que viene del AppLayout, que a su vez viene del root
 const ROOT_CLS = "h-full w-full overflow-hidden";
 
-function Exito({ siniestro, onVolver }) {
+function Exito({ siniestro, docs, onVolver }) {
   const [declaracionPDF, setDeclaracionPDF] = useState(null);
   const [errorPDF,       setErrorPDF]       = useState(null);
+  const [pasePDF,        setPasePDF]        = useState(null);
+  const [errorPasePDF,   setErrorPasePDF]   = useState(null);
+  const [paseMedicoPDF,      setPaseMedicoPDF]      = useState(null);
+  const [errorPaseMedicoPDF, setErrorPaseMedicoPDF] = useState(null);
+  const [descargandoTodos,   setDescargandoTodos]   = useState(false);
 
   useEffect(() => {
     fetchDeclaracionData(siniestro.id)
       .then((raw) => setDeclaracionPDF(buildDeclaracionPDF(raw)))
       .catch((err) => setErrorPDF(err.message ?? "Error al preparar el PDF"));
   }, [siniestro.id]);
+
+  useEffect(() => {
+    if (!docs?.taller) return;
+    fetchPaseTallerData(siniestro.id)
+      .then((raw) => setPasePDF(buildPaseTallerPDF(raw)))
+      .catch((err) => setErrorPasePDF(err.message ?? "Error al preparar el Pase Taller"));
+  }, [siniestro.id, docs?.taller]);
+
+  useEffect(() => {
+    if (!docs?.medico) return;
+    fetchPaseMedicoData(siniestro.id)
+      .then((raw) => setPaseMedicoPDF(buildPaseMedicoPDF(raw)))
+      .catch((err) => setErrorPaseMedicoPDF(err.message ?? "Error al preparar el Pase Médico"));
+  }, [siniestro.id, docs?.medico]);
+
+  // Genera cada PDF listo bajo demanda (pdf(...).toBlob()) y dispara su
+  // descarga con un <a> sintético, en secuencia — un solo botón para no
+  // tener que picar documento por documento cuando ya se generaron todos.
+  const descargarBlob = (blob, fileName) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const handleDescargarTodos = async () => {
+    setDescargandoTodos(true);
+    try {
+      const numero = siniestro.numero_siniestro ?? siniestro.folio ?? siniestro.id;
+      if (declaracionPDF) {
+        const blob = await pdf(<DeclaracionAccidentePDF data={declaracionPDF} />).toBlob();
+        descargarBlob(blob, `declaracion-${numero}.pdf`);
+      }
+      if (docs?.taller && pasePDF) {
+        const blob = await pdf(<PaseTallerPDF data={pasePDF} />).toBlob();
+        descargarBlob(blob, `pase-taller-${numero}.pdf`);
+      }
+      if (docs?.medico && paseMedicoPDF) {
+        const blob = await pdf(<PaseMedicoPDF data={paseMedicoPDF} />).toBlob();
+        descargarBlob(blob, `pase-medico-${numero}.pdf`);
+      }
+    } finally {
+      setDescargandoTodos(false);
+    }
+  };
+
+  const todosListos = !!declaracionPDF && (!docs?.taller || !!pasePDF) && (!docs?.medico || !!paseMedicoPDF);
 
   return (
     <div className="flex flex-col items-center justify-center px-8 text-center py-16">
@@ -98,7 +158,61 @@ function Exito({ siniestro, onVolver }) {
             Preparando declaración...
           </span>
         )}
+
+        {docs?.taller && (
+          pasePDF ? (
+            <PDFDownloadLink
+              document={<PaseTallerPDF data={pasePDF} />}
+              fileName={`pase-taller-${siniestro.numero_siniestro ?? siniestro.folio ?? siniestro.id}.pdf`}
+              style={{ textDecoration: "none" }}
+            >
+              {({ loading: pdfLoading }) => (
+                <span className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-bold hover:bg-[#1e2a50] cursor-pointer select-none">
+                  {pdfLoading ? "Preparando PDF..." : "Descargar Pase Taller (PDF)"}
+                </span>
+              )}
+            </PDFDownloadLink>
+          ) : errorPasePDF ? (
+            <p className="text-xs text-red-500">{errorPasePDF}</p>
+          ) : (
+            <span className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#13193a]/50 text-white text-sm font-bold cursor-wait select-none">
+              Preparando pase taller...
+            </span>
+          )
+        )}
+
+        {docs?.medico && (
+          paseMedicoPDF ? (
+            <PDFDownloadLink
+              document={<PaseMedicoPDF data={paseMedicoPDF} />}
+              fileName={`pase-medico-${siniestro.numero_siniestro ?? siniestro.folio ?? siniestro.id}.pdf`}
+              style={{ textDecoration: "none" }}
+            >
+              {({ loading: pdfLoading }) => (
+                <span className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-bold hover:bg-[#1e2a50] cursor-pointer select-none">
+                  {pdfLoading ? "Preparando PDF..." : "Descargar Pase Médico (PDF)"}
+                </span>
+              )}
+            </PDFDownloadLink>
+          ) : errorPaseMedicoPDF ? (
+            <p className="text-xs text-red-500">{errorPaseMedicoPDF}</p>
+          ) : (
+            <span className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#13193a]/50 text-white text-sm font-bold cursor-wait select-none">
+              Preparando pase médico...
+            </span>
+          )
+        )}
       </div>
+
+      {todosListos && (
+        <button
+          onClick={handleDescargarTodos}
+          disabled={descargandoTodos}
+          className="flex items-center gap-2 px-6 py-2.5 rounded-xl border-2 border-[#13193a] text-[#13193a] text-sm font-bold hover:bg-[#13193a]/5 disabled:opacity-60 disabled:cursor-wait transition-all mb-5"
+        >
+          {descargandoTodos ? "Generando descargas..." : "Descargar todos"}
+        </button>
+      )}
 
       <button
         onClick={onVolver}
@@ -162,13 +276,13 @@ function PanelDetalle({ siniestro, paso, onVolver, onNext, onFinalizar }) {
           <CapturaDatosEvidencia siniestro={siniestro} onSiguiente={onNext} />
         )}
         {paso === 3 && (
-          <DatosAjuste siniestro={siniestro} onSiguiente={onNext} />
+          <Lesionados siniestro={siniestro} onSiguiente={onNext} />
         )}
         {paso === 4 && (
-          <Encuesta siniestro={siniestro} onSiguiente={onNext} />
+          <CierreCaso siniestro={siniestro} onSiguiente={onNext} />
         )}
         {paso === 5 && (
-          <GenerarDocumentos siniestro={siniestro} onFinalizar={onFinalizar} />
+          <Documentos siniestro={siniestro} onFinalizar={onFinalizar} />
         )}
       </div>
       {/* NOTA: el botón de acción (Confirmar / Continuar) está DENTRO de cada paso,
@@ -198,8 +312,9 @@ export default function AjustadorSiniestros() {
     setSiniestro(null);
   };
 
+  const [docsFinal, setDocsFinal] = useState(null);
   const handleNext = () => setPaso((p) => p + 1);
-  const handleFinalizar = () => setVista("exito");
+  const handleFinalizar = (docs) => { setDocsFinal(docs); setVista("exito"); };
 
   return (
     <div className={ROOT_CLS}>
@@ -250,6 +365,7 @@ export default function AjustadorSiniestros() {
             <div className="flex-1 overflow-y-auto">
               <Exito
                 siniestro={siniestro}
+                docs={docsFinal}
                 onVolver={() => {
                   setVista("lista");
                   setSiniestro(null);
@@ -279,6 +395,7 @@ export default function AjustadorSiniestros() {
           <div className="flex-1 overflow-y-auto">
             <Exito
               siniestro={siniestro}
+              docs={docsFinal}
               onVolver={() => {
                 setVista("lista");
                 setSiniestro(null);

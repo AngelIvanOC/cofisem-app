@@ -295,7 +295,18 @@ export async function fetchSiniestros() {
 // Nota: "tipo" es la clasificación propia del ajustador (catálogo TIPOS_SINIESTRO)
 // y se guarda aparte de tipo_siniestro/circunstancia, que son la causa ya
 // capturada por el cabinero (catálogo CAUSAS/CIRCUNSTANCIAS) y no se debe pisar.
-export async function actualizarDatosSiniestro(siniestroId, { tipo, fechaAccidente, horaAccidente, lugar, descripcion, versionAsegurado }) {
+export async function actualizarDatosSiniestro(siniestroId, {
+  tipo, fechaAccidente, horaAccidente, lugar, descripcion, versionAsegurado,
+  zonaAccidente, sentidoCirculacion,
+  causa, circunstancia,
+  estado, municipio, colonia, cp,
+  conductorEsTercero, conductorNombre, conductorTelefono, conductorDomicilio,
+  licenciaTipo, licenciaNumero, licenciaFechaExp, licenciaLugarExp, fechaNacimiento,
+}) {
+  // conductor_*/conductor_es_tercero llegan `undefined` (no `null`) cuando
+  // el ajustador no contestó "¿el conductor es el contratante?" — en ese
+  // caso se omiten del payload para no pisar con vacío lo que ya haya
+  // capturado el cabinero al reportar el siniestro.
   const { error } = await supabase
     .from("siniestros")
     .update({
@@ -305,6 +316,25 @@ export async function actualizarDatosSiniestro(siniestroId, { tipo, fechaAcciden
       ubicacion:               lugar            || null,
       descripcion:             descripcion      || null,
       version_asegurado:       versionAsegurado || null,
+      zona_accidente:          zonaAccidente       || null,
+      sentido_circulacion:     sentidoCirculacion  || null,
+      // causa/circunstancia: confirmadas/corregidas por el ajustador — pisan
+      // lo que puso el cabinero a propósito (decisión de negocio).
+      tipo_siniestro:          causa         || null,
+      circunstancia:           circunstancia || null,
+      estado:                  estado    || null,
+      municipio:               municipio || null,
+      colonia:                 colonia   || null,
+      cp:                      cp        || null,
+      ...(conductorEsTercero !== undefined && { conductor_es_tercero: conductorEsTercero }),
+      ...(conductorNombre    !== undefined && { conductor_nombre:     conductorNombre    || null }),
+      ...(conductorTelefono  !== undefined && { conductor_telefono:   conductorTelefono  || null }),
+      ...(conductorDomicilio !== undefined && { conductor_domicilio:  conductorDomicilio || null }),
+      licencia_tipo:           licenciaTipo        || null,
+      licencia_numero:         licenciaNumero      || null,
+      licencia_fecha_exp:      licenciaFechaExp    || null,
+      licencia_lugar_exp:      licenciaLugarExp    || null,
+      conductor_fecha_nacimiento: fechaNacimiento   || null,
     })
     .eq("id", siniestroId);
   if (error) throw error;
@@ -332,14 +362,28 @@ export function horaLocal(isoStr) {
   });
 }
 
-// ── Guardar Paso 3 del ajustador (terceros + lesionados) ──────
+// ── Guardar Paso 3 del ajustador (N.A. + terceros) ────────────
 // Reemplaza por completo lo guardado previamente para este siniestro,
 // así el ajustador puede regresar y corregir sin generar duplicados.
-export async function guardarPartesInvolucradas(siniestroId, afectadosIds, afectados) {
+// Los lesionados se guardan aparte — ver guardarLesionados más abajo,
+// tienen su propio paso en el flujo.
+export async function guardarPartesInvolucradas(siniestroId, afectadosIds, afectados, datosNA) {
+  if (datosNA) {
+    const { error: errNA } = await supabase
+      .from("siniestros")
+      .update({
+        vehiculo_descripcion_dano:   datosNA.descripcionDano || null,
+        vehiculo_abrir_reserva:      datosNA.abrirReserva ?? null,
+        vehiculo_monto_estimado_dano: datosNA.montoEstimado ? Number(datosNA.montoEstimado) : null,
+        danos_siniestro_marcadores:    datosNA.danosSiniestro    ?? null,
+        danos_preexistente_marcadores: datosNA.danosPreexistente ?? null,
+      })
+      .eq("id", siniestroId);
+    if (errNA) throw errNA;
+  }
+
   const { error: errDelT } = await supabase.from("siniestros_terceros").delete().eq("siniestro_id", siniestroId);
   if (errDelT) throw errDelT;
-  const { error: errDelL } = await supabase.from("siniestros_lesionados").delete().eq("siniestro_id", siniestroId);
-  if (errDelL) throw errDelL;
 
   const terceros = afectadosIds.map((id) => {
     const d = afectados[id];
@@ -350,6 +394,8 @@ export async function guardarPartesInvolucradas(siniestroId, afectadosIds, afect
       vehiculo_color:        d.color       || null,
       vehiculo_placas:       d.placas      || null,
       vehiculo_serie:        d.serie       || null,
+      vehiculo_tipo:         d.vehiculoTipo  || null,
+      vehiculo_motor:        d.vehiculoMotor || null,
       // Nota: la UI aún no distingue propietario vs conductor del tercero;
       // se usa el mismo nombre para ambos hasta que se agregue ese campo.
       propietario_nombre:    d.nombre      || null,
@@ -362,6 +408,19 @@ export async function guardarPartesInvolucradas(siniestroId, afectadosIds, afect
       aseguradora_nombre:    d.aseguradora || null,
       poliza_tercero:        d.polizaTercero || null,
       declaracion:           d.declaracion || null,
+      licencia_tipo:         d.licenciaTipo     || null,
+      licencia_numero:       d.licenciaNumero   || null,
+      licencia_fecha_exp:    d.licenciaFechaExp || null,
+      licencia_lugar_exp:    d.licenciaLugarExp || null,
+      reporte_tercero:       d.reporteTercero   || null,
+      cobertura_tercero:     d.coberturaTercero || null,
+      vencimiento_tercero:   d.vencimientoTercero || null,
+      ajustador_tercero:     d.ajustadorTercero || null,
+      descripcion_dano:      d.descripcionDano  || null,
+      abrir_reserva:         d.abrirReserva     ?? null,
+      monto_estimado_dano:   d.montoEstimado ? Number(d.montoEstimado) : null,
+      danos_siniestro_marcadores:    d.danosSiniestro    ?? null,
+      danos_preexistente_marcadores: d.danosPreexistente ?? null,
     };
   });
   if (terceros.length) {
@@ -369,22 +428,44 @@ export async function guardarPartesInvolucradas(siniestroId, afectadosIds, afect
     if (error) throw error;
   }
 
-  const lesionados = afectadosIds
-    .filter((id) => afectados[id].lesiones === true)
-    .map((id) => {
-      const d = afectados[id];
-      return {
-        siniestro_id:  siniestroId,
-        participante_id: id,
-        nombre:        d.nombre   || null,
-        domicilio:     d.direccion || null,
-        telefono:      d.telefono || null,
-        edad:          d.edad ? Number(d.edad) : null,
-        descripcion:   d.descripcionLesiones || null,
-      };
-    });
-  if (lesionados.length) {
-    const { error } = await supabase.from("siniestros_lesionados").insert(lesionados);
+}
+
+// ── Guardar paso "Lesionados" del ajustador ───────────────────
+// Mismo criterio que guardarPartesInvolucradas: borra y vuelve a
+// insertar todo lo del siniestro, para poder agregar/quitar
+// lesionados libremente sin generar duplicados ni ids huérfanos.
+// region_cuerpo/causa_lesion/estado_lesionado/tipo_lesion/
+// primeros_auxilios/motivo_traslado son los mismos datos que antes
+// vivían en el paso "Documentos" (pase_medico_*) — ahora se capturan
+// aquí, junto con el resto de la persona.
+export async function guardarLesionados(siniestroId, lesionadosIds, lesionados) {
+  const { error: errDelL } = await supabase.from("siniestros_lesionados").delete().eq("siniestro_id", siniestroId);
+  if (errDelL) throw errDelL;
+
+  const lesionadosRows = (lesionadosIds ?? []).map((id) => {
+    const l = lesionados[id];
+    return {
+      siniestro_id:     siniestroId,
+      participante_id:  "NA",
+      nombre:           l.nombre    || null,
+      domicilio:        l.domicilio || null,
+      telefono:         l.telefono  || null,
+      edad:             l.edad ? Number(l.edad) : null,
+      region_cuerpo:    l.regionCuerpo || null,
+      causa_lesion:     l.causaLesion  || null,
+      estado_lesionado: l.estadoLesionado || null,
+      tipo_lesion:      l.tipoLesion   || null,
+      primeros_auxilios: l.primerosAuxilios ?? null,
+      motivo_traslado:  l.motivoTraslado || null,
+      tipo_lesionado:   l.tipoLesionado || null,
+      hospital_asignado: l.hospital || null,
+      cobertura:        l.cobertura || null,
+      abrir_reserva:    l.abrirReserva ?? null,
+      estimado_lesiones: l.estimadoLesiones ? Number(l.estimadoLesiones) : null,
+    };
+  });
+  if (lesionadosRows.length) {
+    const { error } = await supabase.from("siniestros_lesionados").insert(lesionadosRows);
     if (error) throw error;
   }
 }
@@ -393,10 +474,11 @@ export async function guardarPartesInvolucradas(siniestroId, afectadosIds, afect
 // Recibe storage paths ya subidos (ver subirFirma en services/evidencias.js).
 // Nota: "reclamante" hoy es una sola firma para todos los terceros; si el
 // siniestro tiene más de un tercero, se asigna al primero registrado.
-export async function guardarFirmas(siniestroId, { asegurado, ajustador, reclamante } = {}) {
+export async function guardarFirmas(siniestroId, { asegurado, ajustador, reclamante, lesionado } = {}) {
   const updates = {};
   if (asegurado) updates.firma_asegurado_url = asegurado;
   if (ajustador) updates.firma_ajustador_url = ajustador;
+  if (lesionado) updates.firma_lesionado_url = lesionado;
   if (Object.keys(updates).length) {
     const { error } = await supabase.from("siniestros").update(updates).eq("id", siniestroId);
     if (error) throw error;
@@ -422,8 +504,9 @@ export async function guardarFirmas(siniestroId, { asegurado, ajustador, reclama
 }
 
 // ── Guardar Datos de Ajuste (sección Reverso) + croquis ───────
-// causa/circunstancia: confirmadas/corregidas por el ajustador — pisan lo
-// que puso el cabinero a propósito (decisión de negocio).
+// causa/circunstancia ya NO se guardan aquí — se confirman/corrigen en el
+// paso "Datos del Siniestro" (ver actualizarDatosSiniestro), donde vive el
+// resto de lo reportado por el cabinero.
 // horaTomado/horaPasado/horaLlegada: NO vienen de un input del ajustador —
 // el componente las llena con fetchTiemposSiniestro()/horaLocal(), nunca
 // con texto libre, para que no se puedan falsear.
@@ -431,8 +514,6 @@ export async function guardarDatosAjuste(siniestroId, datos) {
   const { error } = await supabase
     .from("siniestros")
     .update({
-      tipo_siniestro:          datos.causa                  || null,
-      circunstancia:           datos.circunstancia           || null,
       culpabilidad:            datos.culpabilidad             || null,
       solicito_grua:           datos.solicitoGrua,
       calificacion_siniestro:  datos.calificacionSiniestro   || null,
@@ -453,6 +534,68 @@ export async function guardarDatosAjuste(siniestroId, datos) {
       conclusiones:            datos.conclusiones            || null,
       croquis_url:             datos.croquisUrl              || null,
       croquis_data:            datos.croquisData             || null,
+    })
+    .eq("id", siniestroId);
+  if (error) throw error;
+}
+
+// ── Guardar Pase Taller (paso 6 del ajustador) ────────────────
+// El taller elegido de TALLERES_LISTA o capturado manualmente se
+// guarda ya "aplanado" (nombre/tel/calle/colonia sueltos) — el
+// PDF no necesita saber si vino de la lista fija o fue manual.
+export async function guardarPaseTaller(siniestroId, datos) {
+  const { error } = await supabase
+    .from("siniestros")
+    .update({
+      pase_taller_numero:              datos.numeroPase          || null,
+      pase_taller_clave:               datos.clave               || null,
+      pase_taller_definicion:          datos.definicion          || null,
+      pase_taller_destino:             datos.destino             || null,
+      pase_taller_vehiculo_tipo:       datos.vehiculoTipo        || null,
+      pase_taller_vehiculo_puertas:    datos.vehiculoPuertas     || null,
+      pase_taller_taller_nombre:       datos.destino === "Taller" ? datos.tallerNombre  || null : null,
+      pase_taller_taller_calle:        datos.destino === "Taller" ? datos.tallerCalle   || null : null,
+      pase_taller_taller_colonia:      datos.destino === "Taller" ? datos.tallerColonia || null : null,
+      pase_taller_taller_telefono:     datos.destino === "Taller" ? datos.tallerTel     || null : null,
+      pase_taller_orden_condicionada:  datos.ordenCondicionada   || null,
+      pase_taller_fecha_expedicion:    datos.fechaExpedicion     || null,
+    })
+    .eq("id", siniestroId);
+  if (error) throw error;
+}
+
+// ── Lesionados ya capturados (paso 3) — para elegir a cuál de ellos
+// corresponde el Pase Médico (paso 6) ─────────────────────────
+// tipo_lesion (región del cuerpo, capturada como checkboxes en el paso 3)
+// y hospital_asignado se incluyen para poder precargarlos en el Pase
+// Médico del paso 6 en vez de volver a pedirlos desde cero (ver
+// PaseMedico en GenerarDocumentos.jsx).
+export async function fetchLesionados(siniestroId) {
+  const { data, error } = await supabase
+    .from("siniestros_lesionados")
+    .select("id, nombre, domicilio, telefono, participante_id, region_cuerpo, causa_lesion, estado_lesionado, tipo_lesion, primeros_auxilios, motivo_traslado, tipo_lesionado, hospital_asignado")
+    .eq("siniestro_id", siniestroId)
+    .order("id", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ── Guardar Pase Médico (paso Documentos del ajustador) ───────
+// Un solo pase médico por siniestro (mismo alcance que Pase Taller) —
+// solo lo que de verdad es "del documento": a cuál lesionado
+// corresponde y el médico/clínica asignada. Los datos de la lesión en
+// sí (causa/estado/tipo/región/primeros auxilios/motivo de traslado)
+// se capturan en el paso Lesionados (guardarLesionados) y se leen en
+// tiempo de generar el PDF desde siniestros_lesionados.
+export async function guardarPaseMedico(siniestroId, datos) {
+  const { error } = await supabase
+    .from("siniestros")
+    .update({
+      pase_medico_lesionado_id:      datos.lesionadoId          || null,
+      pase_medico_clinica_nombre:    datos.clinicaNombre        || null,
+      pase_medico_clinica_telefono:  datos.clinicaTel           || null,
+      pase_medico_clinica_domicilio: datos.clinicaDir           || null,
+      pase_medico_fecha_expedicion:  datos.fechaExpedicion      || null,
     })
     .eq("id", siniestroId);
   if (error) throw error;

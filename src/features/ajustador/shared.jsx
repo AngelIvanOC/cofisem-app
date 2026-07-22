@@ -1,6 +1,17 @@
 // ============================================================
 // src/features/ajustador/shared.jsx
 // ============================================================
+import { useState } from "react";
+
+// Junta lo que captura DireccionCascada (estado/municipio/colonia/cp) +
+// calle/número libres en un solo texto — domicilio del conductor y de
+// terceros son columnas de texto simple, no vale la pena partirlas.
+export function combinarDireccion({ calle, numero, colonia, municipio, estado, cp }) {
+  const calleNum = [calle, numero].filter(Boolean).join(" ");
+  return [calleNum, colonia, municipio, estado, cp && `C.P. ${cp}`]
+    .filter(Boolean)
+    .join(", ") || null;
+}
 
 export const SINIESTROS_MOCK = [
   {
@@ -163,7 +174,7 @@ export const ESTATUS_CLS = {
   Cerrado:              "bg-emerald-50   text-emerald-700 border border-emerald-200",
 };
 
-export const STEP_LABELS_DEFAULT = ["Arribo", "Siniestro", "Partes", "Ajuste", "Encuesta", "Documentos"];
+export const STEP_LABELS_DEFAULT = ["Arribo", "Siniestro", "Partes", "Lesionados", "Cierre", "Documentos"];
 
 export const TIPOS_SINIESTRO = [
   "Choque con tercero",
@@ -179,11 +190,11 @@ export const TIPOS_SINIESTRO = [
 ];
 
 export const TALLERES_LISTA = [
-  { nombre: "Taller Morelos",         telefono: "777 100 2233", direccion: "Blvd. Juárez 450, Centro, Cuernavaca, Morelos" },
-  { nombre: "AutoServicios del Sur",  telefono: "777 200 3344", direccion: "Av. Plan de Ayala 890, Temixco, Morelos" },
-  { nombre: "Taller Zapata",          telefono: "777 300 4455", direccion: "Emiliano Zapata 25, Col. Centro, Jiutepec, Morelos" },
-  { nombre: "Multimarcas Cuernavaca", telefono: "777 400 5566", direccion: "Av. Domingo Diez 1205, Cuernavaca, Morelos" },
-  { nombre: "Renova Cars",            telefono: "552 661 5281", direccion: "Carretera Los Reyes Texcoco Km 33, Texcoco, Edo. Méx." },
+  { nombre: "Taller Morelos",         telefono: "777 100 2233", calle: "Blvd. Juárez 450",                    colonia: "Centro, Cuernavaca, Morelos" },
+  { nombre: "AutoServicios del Sur",  telefono: "777 200 3344", calle: "Av. Plan de Ayala 890",                colonia: "Temixco, Morelos" },
+  { nombre: "Taller Zapata",          telefono: "777 300 4455", calle: "Emiliano Zapata 25",                   colonia: "Centro, Jiutepec, Morelos" },
+  { nombre: "Multimarcas Cuernavaca", telefono: "777 400 5566", calle: "Av. Domingo Diez 1205",                colonia: "Cuernavaca, Morelos" },
+  { nombre: "Renova Cars",            telefono: "552 661 5281", calle: "Carretera Los Reyes Texcoco Km 33",    colonia: "Texcoco, Edo. Méx." },
 ];
 
 export const CLINICAS_LISTA = [
@@ -317,14 +328,36 @@ export function Sep({ label }) {
 }
 
 // ── Sección con header oscuro ─────────────────────────────────
-export function Seccion({ titulo, children, accion }) {
+// `colapsable`: el header se vuelve clickeable y muestra/oculta el
+// contenido (mismo lenguaje visual que DocToggle) — útil para bloques
+// de solo lectura que no necesitan estar siempre expandidos en móvil.
+export function Seccion({ titulo, children, accion, colapsable, defaultAbierto = true }) {
+  const [abierto, setAbierto] = useState(defaultAbierto);
+  const mostrar = colapsable ? abierto : true;
+
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="bg-[#13193a] px-4 py-3 flex items-center justify-between">
-        <p className="text-sm font-bold text-white tracking-wide">{titulo}</p>
-        {accion}
-      </div>
-      <div className="p-4">{children}</div>
+      {colapsable ? (
+        <button
+          type="button"
+          onClick={() => setAbierto((a) => !a)}
+          className="w-full bg-[#13193a] px-4 py-3 flex items-center justify-between"
+        >
+          <p className="text-sm font-bold text-white tracking-wide">{titulo}</p>
+          <div className="flex items-center gap-2">
+            {accion}
+            <svg className={`w-4 h-4 text-white/60 transition-transform ${abierto ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </button>
+      ) : (
+        <div className="bg-[#13193a] px-4 py-3 flex items-center justify-between">
+          <p className="text-sm font-bold text-white tracking-wide">{titulo}</p>
+          {accion}
+        </div>
+      )}
+      {mostrar && <div className="p-4">{children}</div>}
     </div>
   );
 }
@@ -344,4 +377,49 @@ export function AfectadoTag({ label, active, onClick }) {
       {label}
     </button>
   );
+}
+
+// Suma el monto de todos los marcadores de "Daños del Siniestro" (todos
+// los lados, value = { [ladoId]: [{monto,...}] } de DanosMarcadores) —
+// usada para llenar en automático "Monto estimado del daño". Los
+// marcadores de "Daños Preexistentes" no tienen monto (solo nota), así
+// que esto solo debe llamarse con datosNA/datosAfectado.danosSiniestro,
+// nunca con .danosPreexistente.
+// Fila de botones tipo "chip" para elegir una opción de una lista corta
+// (Sí/No, Atropello/Colisión, etc.) — usada en el paso de Lesionados y
+// en Documentos (Pase Taller/Médico).
+export function ToggleRow({ label, options, current, onPick }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">{label}</label>
+      <div className="flex gap-2 flex-wrap">
+        {options.map((op) => (
+          <button
+            key={op}
+            type="button"
+            onClick={() => onPick(op)}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${current === op ? "bg-[#13193a] text-white border-[#13193a]" : "bg-white text-gray-500 border-gray-200"}`}
+          >
+            {op}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Mismo catálogo de regiones del cuerpo que usa el Pase Médico — se
+// reutiliza en el paso de Lesionados, así ambos hablan de las mismas
+// zonas sin que se desincronicen si se agrega/quita una.
+export const REGIONES_CUERPO = ["Cabeza", "Cuello", "Tórax", "Abdomen", "Miembros Superiores", "Miembros Inferiores"];
+
+export function sumaMontosDanos(value) {
+  return Object.values(value ?? {})
+    .flat()
+    .reduce((acc, m) => acc + (Number(m?.monto) || 0), 0);
+}
+
+export function formatMonto(n) {
+  if (!n) return "";
+  return n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 }

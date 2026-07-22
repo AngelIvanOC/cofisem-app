@@ -53,9 +53,11 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
     .select(`
       id, numero_siniestro, estatus, ubicacion, created_at,
       fecha_siniestro, hora_siniestro, tipo_siniestro, circunstancia, descripcion,
+      estado, municipio, colonia, cp,
+      clasificacion_siniestro, version_asegurado, zona_accidente, sentido_circulacion,
       croquis_data,
       polizas(
-        id, constancia, numero_poliza, placas, num_serie, anio, fecha_fin,
+        id, constancia, numero_poliza, placas, num_serie, anio, fecha_fin, color,
         clientes(nombre, apellido, rfc, curp, telefono, email,
                  calle, colonia, ciudad, estado, cp),
         vehiculos_amis(marca, tipo, dc, dl, anio),
@@ -107,7 +109,7 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
         marca:  veh.marca ?? "",
         modelo: veh.tipo || veh.dc || veh.dl || "",
         anio:   String(veh.anio || p.anio || ""),
-        color:  "",
+        color:  p.color ?? "",
         serie:  p.num_serie ?? "",
         placas: p.placas    ?? "",
       },
@@ -119,6 +121,14 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
         porcentajeDeducible: 0,
       },
       ubicacion: s.ubicacion ?? null,
+      // Estructurada — la llenó el cabinero al reportar, el ajustador la
+      // confirma/corrige en el paso 1 con el mismo select en cascada.
+      ubicacionEstructurada: {
+        estado:    s.estado    ?? "",
+        municipio: s.municipio ?? "",
+        colonia:   s.colonia   ?? "",
+        cp:        s.cp        ?? "",
+      },
       coords:    null,
       telefono:  cl.telefono ?? null,
       // Reportado por cabinero — para autorrellenar el paso 2 del ajustador
@@ -127,6 +137,12 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
       causaReportada:          s.tipo_siniestro  ?? null,
       circunstanciaReportada:  s.circunstancia   ?? null,
       descripcionReportada:    s.descripcion     ?? null,
+      // Ya capturado por el ajustador en una vuelta anterior a este paso —
+      // para que al regresar no se vea vacío lo que ya se guardó.
+      tipoAjustadorGuardado:      s.clasificacion_siniestro ?? null,
+      versionAseguradoGuardado:   s.version_asegurado       ?? null,
+      zonaAccidenteGuardada:      s.zona_accidente          ?? null,
+      sentidoCirculacionGuardado: s.sentido_circulacion     ?? null,
       croquisData:             s.croquis_data    ?? null,
       tiempo:    tiempoRelativo(s.created_at),
       estatus:   s.estatus ?? "Asignado",
