@@ -8,8 +8,12 @@ import {
   contarPolizasConcesionario,
   calcularEstatus,
   crearPolizaSubsecuente,
+  cambiarOficinaPoliza,
 } from "../../services/polizas";
-import { fetchOperadores } from "../../services/usuarios";
+import {
+  fetchOperadores,
+  fetchOperadoresPorOficina,
+} from "../../services/usuarios";
 import { fetchConfigCostos } from "../../services/configuracion";
 import { actualizarNombreCliente } from "../../services/clientes";
 import { actualizarNombreConcesionario } from "../../services/concesionarios";
@@ -24,6 +28,7 @@ import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 import {
   AlertTriangle,
+  ArrowLeftRight,
   CheckCircle2,
   ChevronLeft,
   Eye,
@@ -1427,6 +1432,257 @@ function DetallePolizaAdmin({ poliza, pagos, config, onVolver }) {
   );
 }
 
+// ── Modal Cambiar oficina / operador ───────────────────────────
+function ModalCambiarOficina({ poliza, onClose, onDone }) {
+  const [oficinas, setOficinas] = useState([]);
+  const [cargandoOficinas, setCargandoOficinas] = useState(true);
+  const [oficinaId, setOficinaId] = useState(
+    poliza.oficina_id ?? poliza.oficinas?.id ?? "",
+  );
+  const [operadores, setOperadores] = useState([]);
+  const [cargandoOperadores, setCargandoOperadores] = useState(false);
+  const [operadorId, setOperadorId] = useState("");
+  const [procesando, setProcesando] = useState(false);
+
+  // Oficinas disponibles
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("oficinas")
+          .select("id, nombre")
+          .order("nombre");
+        if (error) throw error;
+        setOficinas(data ?? []);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setCargandoOficinas(false);
+      }
+    })();
+  }, []);
+
+  // Operadores de la oficina seleccionada
+  useEffect(() => {
+    if (!oficinaId) {
+      setOperadores([]);
+      setOperadorId("");
+      return;
+    }
+    setCargandoOperadores(true);
+    (async () => {
+      try {
+        const ops = await fetchOperadoresPorOficina(oficinaId);
+        setOperadores(ops);
+        // Si el operador actual de la póliza sigue en la lista, se preselecciona
+        setOperadorId(
+          ops.some((o) => o.id === poliza.creado_por) ? poliza.creado_por : "",
+        );
+      } catch (e) {
+        console.error(e);
+        setOperadores([]);
+      } finally {
+        setCargandoOperadores(false);
+      }
+    })();
+  }, [oficinaId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const oficinaCambio = oficinaId !== "" && Number(oficinaId) !== Number(poliza.oficina_id ?? poliza.oficinas?.id ?? null);
+  const operadorFinal =
+    operadores.length > 1 ? (operadorId || null) : (operadores[0]?.id ?? null);
+  const operadorCambio = operadorFinal !== (poliza.creado_por ?? null);
+
+  const valido =
+    oficinaId !== "" &&
+    !cargandoOperadores &&
+    (operadores.length <= 1 || operadorId) &&
+    (oficinaCambio || operadorCambio);
+
+  const handleConfirmar = async () => {
+    setProcesando(true);
+    const constanciaLabel = poliza.constancia || poliza.numero_poliza;
+    try {
+      const updates = {};
+      const oficinaNombre =
+        oficinas.find((o) => Number(o.id) === Number(oficinaId))?.nombre ||
+        "";
+      const operadorNombre = operadores.find((o) => o.id === operadorFinal);
+      const operadorLabel = operadorNombre
+        ? `${operadorNombre.nombre} ${operadorNombre.apellido || ""}`.trim()
+        : null;
+
+      let notas;
+      if (oficinaCambio) {
+        updates.oficina_id = Number(oficinaId);
+        updates.creado_por = operadorFinal;
+        notas = `SE CAMBIA PÓLIZA A LA OFICINA ${oficinaNombre.toUpperCase()}${
+          operadorLabel ? ` — ASIGNADA A ${operadorLabel.toUpperCase()}` : ""
+        }`;
+      } else if (operadorCambio) {
+        updates.creado_por = operadorFinal;
+        notas = `SE REASIGNA PÓLIZA A ${operadorLabel ? operadorLabel.toUpperCase() : "—"}`;
+      }
+
+      await cambiarOficinaPoliza(poliza.id, updates, notas);
+
+      onDone();
+      Swal.fire({
+        icon: "success",
+        title: "Póliza actualizada",
+        text: `La póliza ${constanciaLabel} fue actualizada.`,
+        confirmButtonColor: "#13193a",
+        confirmButtonText: "Aceptar",
+        timer: 4000,
+        timerProgressBar: true,
+      });
+    } catch (e) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudo actualizar la póliza: " + e.message,
+        confirmButtonColor: "#13193a",
+      });
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const selCls =
+    "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{
+        backdropFilter: "blur(8px)",
+        backgroundColor: "rgba(10,15,40,0.55)",
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+            <ArrowLeftRight className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-sm font-bold text-[#13193a]">
+              Cambiar oficina / operador
+            </h2>
+            <p className="text-xs text-gray-400 mt-0.5 font-mono">
+              {poliza.constancia || poliza.numero_poliza} ·{" "}
+              {poliza.clientes?.nombre} {poliza.clientes?.apellido}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+              Oficina <span className="text-red-400">*</span>
+            </label>
+            {cargandoOficinas ? (
+              <div className="flex items-center gap-2 text-gray-400 text-xs py-1">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando
+                oficinas…
+              </div>
+            ) : (
+              <select
+                value={oficinaId}
+                onChange={(e) => setOficinaId(e.target.value)}
+                className={selCls}
+              >
+                <option value="">— Selecciona una oficina —</option>
+                {oficinas.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.nombre}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {oficinaId !== "" && (
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Operador asignado{" "}
+                {operadores.length > 1 && (
+                  <span className="text-red-400">*</span>
+                )}
+              </label>
+              {cargandoOperadores ? (
+                <div className="flex items-center gap-2 text-gray-400 text-xs py-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando
+                  operadores…
+                </div>
+              ) : operadores.length > 1 ? (
+                <select
+                  value={operadorId}
+                  onChange={(e) => setOperadorId(e.target.value)}
+                  className={selCls}
+                >
+                  <option value="">— Selecciona un operador —</option>
+                  {operadores.map((op) => (
+                    <option key={op.id} value={op.id}>
+                      {op.nombre} {op.apellido || ""}
+                    </option>
+                  ))}
+                </select>
+              ) : operadores.length === 1 ? (
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5">
+                  Se asignará a{" "}
+                  <span className="font-semibold text-[#13193a]">
+                    {operadores[0].nombre} {operadores[0].apellido || ""}
+                  </span>
+                  , único operador de esta oficina.
+                </p>
+              ) : (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                  Esta oficina no tiene operadores activos.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-6 pb-6">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirmar}
+            disabled={!valido || procesando}
+            className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold disabled:opacity-40 transition-all shadow-lg shadow-indigo-600/15 flex items-center justify-center gap-2"
+          >
+            {procesando ? (
+              <>
+                <Loader2 className="animate-spin w-4 h-4" />
+                Guardando…
+              </>
+            ) : (
+              "Guardar cambios"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Modal Poner al Corriente ──────────────────────────────────
 function ModalPonerAlCorriente({ poliza, onClose, onDone }) {
   const [cargando, setCargando] = useState(true);
@@ -1644,7 +1900,7 @@ export default function AdminPolizas() {
         `
         id, numero_poliza, constancia, estatus, forma_pago,
         fecha_inicio, fecha_fin, placas, aseguradora, created_at,
-        cliente_id, cobertura_id, oficina_id,
+        cliente_id, cobertura_id, oficina_id, creado_por,
         clientes(nombre, apellido),
         vendedores(nombre, apellido),
         oficinas(id, nombre),
@@ -2003,6 +2259,16 @@ export default function AdminPolizas() {
                             )}
                             PDF
                           </button>
+                          <button
+                            onClick={() => {
+                              setPolSel(p);
+                              setModal("oficina");
+                            }}
+                            title="Cambiar oficina / operador"
+                            className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-600 text-[11px] font-bold hover:bg-indigo-100 transition-colors whitespace-nowrap"
+                          >
+                            <ArrowLeftRight className="w-3 h-3" />
+                          </button>
                           {p.estatus !== "CANCELADA" && (
                             <>
                               <button
@@ -2087,6 +2353,16 @@ export default function AdminPolizas() {
       )}
       {modal === "devengar" && polSel && (
         <ModalCancelarProrrata
+          poliza={polSel}
+          onClose={cerrarModal}
+          onDone={() => {
+            cerrarModal();
+            cargar();
+          }}
+        />
+      )}
+      {modal === "oficina" && polSel && (
+        <ModalCambiarOficina
           poliza={polSel}
           onClose={cerrarModal}
           onDone={() => {

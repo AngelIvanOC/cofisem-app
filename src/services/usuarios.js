@@ -22,3 +22,27 @@ export async function fetchOperadores() {
   if (error) throw error;
   return data ?? [];
 }
+
+export async function fetchOperadoresPorOficina(oficinaId) {
+  if (!oficinaId) return [];
+
+  const { data: rol, error: eRol } = await supabase
+    .from("roles")
+    .select("id")
+    .ilike("nombre", "operador")
+    .maybeSingle();
+
+  if (eRol) throw eRol;
+  if (!rol) return [];
+
+  const { data, error } = await supabase
+    .from("usuarios")
+    .select("id, nombre, apellido")
+    .eq("rol_id", rol.id)
+    .eq("oficina_id", oficinaId)
+    .eq("activo", true)
+    .order("nombre");
+
+  if (error) throw error;
+  return data ?? [];
+}

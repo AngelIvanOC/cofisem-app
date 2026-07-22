@@ -670,6 +670,21 @@ export async function editarPoliza(id, { numSerie, numMotor, placas }, editadoPo
   });
 }
 
+// ── Cambiar oficina y/o operador asignado a una póliza ────────────────────
+// `updates` puede traer oficina_id y/o creado_por — solo se actualiza lo que
+// realmente cambió (ver ModalCambiarOficina en AdminPolizas.jsx).
+export async function cambiarOficinaPoliza(id, updates, notas) {
+  const { error } = await supabase.from('polizas').update(updates).eq('id', id);
+  if (error) throw error;
+
+  await supabase.from('polizas_historial').insert({
+    poliza_id:    id,
+    estatus_nuevo: null,
+    notas:         notas || null,
+    cambiado_por:  null,
+  });
+}
+
 // ── Contar pólizas activas de un cliente ──────────────────────────────────
 export async function contarPolizasCliente(clienteId) {
   if (!clienteId) return 0;
