@@ -11,6 +11,9 @@ import { PAGE_SIZE, RECTS, LOGO } from "./paseTallerGrid";
 import LOGO_GAMAN from "../../assets/logo_excel_pag1.png";
 import DANO_FRENTE from "../../assets/danos/frente.png";
 import DANO_DERECHA from "../../assets/danos/derecha.png";
+import DANO_ATRAS from "../../assets/danos/atras.png";
+import DANO_IZQUIERDA from "../../assets/danos/izquierda.png";
+import DANO_ARRIBA from "../../assets/danos/arriba.png";
 
 // Por default react-pdf parte a media palabra ("CUERNAVACA" -> "CUER-"
 // / "NAVACA") cuando una palabra larga cae justo en el borde de una
@@ -22,45 +25,68 @@ Font.registerHyphenationCallback((word) => [word]);
 
 const DEFAULT_BORDER = { t: { w: 0.5, c: "#000000" }, r: { w: 0.5, c: "#000000" }, b: { w: 0.5, c: "#000000" }, l: { w: 0.5, c: "#000000" } };
 
-// ── Rediseño del mapa de daños: 5 lados (antes 3 diagramas fijos del
-// Excel) — mismas fotos con marcadores que captura el ajustador en
-// DanosMarcadores.jsx (frente/detrás/arriba/derecha/izquierda). Por
-// ahora son placeholders para validar el espacio antes de conectar las
-// fotos reales (guardado en bucket, pendiente de aprobar este layout).
-const DIAGRAM_LABELS = ["FRENTE", "DETRÁS", "ARRIBA", "DERECHA", "IZQUIERDA"];
-function filaDiagramas(top) {
-  const left0 = 10, totalW = 592, gap = 6, labelH = 9, labelGap = 2, imgH = 82;
-  const n = DIAGRAM_LABELS.length;
+// ── Mapa de daños: 5 lados posibles, pero solo se dibuja el diagrama de
+// los que de verdad tienen marcadores — cada uno se agranda para ocupar
+// el espacio de los que no aplican, y lleva debajo su propia leyenda
+// numerada (mismos números que ya trae cada punto, ver
+// danosSiniestroMarcadores/danosPreexistentesMarcadores, armados en
+// pasePdf.js a partir de danos_siniestro_marcadores/danos_preexistente_marcadores).
+// El diagrama en sí es siempre el mismo dibujo genérico de referencia
+// (igual que el que usa el ajustador para marcar en DanosMarcadores.jsx,
+// src/assets/danos/) — no varía por siniestro, así que se embebe directo
+// en el PDF en vez de traerlo de Storage.
+const LADO_IMG = { FRENTE: DANO_FRENTE, "DETRÁS": DANO_ATRAS, ARRIBA: DANO_ARRIBA, DERECHA: DANO_DERECHA, IZQUIERDA: DANO_IZQUIERDA };
+const ORDEN_LADOS = ["FRENTE", "DETRÁS", "ARRIBA", "DERECHA", "IZQUIERDA"];
+// Las 5 imágenes miden exactamente 1536x1024 (confirmado) — mismo
+// aspecto siempre, así que no hace falta medirlas en tiempo de render.
+const ASPECT_LADO = 1536 / 1024;
+// react-pdf recorta el texto en silencio si la caja queda apenas por
+// debajo de lo que necesita una línea (mismo bug ya visto en otros PDFs
+// de este proyecto) — 10pt da margen de sobra para fontSize 6.5 + el
+// marginBottom de cada renglón.
+const LEGEND_LINE_H = 10;
+const IMG_H_MIN = 55, IMG_H_MAX = 105;
+
+// Rectángulo real donde cabe la imagen dentro de su caja (boxW x boxH)
+// SIN deformarla — mismo criterio "object-fit:contain" que ya usa
+// DanosMarcadores.jsx (rectoContenido): si sobra ancho, se centra
+// horizontal; nunca se estira a ojo para "rellenar" la caja.
+function contenido(boxW, boxH) {
+  let w = boxH * ASPECT_LADO, h = boxH;
+  if (w > boxW) { w = boxW; h = boxW / ASPECT_LADO; }
+  return { w, h, offL: (boxW - w) / 2, offT: (boxH - h) / 2 };
+}
+
+function filaDanos(top, marcadoresPorLabel, budget) {
+  const left0 = 10, totalW = 592, gap = 10, labelH = 10, labelGap = 2, legendGap = 3, margen = 8;
+  const activos = ORDEN_LADOS.filter((label) => marcadoresPorLabel?.[label]?.length);
+  if (activos.length === 0) {
+    return { slots: [], avisoRect: { l: left0, t: top, w: totalW, h: labelH + labelGap + IMG_H_MIN } };
+  }
+  // La caja de la imagen se agranda tanto como el espacio vertical de la
+  // fila lo permita (sin chocar con lo que sigue en la página), dejando
+  // lugar para la leyenda más larga de los lados activos — así un solo
+  // lado marcado se ve más grande que cuando hay varios, sin necesitar
+  // números fijos por cantidad de lados.
+  const maxMarcas = Math.max(...activos.map((label) => marcadoresPorLabel[label].length));
+  const legendH = maxMarcas * LEGEND_LINE_H;
+  const imgH = Math.min(IMG_H_MAX, Math.max(IMG_H_MIN, budget - margen - labelH - labelGap - legendGap - legendH));
+  const n = activos.length;
   const w = (totalW - gap * (n - 1)) / n;
-  return DIAGRAM_LABELS.map((label, i) => {
+  const slots = activos.map((label, i) => {
     const l = left0 + i * (w + gap);
+    const cont = contenido(w, imgH);
     return {
       label,
       labelRect: { l, t: top, w, h: labelH },
       imgRect: { l, t: top + labelH + labelGap, w, h: imgH },
+      contRect: { l: l + cont.offL, t: top + labelH + labelGap + cont.offT, w: cont.w, h: cont.h },
+      legendRect: { l, t: top + labelH + labelGap + imgH + legendGap, w, h: legendH },
+      marcadores: marcadoresPorLabel[label],
     };
   });
+  return { slots, avisoRect: null };
 }
-const FILA_DANOS_SINIESTRO = filaDiagramas(338.06);
-const FILA_DANOS_PREEXISTENTES = filaDiagramas(490.63);
-
-// ── SIMULACIÓN TEMPORAL — solo para revisar el espacio con fotos reales
-// encima mientras no existe el guardado en bucket ni los 5 lados reales
-// (hoy LADOS_CARRO solo tiene frente/derecha). "DETRÁS" reutiliza la
-// foto de frente (miden prácticamente lo mismo); "IZQUIERDA" reutiliza
-// la de derecha, espejeada; "ARRIBA" se deja vacío porque aún no se
-// tiene esa medida. Quitar este bloque y las 2 líneas que lo usan en
-// <Overlay> en cuanto haya URLs reales de Storage.
-const SIMULACION_FOTOS = { FRENTE: DANO_FRENTE, "DETRÁS": DANO_FRENTE, DERECHA: DANO_DERECHA, IZQUIERDA: DANO_DERECHA };
-const SIMULACION_ESPEJO = { IZQUIERDA: true };
-const SIMULACION_MARCADORES_SINIESTRO = {
-  FRENTE: [{ xPct: 0.32, yPct: 0.4, numero: 1 }, { xPct: 0.68, yPct: 0.6, numero: 2 }],
-  DERECHA: [{ xPct: 0.5, yPct: 0.5, numero: 1 }],
-};
-const SIMULACION_MARCADORES_PREEXISTENTES = {
-  IZQUIERDA: [{ xPct: 0.4, yPct: 0.55, numero: 1 }],
-};
-
 
 // ── Helpers de datos ───────────────────────────────────────────
 function fmtFechaDMA(str) {
@@ -134,47 +160,64 @@ function CheckMark({ rect, active }) {
   );
 }
 // Espacio de un lado del mapa de daños: etiqueta (FRENTE/DETRÁS/...)
-// arriba + recuadro de la foto. Con `url` dibuja la foto real (marcada
-// por el ajustador en DanosMarcadores.jsx); sin ella, un placeholder
-// punteado — así se puede validar el espacio de los 5 lados aunque la
-// foto todavía no venga de ningún lado.
-function DiagramaLado({ labelRect, imgRect, label, url, espejo, marcadores }) {
-  if (!imgRect) return null;
+// arriba + recuadro gris (imgRect, ancho completo de la columna) + la
+// imagen SIN deformar centrada adentro (contRect, ya resuelto por
+// contenido() en filaDanos) + los puntos que marcó el ajustador
+// (posicionados sobre contRect, no sobre la caja completa — es donde
+// de verdad está la imagen) + su leyenda numerada debajo.
+function DiagramaLado({ labelRect, imgRect, contRect, legendRect, label, marcadores }) {
+  const url = LADO_IMG[label];
   return (
     <>
       <View style={{ position: "absolute", left: labelRect.l, top: labelRect.t, width: labelRect.w, height: labelRect.h, alignItems: "center", justifyContent: "center" }}>
-        <Text style={{ fontSize: 6.5, fontFamily: "Helvetica-Bold", color: "#374151" }}>{label}</Text>
+        <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: "#374151" }}>{label}</Text>
       </View>
       <View
         style={{
           position: "absolute", left: imgRect.l, top: imgRect.t, width: imgRect.w, height: imgRect.h,
           borderWidth: 0.75, borderColor: "#9ca3af", backgroundColor: "#f3f4f6",
-          alignItems: "center", justifyContent: "center",
         }}
-      >
-        {url ? (
-          <Image src={url} style={{ width: imgRect.w, height: imgRect.h, transform: espejo ? "scaleX(-1)" : undefined }} />
-        ) : (
-          <Text style={{ fontSize: 6, color: "#9ca3af", textAlign: "center" }}>Foto{"\n"}pendiente</Text>
-        )}
-      </View>
-      {marcadores?.map((m) => (
+      />
+      <Image src={url} style={{ position: "absolute", left: contRect.l, top: contRect.t, width: contRect.w, height: contRect.h }} />
+      {marcadores.map((m) => (
         <View
           key={m.numero}
           style={{
             position: "absolute",
-            left: imgRect.l + m.xPct * imgRect.w - 4.5,
-            top: imgRect.t + m.yPct * imgRect.h - 4.5,
-            width: 9, height: 9, borderRadius: 4.5,
-            backgroundColor: "rgba(220,38,38,0.55)", borderWidth: 0.6, borderColor: "#dc2626",
+            left: contRect.l + m.xPct * contRect.w - 6,
+            top: contRect.t + m.yPct * contRect.h - 6,
+            width: 12, height: 12, borderRadius: 6,
+            backgroundColor: "rgba(220,38,38,0.55)", borderWidth: 0.75, borderColor: "#dc2626",
             alignItems: "center", justifyContent: "center",
           }}
         >
-          <Text style={{ fontSize: 5, color: "#ffffff", fontFamily: "Helvetica-Bold" }}>{m.numero}</Text>
+          <Text style={{ fontSize: 6.5, color: "#ffffff", fontFamily: "Helvetica-Bold" }}>{m.numero}</Text>
         </View>
       ))}
+      <View style={{ position: "absolute", left: legendRect.l, top: legendRect.t, width: legendRect.w, height: legendRect.h }}>
+        {marcadores.map((m) => (
+          <Text key={m.numero} wrap={false} style={{ fontSize: 6.5, color: "#1f2937", marginBottom: 1.5 }}>
+            <Text style={{ fontFamily: "Helvetica-Bold" }}>{m.numero}. </Text>
+            {m.nota || "—"}
+          </Text>
+        ))}
+      </View>
     </>
   );
+}
+// Fila completa de un mapa de daños (siniestro o preexistentes): dibuja
+// solo los lados con marcadores; si ninguno tiene, un solo aviso
+// centrado en vez de 5 casillas vacías.
+function FilaDanos({ top, budget, marcadoresPorLabel, prefix }) {
+  const { slots, avisoRect } = filaDanos(top, marcadoresPorLabel, budget);
+  if (!slots.length) {
+    return (
+      <View style={{ position: "absolute", left: avisoRect.l, top: avisoRect.t, width: avisoRect.w, height: avisoRect.h, alignItems: "center", justifyContent: "center" }}>
+        <Text style={{ fontSize: 8, color: "#9ca3af", fontFamily: "Helvetica-Bold" }}>Sin daños marcados</Text>
+      </View>
+    );
+  }
+  return slots.map((slot) => <DiagramaLado key={`${prefix}-${slot.label}`} {...slot} />);
 }
 
 // ── Esqueleto: dibuja TODAS las celdas tal cual el Excel ──────
@@ -237,24 +280,18 @@ function Overlay({ d }) {
       {V(13, 8, d.taller?.colonia)}
       {V(13, 9, d.taller?.telefono)}
 
-      {/* Mapa de daños — Daños del siniestro (5 lados) */}
-      {FILA_DANOS_SINIESTRO.map((slot) => (
-        <DiagramaLado
-          key={`ds-${slot.label}`} {...slot}
-          url={d.danosSiniestroUrls?.[slot.label] ?? SIMULACION_FOTOS[slot.label]}
-          espejo={SIMULACION_ESPEJO[slot.label]}
-          marcadores={SIMULACION_MARCADORES_SINIESTRO[slot.label]}
-        />
-      ))}
-      {/* Mapa de daños — Daños preexistentes (5 lados) */}
-      {FILA_DANOS_PREEXISTENTES.map((slot) => (
-        <DiagramaLado
-          key={`dp-${slot.label}`} {...slot}
-          url={d.danosPreexistentesUrls?.[slot.label] ?? SIMULACION_FOTOS[slot.label]}
-          espejo={SIMULACION_ESPEJO[slot.label]}
-          marcadores={SIMULACION_MARCADORES_PREEXISTENTES[slot.label]}
-        />
-      ))}
+      {/* Mapa de daños — Daños del siniestro (solo lados con marcas).
+          budget = espacio real hasta el borde inferior de ESTA celda del
+          Excel (326.22 + 130.17 = 456.39 — no hasta donde empieza la
+          fila de "Daños preexistentes", que ya incluye su propio
+          encabezado azul de por medio), para que la imagen crezca todo
+          lo que el hueco disponible permite sin invadir la celda de al
+          lado. */}
+      <FilaDanos top={338.06} budget={456.39 - 338.06} marcadoresPorLabel={d.danosSiniestroMarcadores} prefix="ds" />
+      {/* Mapa de daños — Daños preexistentes. budget = hasta el borde
+          inferior de esta celda (474.99 + 130.17 = 605.16), justo antes
+          del bloque de "NOTAS". */}
+      <FilaDanos top={490.63} budget={605.16 - 490.63} marcadoresPorLabel={d.danosPreexistentesMarcadores} prefix="dp" />
 
       {/* Orden condicionada / lugar y fecha */}
       <TextBox rect={R(RECTS, 36, 0)} value={d.ordenCondicionada} align="center" />

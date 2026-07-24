@@ -56,6 +56,7 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
       estado, municipio, colonia, cp,
       clasificacion_siniestro, version_asegurado, zona_accidente, sentido_circulacion,
       croquis_data,
+      conductor_es_tercero, conductor_nombre, conductor_telefono,
       polizas(
         id, constancia, numero_poliza, placas, num_serie, anio, fecha_fin, color,
         clientes(nombre, apellido, rfc, curp, telefono, email,
@@ -144,6 +145,12 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
       zonaAccidenteGuardada:      s.zona_accidente          ?? null,
       sentidoCirculacionGuardado: s.sentido_circulacion     ?? null,
       croquisData:             s.croquis_data    ?? null,
+      // Quién manejaba, ya lo decidió el cabinero al levantar el
+      // reporte — el ajustador ya no vuelve a preguntarlo (ver
+      // Conductor en DatosSiniestro.jsx).
+      conductorEsTerceroReportado: s.conductor_es_tercero ?? false,
+      conductorNombreReportado:    s.conductor_nombre     ?? null,
+      conductorTelefonoReportado:  s.conductor_telefono   ?? null,
       tiempo:    tiempoRelativo(s.created_at),
       estatus:   s.estatus ?? "Asignado",
       poliza:    polizaNum,

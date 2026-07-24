@@ -348,6 +348,10 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
     setUploadError(null);
   };
 
+  // Ya hay una foto de llegada subida en un intento anterior y no se tomó
+  // una nueva esta sesión — el arribo ya se registró la vez pasada.
+  const yaConfirmadoAntes = !!fotoExistente && !fotoLocal;
+
   const handleConfirmar = async () => {
     if (uploading || guardando) return;
     setGuardando(true);
@@ -539,23 +543,28 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
         </div>
       )}
 
-      {/* Botón */}
+      {/* Botón — si ya había una foto de llegada subida en un intento
+          anterior (fotoExistente) y no se tomó una nueva esta sesión, el
+          arribo ya quedó registrado la vez pasada: no hace falta volver a
+          confirmar ni a mandar GPS, solo se avanza al siguiente paso. */}
       <div className="pb-6">
         <button
-          onClick={handleConfirmar}
-          disabled={(!fotoLocal && !fotoExistente) || confirmado || uploading || guardando}
+          onClick={yaConfirmadoAntes ? onConfirmar : handleConfirmar}
+          disabled={yaConfirmadoAntes ? false : ((!fotoLocal && !fotoExistente) || confirmado || uploading || guardando)}
           className={[
             "w-full py-3.5 rounded-2xl text-sm font-bold transition-all duration-300",
-            !fotoLocal
-              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : uploading || guardando
-                ? "bg-gray-200 text-gray-400 cursor-wait"
-                : confirmado
-                  ? "bg-emerald-500 text-white"
-                  : "bg-[#13193a] hover:bg-[#1e2a50] text-white active:scale-[0.98] shadow-lg shadow-[#13193a]/15",
+            yaConfirmadoAntes
+              ? "bg-[#13193a] hover:bg-[#1e2a50] text-white active:scale-[0.98] shadow-lg shadow-[#13193a]/15"
+              : !fotoLocal && !fotoExistente
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : uploading || guardando
+                  ? "bg-gray-200 text-gray-400 cursor-wait"
+                  : confirmado
+                    ? "bg-emerald-500 text-white"
+                    : "bg-[#13193a] hover:bg-[#1e2a50] text-white active:scale-[0.98] shadow-lg shadow-[#13193a]/15",
           ].join(" ")}
         >
-          {uploading ? (
+          {yaConfirmadoAntes ? "Siguiente" : uploading ? (
             <span className="flex items-center justify-center gap-2">
               <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
               Subiendo foto...

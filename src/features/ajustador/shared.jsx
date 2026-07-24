@@ -189,13 +189,9 @@ export const TIPOS_SINIESTRO = [
   "Otro",
 ];
 
-export const TALLERES_LISTA = [
-  { nombre: "Taller Morelos",         telefono: "777 100 2233", calle: "Blvd. Juárez 450",                    colonia: "Centro, Cuernavaca, Morelos" },
-  { nombre: "AutoServicios del Sur",  telefono: "777 200 3344", calle: "Av. Plan de Ayala 890",                colonia: "Temixco, Morelos" },
-  { nombre: "Taller Zapata",          telefono: "777 300 4455", calle: "Emiliano Zapata 25",                   colonia: "Centro, Jiutepec, Morelos" },
-  { nombre: "Multimarcas Cuernavaca", telefono: "777 400 5566", calle: "Av. Domingo Diez 1205",                colonia: "Cuernavaca, Morelos" },
-  { nombre: "Renova Cars",            telefono: "552 661 5281", calle: "Carretera Los Reyes Texcoco Km 33",    colonia: "Texcoco, Edo. Méx." },
-];
+// TALLERES_LISTA se dio de baja — el paso "Documentos" ahora trae los
+// talleres reales de la tabla `servicios` (tipo='taller') vía
+// fetchTalleres() en services/servicios.js.
 
 export const CLINICAS_LISTA = [
   { nombre: "Clínica Reforma",        telefono: "777 302 2505", direccion: "C. Ocotepec 517, Cuernavaca, Morelos 62260" },

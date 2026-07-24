@@ -42,9 +42,15 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
       .finally(() => setAjustadoresCargando(false));
   }, []);
 
+  // Por default el operador es el propio asegurado — se precarga con sus
+  // datos de la póliza (poliza.asegurado). Si el checkbox "El operador
+  // no es el asegurado" se marca, estos 2 campos se limpian para
+  // capturar al operador real (SeccionConductorNA se encarga).
   const [conductorNA, setConductorNA] = useState({
-    nombre: "", telefono: "", esTercero: false,
-    contactoExtraNombre: "", contactoExtraTelefono: "",
+    nombre: poliza.asegurado?.nombre ?? "",
+    telefono: poliza.asegurado?.telefono ?? "",
+    operadorEsOtro: false,
+    cabinaNombre: "", cabinaTelefono: "",
   });
 
   const [localizacion, setLocalizacion] = useState({
@@ -116,7 +122,7 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
       </Seccion>
 
       {/* Conductor del asegurado */}
-      <SeccionConductorNA data={conductorNA} onChange={setConductorNA} />
+      <SeccionConductorNA data={conductorNA} onChange={setConductorNA} asegurado={poliza.asegurado} />
 
       {/* Información del siniestro */}
       <Seccion titulo="Información del Siniestro">

@@ -36,11 +36,12 @@ export default function DatosSiniestro({ siniestro, onSiguiente }) {
   const [causa,         setCausa]         = useState(siniestro.causaReportada ?? "");
   const [circunstancia, setCircunstancia] = useState(siniestro.circunstanciaReportada ?? "");
 
-  // Conductor — si es el contratante (asegurado) sus datos personales ya
-  // se conocen (no se vuelven a pedir), solo faltan los de licencia.
-  const [conductorEsContratante, setConductorEsContratante] = useState(null);
-  const [conductorNombre,    setConductorNombre]    = useState("");
-  const [conductorTelefono,  setConductorTelefono]  = useState("");
+  // Conductor — quién manejaba (el asegurado o alguien más) ya lo
+  // decidió el cabinero al levantar el reporte; aquí no se vuelve a
+  // preguntar. Si es el asegurado, sus datos personales ya se conocen;
+  // si no, el nombre/teléfono ya los capturó el cabinero (de solo
+  // lectura) y solo falta el domicilio + los datos de licencia.
+  const conductorEsAsegurado = siniestro.conductorEsTerceroReportado !== true;
   const [conductorDireccion, setConductorDireccion] = useState({ estado: "", municipio: "", colonia: "", cp: "", calle: "", numero: "" });
   const [licenciaTipo,       setLicenciaTipo]       = useState("");
   const [licenciaNumero,     setLicenciaNumero]     = useState("");
@@ -57,23 +58,16 @@ export default function DatosSiniestro({ siniestro, onSiguiente }) {
     setGuardando(true);
     setErrorGuardar(null);
     try {
-      const esContratante = conductorEsContratante === "Sí";
-      // Si no se contestó "¿el conductor es el contratante?", no se manda
-      // nombre/teléfono/domicilio del conductor — así no se pisa lo que ya
-      // capturó el cabinero al reportar el siniestro (conductor_nombre/
-      // conductor_telefono) con valores vacíos por default.
-      const datosConductor = conductorEsContratante === null ? {} : {
-        conductorEsTercero: !esContratante,
-        conductorNombre:    esContratante ? a.nombre    : conductorNombre,
-        conductorTelefono:  esContratante ? a.telefono  : conductorTelefono,
-        conductorDomicilio: esContratante ? a.direccion : combinarDireccion(conductorDireccion),
-      };
+      // Quién maneja (asegurado o no) ya lo definió el cabinero — este
+      // paso ya no lo decide ni lo vuelve a escribir. Domicilio del
+      // conductor solo aplica cuando no es el asegurado (si lo es, ya
+      // se conoce por a.direccion).
       await actualizarDatosSiniestro(siniestro.id, {
         tipo, fechaAccidente, horaAccidente, lugar, descripcion, versionAsegurado,
         zonaAccidente, sentidoCirculacion,
         causa, circunstancia,
         estado: ubicacion.estado, municipio: ubicacion.municipio, colonia: ubicacion.colonia, cp: ubicacion.cp,
-        ...datosConductor,
+        conductorDomicilio: conductorEsAsegurado ? a.direccion : combinarDireccion(conductorDireccion),
         licenciaTipo, licenciaNumero, licenciaFechaExp, licenciaLugarExp, fechaNacimiento,
       });
       onSiguiente();
@@ -204,38 +198,20 @@ export default function DatosSiniestro({ siniestro, onSiguiente }) {
         </div>
       </Seccion>
 
-      {/* ── Conductor ──────────────────────────────────────────── */}
+      {/* ── Conductor — quién manejaba ya lo dijo el cabinero ─────── */}
       <Seccion titulo="Conductor">
         <div className="space-y-3">
-          <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">¿El conductor es el contratante (asegurado)?</label>
-            <div className="flex gap-2">
-              {["Sí", "No"].map((op) => (
-                <button
-                  key={op}
-                  onClick={() => setConductorEsContratante(op)}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${conductorEsContratante === op ? "bg-[#13193a] text-white border-[#13193a]" : "bg-white text-gray-500 border-gray-200"}`}
-                >
-                  {op}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {conductorEsContratante === "Sí" && (
+          {conductorEsAsegurado ? (
             <div className="bg-gray-50 rounded-xl p-3 space-y-1.5">
               <p className="text-xs font-bold text-[#13193a]">{a.nombre}</p>
               <p className="text-xs text-gray-500">{a.telefono}</p>
               <p className="text-xs text-gray-400">{a.direccion}</p>
             </div>
-          )}
-
-          {conductorEsContratante === "No" && (
+          ) : (
             <>
-              <Campo label="Nombre del conductor" placeholder="Nombre completo" value={conductorNombre} onChange={setConductorNombre} />
               <div className="grid grid-cols-2 gap-3">
-                <Campo label="Teléfono" type="tel" placeholder="55 0000 0000" value={conductorTelefono} onChange={setConductorTelefono} />
-                <Campo label="Fecha de nacimiento" type="date" value={fechaNacimiento} onChange={setFechaNacimiento} />
+                <CampoSistema label="Nombre del conductor" value={siniestro.conductorNombreReportado} />
+                <CampoSistema label="Teléfono" value={siniestro.conductorTelefonoReportado} />
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Domicilio</label>
@@ -251,21 +227,15 @@ export default function DatosSiniestro({ siniestro, onSiguiente }) {
             </>
           )}
 
-          {conductorEsContratante !== null && (
-            <>
-              {conductorEsContratante === "Sí" && (
-                <Campo label="Fecha de nacimiento" type="date" value={fechaNacimiento} onChange={setFechaNacimiento} />
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                <Campo label="Tipo de licencia" placeholder="Ej. Tipo A" value={licenciaTipo} onChange={setLicenciaTipo} />
-                <Campo label="Número de licencia" value={licenciaNumero} onChange={setLicenciaNumero} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Campo label="Fecha de expedición" type="date" value={licenciaFechaExp} onChange={setLicenciaFechaExp} />
-                <Campo label="Lugar de expedición" value={licenciaLugarExp} onChange={setLicenciaLugarExp} />
-              </div>
-            </>
-          )}
+          <Campo label="Fecha de nacimiento" type="date" value={fechaNacimiento} onChange={setFechaNacimiento} />
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Tipo de licencia" placeholder="Ej. Tipo A" value={licenciaTipo} onChange={setLicenciaTipo} />
+            <Campo label="Número de licencia" value={licenciaNumero} onChange={setLicenciaNumero} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Fecha de expedición" type="date" value={licenciaFechaExp} onChange={setLicenciaFechaExp} />
+            <Campo label="Lugar de expedición" value={licenciaLugarExp} onChange={setLicenciaLugarExp} />
+          </div>
         </div>
       </Seccion>
 

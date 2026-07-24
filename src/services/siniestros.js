@@ -31,7 +31,7 @@ export function detectarTipoBusqueda(v) {
 const SEL_POLIZA = `
   id, constancia, numero_poliza, estatus, fecha_inicio, fecha_fin,
   cliente_id, placas, num_serie, num_motor, anio, capacidad, notas,
-  clientes(nombre, apellido),
+  clientes(nombre, apellido, telefono),
   oficinas(nombre),
   vendedores(nombre, apellido),
   concesionarios(nombre, apellido1, apellido2),
@@ -102,6 +102,11 @@ function mapPolizaACard(p) {
     clienteId: p.cliente_id,   // necesario para crearSiniestro
     numero:    p.constancia || p.numero_poliza,
     titular,
+    // Nombre y teléfono del cliente solos (sin "Y/O <concesionario>" del
+    // titular) — para precargar "Conductor del Asegurado" en el reporte
+    // de cabinero, asumiendo que el asegurado es quien maneja hasta que
+    // se diga lo contrario.
+    asegurado: { nombre, telefono: p.clientes?.telefono ?? "" },
     vendedor:  [p.vendedores?.nombre, p.vendedores?.apellido].filter(Boolean).join(" ") || null,
     prima:     fmtMXN(primaTotal),
     estatus:   calcularEstatus(p.estatus, p.fecha_fin),
@@ -215,12 +220,18 @@ export async function crearSiniestro({ polizaId, clienteId, folio, form, reporta
       calle:      localizacion?.calle      || null,
       numero_ext: localizacion?.numero     || null,
       referencia: localizacion?.referencia || null,
-      // Conductor del asegurado
+      // Conductor del asegurado — nombre/telefono son de quien manejaba
+      // (el operador): por default el propio asegurado (precargado desde
+      // clientes en FormSiniestro), o alguien distinto si se marcó
+      // operadorEsOtro. conductor_cabina_* es aparte y opcional: el
+      // contacto de la cabina/radiotaxi que reporta, para localizar al
+      // operador si no contesta — no reemplaza al operador, se guarda
+      // además.
       conductor_nombre:            conductorNA?.nombre               || null,
       conductor_telefono:          conductorNA?.telefono             || null,
-      conductor_es_tercero:        conductorNA?.esTercero            ?? false,
-      conductor_contacto_nombre:   conductorNA?.contactoExtraNombre  || null,
-      conductor_contacto_telefono: conductorNA?.contactoExtraTelefono || null,
+      conductor_es_tercero:        conductorNA?.operadorEsOtro       ?? false,
+      conductor_cabina_nombre:     conductorNA?.cabinaNombre         || null,
+      conductor_cabina_telefono:   conductorNA?.cabinaTelefono       || null,
       // Ajustador, estatus y tiempos del reporte
       ajustador_id:        ajustadorId      || null,
       estatus:             ajustadorId ? "Asignado" : "Reportado",
@@ -300,13 +311,12 @@ export async function actualizarDatosSiniestro(siniestroId, {
   zonaAccidente, sentidoCirculacion,
   causa, circunstancia,
   estado, municipio, colonia, cp,
-  conductorEsTercero, conductorNombre, conductorTelefono, conductorDomicilio,
+  conductorDomicilio,
   licenciaTipo, licenciaNumero, licenciaFechaExp, licenciaLugarExp, fechaNacimiento,
 }) {
-  // conductor_*/conductor_es_tercero llegan `undefined` (no `null`) cuando
-  // el ajustador no contestó "¿el conductor es el contratante?" — en ese
-  // caso se omiten del payload para no pisar con vacío lo que ya haya
-  // capturado el cabinero al reportar el siniestro.
+  // conductor_es_tercero/conductor_nombre/conductor_telefono NO se tocan
+  // aquí — ya los definió el cabinero al levantar el reporte (ver
+  // crearSiniestro) y el ajustador no vuelve a decidir quién manejaba.
   const { error } = await supabase
     .from("siniestros")
     .update({
@@ -326,10 +336,7 @@ export async function actualizarDatosSiniestro(siniestroId, {
       municipio:               municipio || null,
       colonia:                 colonia   || null,
       cp:                      cp        || null,
-      ...(conductorEsTercero !== undefined && { conductor_es_tercero: conductorEsTercero }),
-      ...(conductorNombre    !== undefined && { conductor_nombre:     conductorNombre    || null }),
-      ...(conductorTelefono  !== undefined && { conductor_telefono:   conductorTelefono  || null }),
-      ...(conductorDomicilio !== undefined && { conductor_domicilio:  conductorDomicilio || null }),
+      conductor_domicilio:     conductorDomicilio || null,
       licencia_tipo:           licenciaTipo        || null,
       licencia_numero:         licenciaNumero      || null,
       licencia_fecha_exp:      licenciaFechaExp    || null,
@@ -540,7 +547,8 @@ export async function guardarDatosAjuste(siniestroId, datos) {
 }
 
 // ── Guardar Pase Taller (paso 6 del ajustador) ────────────────
-// El taller elegido de TALLERES_LISTA o capturado manualmente se
+// El taller elegido de la tabla `servicios` (ver fetchTalleres en
+// services/servicios.js) o capturado manualmente se
 // guarda ya "aplanado" (nombre/tel/calle/colonia sueltos) — el
 // PDF no necesita saber si vino de la lista fija o fue manual.
 export async function guardarPaseTaller(siniestroId, datos) {

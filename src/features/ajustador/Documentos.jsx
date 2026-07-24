@@ -9,8 +9,9 @@
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import { guardarPaseTaller, guardarPaseMedico, fetchLesionados, guardarFirmas, cerrarSiniestro } from "../../services/siniestros";
+import { fetchTalleres } from "../../services/servicios";
 import { subirFirma } from "../../services/evidencias";
-import { Campo, CampoSistema, Sep, ToggleRow, TALLERES_LISTA, CLINICAS_LISTA } from "./shared";
+import { Campo, CampoSistema, Sep, ToggleRow, CLINICAS_LISTA } from "./shared";
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -41,17 +42,17 @@ function DocToggle({ titulo, desc, activo, onToggle, children }) {
 }
 
 // ── Pase Taller ───────────────────────────────────────────────
-function PaseTaller({ siniestro, value, onChange }) {
+function PaseTaller({ siniestro, value, onChange, talleres }) {
   const set = (patch) => onChange((v) => ({ ...v, ...patch }));
 
   const p      = siniestro.polizaInfo ?? {};
   const manual = value.tallerIdx === "manual";
-  const taller = !manual && value.tallerIdx !== "" ? TALLERES_LISTA[Number(value.tallerIdx)] : null;
+  const taller = !manual && value.tallerIdx !== "" ? talleres.find((t) => String(t.id) === value.tallerIdx) : null;
 
   const handleTallerSelect = (val) => {
     if (val !== "manual" && val !== "") {
-      const t = TALLERES_LISTA[Number(val)];
-      set({ tallerIdx: val, tallerNombre: t.nombre, tallerTel: t.telefono, tallerCalle: t.calle, tallerColonia: t.colonia });
+      const t = talleres.find((x) => String(x.id) === val);
+      if (t) set({ tallerIdx: val, tallerNombre: t.nombre, tallerTel: t.telefono, tallerCalle: t.calle, tallerColonia: t.colonia });
     } else if (val === "manual") {
       set({ tallerIdx: val, tallerNombre: "", tallerTel: "", tallerCalle: "", tallerColonia: "" });
     } else {
@@ -101,7 +102,7 @@ function PaseTaller({ siniestro, value, onChange }) {
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all"
             >
               <option value="">Selecciona un taller...</option>
-              {TALLERES_LISTA.map((t, i) => <option key={i} value={i}>{t.nombre}</option>)}
+              {talleres.map((t) => <option key={t.id} value={String(t.id)}>{t.nombre}</option>)}
               <option value="manual">Otro taller (capturar manualmente)</option>
             </select>
           </div>
@@ -115,7 +116,7 @@ function PaseTaller({ siniestro, value, onChange }) {
                     <Campo label="Teléfono" type="tel" placeholder="55 0000 0000" value={value.tallerTel} onChange={(v) => set({ tallerTel: v })} />
                   </div>
                   <Campo label="Calle, No. Exterior e interior" placeholder="Calle y número" value={value.tallerCalle} onChange={(v) => set({ tallerCalle: v })} />
-                  <Campo label="Colonia" placeholder="Colonia, ciudad" value={value.tallerColonia} onChange={(v) => set({ tallerColonia: v })} />
+                  <Campo label="Colonia" placeholder="Colonia" value={value.tallerColonia} onChange={(v) => set({ tallerColonia: v })} />
                 </>
               ) : (
                 <>
@@ -374,6 +375,7 @@ export default function Documentos({ siniestro, onFinalizar }) {
   const [paseTaller, setPaseTaller] = useState(PASE_TALLER_DEFAULT);
   const [paseMedico, setPaseMedico] = useState(PASE_MEDICO_DEFAULT);
   const [lesionados, setLesionados] = useState([]);
+  const [talleres,   setTalleres]   = useState([]);
   const [firmas,     setFirmas]     = useState({ asegurado: null, afectado: null, ajustador: null, lesionado: null });
   const [firmando,   setFirmando]   = useState(null);
   const [cerrando,   setCerrando]   = useState(false);
@@ -382,6 +384,10 @@ export default function Documentos({ siniestro, onFinalizar }) {
   useEffect(() => {
     fetchLesionados(siniestro.id).then(setLesionados).catch(() => setLesionados([]));
   }, [siniestro.id]);
+
+  useEffect(() => {
+    fetchTalleres().then(setTalleres).catch(() => setTalleres([]));
+  }, []);
 
   const toggleDoc = (k) => setDocs((d) => ({ ...d, [k]: !d[k] }));
 
@@ -419,7 +425,7 @@ export default function Documentos({ siniestro, onFinalizar }) {
       <div className="space-y-3">
         <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Selecciona los documentos a generar</p>
         <DocToggle titulo="Pase Taller" desc="Autorización para reparación del vehículo" activo={docs.taller} onToggle={() => toggleDoc("taller")}>
-          <PaseTaller siniestro={siniestro} value={paseTaller} onChange={setPaseTaller} />
+          <PaseTaller siniestro={siniestro} value={paseTaller} onChange={setPaseTaller} talleres={talleres} />
         </DocToggle>
         <DocToggle titulo="Pase Médico" desc="Autorización de atención por lesiones" activo={docs.medico} onToggle={() => toggleDoc("medico")}>
           <PaseMedico value={paseMedico} onChange={setPaseMedico} lesionados={lesionados} />

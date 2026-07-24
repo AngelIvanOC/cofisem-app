@@ -21,14 +21,33 @@ const SEL_PASE_TALLER = `
   pase_taller_taller_nombre, pase_taller_taller_calle, pase_taller_taller_colonia, pase_taller_taller_telefono,
   pase_taller_orden_condicionada, pase_taller_fecha_expedicion,
   municipio, firma_asegurado_url, firma_ajustador_url,
+  danos_siniestro_marcadores, danos_preexistente_marcadores,
   polizas(
     numero_poliza, constancia, placas, color, fecha_inicio,
     clientes(nombre, apellido, telefono),
     vehiculos_amis(marca, tipo, anio)
   ),
   ajustador:usuarios!siniestros_ajustador_id_fkey(nombre, apellido, telefono),
-  siniestros_terceros(propietario_nombre, propietario_telefono, firma_reclamante_url)
+  siniestros_terceros(propietario_nombre, propietario_telefono, firma_reclamante_url, danos_siniestro_marcadores, danos_preexistente_marcadores)
 `;
+
+// ── Numeración global de marcadores de daños, en el mismo orden en que
+// el ajustador los captura en DanosMarcadores.jsx (ver LADOS_CARRO en
+// src/features/ajustador/danos/lados.js) — el número de cada marcador
+// no se guarda con él, se deriva de esa posición. Traduce además el id
+// de lado (minúsculas, sin acentos) a la etiqueta que usa el PDF.
+const LADO_ORDEN  = ["frente", "derecha", "atras", "izquierda", "arriba"];
+const LADO_LABEL  = { frente: "FRENTE", derecha: "DERECHA", atras: "DETRÁS", izquierda: "IZQUIERDA", arriba: "ARRIBA" };
+
+function marcadoresPorLabel(marcadoresPorLadoId) {
+  const resultado = {};
+  let n = 0;
+  for (const ladoId of LADO_ORDEN) {
+    const arr = marcadoresPorLadoId?.[ladoId] ?? [];
+    if (arr.length) resultado[LADO_LABEL[ladoId]] = arr.map((m) => ({ xPct: m.xPct, yPct: m.yPct, nota: m.nota, numero: ++n }));
+  }
+  return resultado;
+}
 
 // ── 1. Trae todo lo crudo de BD + genera URLs firmadas de firmas ──
 export async function fetchPaseTallerData(siniestroId) {
@@ -63,6 +82,11 @@ export function buildPaseTallerPDF(data) {
   const interesadoTelefono = data.esTercero ? t.propietario_telefono : cl.telefono;
   const interesadoFirmaUrl = data.esTercero ? data.firmaTerceroUrl   : data.firmaAseguradoUrl;
 
+  // El mapa de daños es del vehículo al que le corresponde el pase (el
+  // del asegurado o el del tercero, según pase_taller_definicion) — los
+  // marcadores se leen de esa misma fuente.
+  const fuenteDanos = data.esTercero ? t : data;
+
   return {
     numeroSiniestro: data.numero_siniestro,
     placas: p.placas,
@@ -95,6 +119,8 @@ export function buildPaseTallerPDF(data) {
     },
     ordenCondicionada: data.pase_taller_orden_condicionada,
     lugarFecha: [data.municipio, fmtFecha(data.pase_taller_fecha_expedicion)].filter(Boolean).join(", "),
+    danosSiniestroMarcadores:     marcadoresPorLabel(fuenteDanos.danos_siniestro_marcadores),
+    danosPreexistentesMarcadores: marcadoresPorLabel(fuenteDanos.danos_preexistente_marcadores),
     ajustadorFirma: { nombre: aj.nombre ? [aj.nombre, aj.apellido].filter(Boolean).join(" ") : null, telefono: aj.telefono, url: data.firmaAjustadorUrl },
     interesadoFirma: { nombre: interesadoNombre, telefono: interesadoTelefono, url: interesadoFirmaUrl },
   };
