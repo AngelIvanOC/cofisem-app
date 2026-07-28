@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Eye,
+  KeyRound,
   Loader2,
   Pencil,
   RefreshCcw,
@@ -1901,6 +1902,7 @@ export default function AdminPolizas() {
         id, numero_poliza, constancia, estatus, forma_pago,
         fecha_inicio, fecha_fin, placas, aseguradora, created_at,
         cliente_id, cobertura_id, oficina_id, creado_por,
+        num_serie, estado_serie,
         clientes(nombre, apellido),
         vendedores(nombre, apellido),
         oficinas(id, nombre),
@@ -2027,6 +2029,47 @@ export default function AdminPolizas() {
       console.error(e);
     } finally {
       setLoadingViewerId(null);
+    }
+  };
+
+  const liberarSerie = async (p) => {
+    const { isConfirmed } = await Swal.fire({
+      icon: "question",
+      title: "Liberar No. Serie",
+      text: `¿Autorizas liberar el No. Serie de la póliza ${p.constancia || p.numero_poliza} para permitir una nueva póliza con el mismo número?`,
+      showCancelButton: true,
+      confirmButtonColor: "#13193a",
+      confirmButtonText: "Sí, liberar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!isConfirmed) return;
+    try {
+      await supabase
+        .from("polizas")
+        .update({ estado_serie: "LIBERADA" })
+        .eq("id", p.id);
+      await supabase.from("polizas_historial").insert({
+        poliza_id: p.id,
+        estatus_nuevo: "SERIE_LIBERADA",
+        notas: `Se autorizó la liberación del No. Serie ${p.num_serie || ""} para permitir una nueva póliza.`,
+        cambiado_por: null,
+      });
+      await cargar();
+      Swal.fire({
+        icon: "success",
+        title: "Serie liberada",
+        text: `El No. Serie de la póliza ${p.constancia || p.numero_poliza} ya está disponible para una nueva póliza.`,
+        confirmButtonColor: "#13193a",
+        timer: 4000,
+        timerProgressBar: true,
+      });
+    } catch (e) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudo liberar la serie: " + e.message,
+        confirmButtonColor: "#13193a",
+      });
     }
   };
 
@@ -2269,6 +2312,16 @@ export default function AdminPolizas() {
                           >
                             <ArrowLeftRight className="w-3 h-3" />
                           </button>
+                          {p.estado_serie === "SOLICITADA" && (
+                            <button
+                              onClick={() => liberarSerie(p)}
+                              title="Autorizar liberación de No. Serie"
+                              className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-[11px] font-bold hover:bg-purple-100 transition-colors whitespace-nowrap"
+                            >
+                              <KeyRound className="w-3 h-3" />
+                              Liberar serie
+                            </button>
+                          )}
                           {p.estatus !== "CANCELADA" && (
                             <>
                               <button

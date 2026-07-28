@@ -131,6 +131,7 @@ export default function FormCotizacion({
   const [amisError, setAmisError] = useState(false);
   const [serieError, setSerieError] = useState(null);
   const [serieChecking, setSerieChecking] = useState(false);
+  const [serieBloqueante, setSerieBloqueante] = useState(null);
   const [modoManual, setModoManual] = useState(false);
   const [todasMarcas, setTodasMarcas] = useState([]);
   const [tiposManualDisp, setTiposManualDisp] = useState([]);
@@ -568,18 +569,53 @@ export default function FormCotizacion({
     if (!val || val.length < 5) return;
     setSerieChecking(true);
     setSerieError(null);
+    setSerieBloqueante(null);
     const { data } = await supabase
       .from("polizas")
-      .select("constancia, estatus")
+      .select("id, constancia, estatus, estado_serie")
       .eq("num_serie", val)
       .in("estatus", ["VIGENTE", "POR VENCER"])
       .maybeSingle();
-    if (data) {
+    if (data && data.estado_serie !== "LIBERADA") {
       setSerieError(
         `Este No. Serie ya tiene una póliza vigente: ${data.constancia}`,
       );
+      setSerieBloqueante(data);
     }
     setSerieChecking(false);
+  };
+
+  const solicitarLiberacionSerie = async () => {
+    if (!serieBloqueante) return;
+    try {
+      await supabase
+        .from("polizas")
+        .update({ estado_serie: "SOLICITADA" })
+        .eq("id", serieBloqueante.id);
+      await supabase.from("polizas_historial").insert({
+        poliza_id: serieBloqueante.id,
+        estatus_nuevo: "SOLICITUD_LIBERACION_SERIE",
+        notas: `${usuario?.nombre ?? ""} ${usuario?.apellido ?? ""} solicitó liberar el No. Serie para emitir una nueva póliza con el mismo número.`.trim(),
+        cambiado_por: usuario?.id ?? null,
+      });
+      setSerieBloqueante((b) =>
+        b ? { ...b, estado_serie: "SOLICITADA" } : b,
+      );
+      await Swal.fire({
+        icon: "success",
+        title: "Solicitud enviada",
+        text: "Un administrador debe autorizar la liberación antes de que puedas continuar con esta póliza.",
+        confirmButtonColor: "#13193a",
+        confirmButtonText: "Aceptar",
+      });
+    } catch (e) {
+      await Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudo enviar la solicitud: " + e.message,
+        confirmButtonColor: "#13193a",
+      });
+    }
   };
 
   const handleEmitir = async () => {
@@ -1793,13 +1829,29 @@ export default function FormCotizacion({
             <button
               onClick={async () => {
                 if (paso === 2 && serieError) {
-                  await Swal.fire({
+                  if (serieBloqueante?.estado_serie === "SOLICITADA") {
+                    await Swal.fire({
+                      icon: "info",
+                      title: "Solicitud pendiente",
+                      text: `Ya se solicitó la liberación de este No. Serie (póliza ${serieBloqueante.constancia}). Un administrador debe autorizarla antes de continuar.`,
+                      confirmButtonColor: "#13193a",
+                      confirmButtonText: "Entendido",
+                    });
+                    return;
+                  }
+                  const { dismiss } = await Swal.fire({
                     icon: "error",
                     title: "No. Serie duplicado",
                     text: serieError,
                     confirmButtonColor: "#13193a",
                     confirmButtonText: "Entendido",
+                    showCancelButton: true,
+                    cancelButtonColor: "#b45309",
+                    cancelButtonText: "Solicitar liberación de serie",
                   });
+                  if (dismiss === Swal.DismissReason.cancel) {
+                    await solicitarLiberacionSerie();
+                  }
                   return;
                 }
                 if (paso === 2 && modoManual) {
