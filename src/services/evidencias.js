@@ -130,7 +130,6 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
         colonia:   s.colonia   ?? "",
         cp:        s.cp        ?? "",
       },
-      coords:    null,
       telefono:  cl.telefono ?? null,
       // Reportado por cabinero — para autorrellenar el paso 2 del ajustador
       fechaSiniestroReportada: s.fecha_siniestro ?? null,

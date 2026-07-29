@@ -21,12 +21,15 @@ function distanciaMetros(lat1, lng1, lat2, lng2) {
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-function fmtCoords(lat, lng) {
-  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-}
-
 function mapsUrl(lat, lng) {
   return `https://maps.google.com/?q=${lat},${lng}`;
+}
+
+// Ruta/direcciones hacia el lugar del siniestro — a coords geocodificadas
+// si ya las tenemos, si no a la dirección en texto (Google la resuelve igual).
+function mapsDirUrl(destino) {
+  const q = typeof destino === "string" ? destino : `${destino.lat},${destino.lng}`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`;
 }
 
 // ── Hook: GPS del dispositivo ─────────────────────────────────
@@ -54,33 +57,30 @@ function useGPS() {
 }
 
 // ── Tarjeta GPS del dispositivo ───────────────────────────────
+// No se muestran coordenadas crudas: solo un estado simple
+// (Confirmada / Falta por confirmar) para no generar la impresión
+// de que el ajustador queda geolocalizado todo el tiempo.
 function TarjetaGPSDispositivo({ estado, coords }) {
   if (estado === "pidiendo") {
     return (
-      <div className="flex items-center gap-3 p-3 rounded-2xl bg-blue-50 border border-blue-100">
-        <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
-          <div className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
+      <div className="flex items-center gap-3 p-3 rounded-2xl bg-gray-50 border border-gray-200">
+        <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
+          <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
         </div>
-        <div>
-          <p className="text-xs font-bold text-blue-800">Obteniendo ubicación del dispositivo...</p>
-          <p className="text-[11px] text-blue-500 mt-0.5">Acepta el permiso de ubicación si el navegador lo solicita</p>
-        </div>
+        <p className="text-xs font-bold text-gray-500">Confirmando ubicación...</p>
       </div>
     );
   }
 
   if (estado === "denegado") {
     return (
-      <div className="flex items-center gap-3 p-3 rounded-2xl bg-amber-50 border border-amber-200">
-        <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 text-amber-600">
+      <div className="flex items-center gap-3 p-3 rounded-2xl bg-gray-50 border border-gray-200">
+        <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 text-gray-400">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
           </svg>
         </div>
-        <div>
-          <p className="text-xs font-bold text-amber-800">GPS del dispositivo no disponible</p>
-          <p className="text-[11px] text-amber-600 mt-0.5">El arribo se registrará sin coordenadas del dispositivo</p>
-        </div>
+        <p className="text-xs font-bold text-gray-500">Falta por confirmar</p>
       </div>
     );
   }
@@ -91,23 +91,16 @@ function TarjetaGPSDispositivo({ estado, coords }) {
       href={mapsUrl(coords.lat, coords.lng)}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-start gap-3 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+      className="flex items-center gap-3 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition-colors"
     >
-      <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0 text-emerald-600 mt-0.5">
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+      <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0 text-emerald-600">
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <p className="text-xs font-bold text-emerald-800">Ubicación del dispositivo capturada</p>
-          <svg className="w-3 h-3 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <p className="text-[11px] text-emerald-700 font-mono mt-0.5">{fmtCoords(coords.lat, coords.lng)}</p>
-        <p className="text-[10px] text-emerald-500 mt-0.5">Precisión: ±{coords.precision} m · Ver en Google Maps →</p>
+      <div>
+        <p className="text-xs font-bold text-emerald-800">Confirmada</p>
+        <p className="text-[10px] text-emerald-500 mt-0.5">Ver en Google Maps →</p>
       </div>
     </a>
   );
@@ -243,14 +236,12 @@ function TarjetaGPSFoto({ fotoGPS, gpsDispositivo }) {
         </svg>
       </div>
       <div className="flex-1 min-w-0">
-        <p className={`text-xs font-bold ${clr.text}`}>GPS de la fotografía (EXIF)</p>
-        <p className={`text-[11px] font-mono mt-0.5 ${clr.text}`}>{fmtCoords(fotoGPS.lat, fotoGPS.lng)}</p>
-        {distancia !== null && (
+        <p className={`text-xs font-bold ${clr.text}`}>Foto georreferenciada</p>
+        {distancia !== null ? (
           <p className={`text-[10px] mt-0.5 font-semibold ${clr.text}`}>
-            {consistencia.icono} Diferencia con dispositivo: {distancia < 1000 ? `${distancia} m` : `${(distancia / 1000).toFixed(1)} km`} — {consistencia.texto}
+            {consistencia.icono} {consistencia.texto} con tu ubicación
           </p>
-        )}
-        {distancia === null && (
+        ) : (
           <p className={`text-[10px] mt-0.5 ${clr.text}`}>Ver en Google Maps →</p>
         )}
       </div>
@@ -262,6 +253,11 @@ function TarjetaGPSFoto({ fotoGPS, gpsDispositivo }) {
 export default function ConfirmarArribo({ siniestro, onConfirmar }) {
   const { estado: gpsEstado, coords: gpsCoords } = useGPS();
   const { cargando: geoCargando, coords: sinCoords } = useGeocodeSiniestro(siniestro);
+  const siniestroMapsUrl = sinCoords
+    ? mapsDirUrl(sinCoords)
+    : siniestro.ubicacion
+      ? mapsDirUrl(siniestro.ubicacion)
+      : null;
 
   const [confirmado,  setConfirmado]  = useState(false);
   const [fotoLocal,   setFotoLocal]   = useState(null);
@@ -426,13 +422,21 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
           </div>
         </div>
         {siniestro.ubicacion && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
+          <a
+            href={siniestroMapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-start gap-2 px-3 py-2 rounded-xl bg-gray-50 border border-gray-100 hover:bg-gray-100 transition-colors"
+          >
             <svg className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
             </svg>
-            <p className="text-xs text-gray-500 leading-snug">{siniestro.ubicacion}</p>
-          </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 leading-snug">{siniestro.ubicacion}</p>
+              <p className="text-[10px] text-blue-600 font-semibold mt-0.5">Cómo llegar en Google Maps →</p>
+            </div>
+          </a>
         )}
       </div>
 
@@ -483,9 +487,7 @@ export default function ConfirmarArribo({ siniestro, onConfirmar }) {
             )}
             {fotoGPS && !uploading && (
               <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1">
-                <p className="text-white text-[10px] font-mono">
-                  📍 {fotoGPS.lat.toFixed(4)}, {fotoGPS.lng.toFixed(4)}
-                </p>
+                <p className="text-white text-[10px] font-semibold">📍 Ubicación verificada</p>
               </div>
             )}
 

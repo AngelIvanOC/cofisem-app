@@ -2,9 +2,14 @@
 // src/features/ajustador/croquis/CroquisEditor.jsx
 // Editor de croquis por arrastre de iconos (vehículos, señales,
 // elementos de vía y efectos) sobre una plantilla esquemática.
-// Llena por completo el contenedor donde se monta (pensado para
-// usarse dentro de un modal de pantalla completa) y no gestiona
-// su propia persistencia: expone exportPNG() por ref.
+// El lienzo (Stage) SIEMPRE mide la misma proporción que la celda
+// real del croquis en el PDF — nunca se estira para llenar el
+// contenedor, se "contiene" (letterbox) dentro del espacio
+// disponible, quedando más chico de ancho o de alto según el
+// dispositivo. Así lo que se dibuja/exporta ya tiene exactamente
+// la proporción final: se ve igual mientras se edita, en la
+// miniatura de preview y en el PDF — no gestiona su propia
+// persistencia: expone exportPNG() por ref.
 // ============================================================
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Stage, Layer, Transformer, Group } from "react-konva";
@@ -17,6 +22,15 @@ import "./forzarRotacionKonva";
 function nuevoId(tipo) {
   return `${tipo}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
+
+// Proporción real de la celda del croquis en el PDF (Reverso, r1:47 c1:0
+// en declaracionGrid.js): 592 × 122.52 pt ≈ 4.83:1. El Stage del editor
+// se dimensiona siempre a esta misma proporción (ver stageW/stageH más
+// abajo) en vez de ocupar el contenedor completo — así nada necesita
+// estirarse ni deformarse en ningún punto del proceso.
+const CROQUIS_BOX_W = 592;
+const CROQUIS_BOX_H = 122.52;
+const CROQUIS_ASPECT = CROQUIS_BOX_W / CROQUIS_BOX_H;
 
 function ElementoCroquis({ el, isSelected, onSelect, onChange, shapeRef }) {
   const Icono = ICON_COMPONENTS[el.tipo];
@@ -102,10 +116,21 @@ const CroquisEditor = forwardRef(function CroquisEditor(
   const seleccionado = elements.find((e) => e.id === selectedId) ?? null;
   const catalogoSeleccionado = seleccionado ? CATALOGO_POR_TIPO[seleccionado.tipo] : null;
 
+  // El Stage se "contiene" dentro del espacio medido (size = contenedor
+  // completo), manteniendo siempre la proporción de CROQUIS_ASPECT — nunca
+  // se estira para llenar el contenedor completo, así que queda más chico
+  // de ancho o de alto según el dispositivo, pero jamás deformado.
+  let stageW = size.w;
+  let stageH = stageW / CROQUIS_ASPECT;
+  if (stageH > size.h) {
+    stageH = size.h;
+    stageW = stageH * CROQUIS_ASPECT;
+  }
+
   const agregarElemento = useCallback((item) => {
     const id = nuevoId(item.tipo);
-    const cx = size.w / 2 || 300;
-    const cy = size.h / 2 || 200;
+    const cx = stageW / 2 || 300;
+    const cy = stageH / 2 || 200;
     const cascade = (elements.length % 6) * 16;
     setElements((els) => [
       ...els,
@@ -123,7 +148,7 @@ const CroquisEditor = forwardRef(function CroquisEditor(
     ]);
     setSelectedId(id);
     setPaletaAbierta(false);
-  }, [elements.length, size.w, size.h, setElements, setSelectedId]);
+  }, [elements.length, stageW, stageH, setElements, setSelectedId]);
 
   const actualizarElemento = useCallback((actualizado) => {
     setElements((els) => els.map((e) => (e.id === actualizado.id ? actualizado : e)));
@@ -159,39 +184,42 @@ const CroquisEditor = forwardRef(function CroquisEditor(
 
   return (
     <div className="h-full w-full flex flex-col bg-white">
-      {/* Lienzo — ocupa todo el espacio disponible, sin scroll */}
+      {/* Lienzo — el Stage se centra y se "contiene" (letterbox) dentro de
+          este contenedor, que sí ocupa todo el espacio disponible */}
       <div ref={containerRef} className="relative w-full flex-1 min-h-0 bg-gray-100 overflow-hidden">
-        {size.w > 0 && (
-          <Stage
-            ref={stageRef}
-            width={size.w}
-            height={size.h}
-            onMouseDown={deseleccionarSiFondo}
-            onTouchStart={deseleccionarSiFondo}
-          >
-            <Layer>
-              <Plantilla w={size.w} h={size.h} />
-            </Layer>
-            <Layer>
-              {elements.map((el) => (
-                <ElementoCroquis
-                  key={el.id}
-                  el={el}
-                  isSelected={el.id === selectedId}
-                  onSelect={() => setSelectedId(el.id)}
-                  onChange={actualizarElemento}
-                  shapeRef={(node) => { shapeRefs.current[el.id] = node; }}
+        {stageW > 0 && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Stage
+              ref={stageRef}
+              width={stageW}
+              height={stageH}
+              onMouseDown={deseleccionarSiFondo}
+              onTouchStart={deseleccionarSiFondo}
+            >
+              <Layer>
+                <Plantilla w={stageW} h={stageH} />
+              </Layer>
+              <Layer>
+                {elements.map((el) => (
+                  <ElementoCroquis
+                    key={el.id}
+                    el={el}
+                    isSelected={el.id === selectedId}
+                    onSelect={() => setSelectedId(el.id)}
+                    onChange={actualizarElemento}
+                    shapeRef={(node) => { shapeRefs.current[el.id] = node; }}
+                  />
+                ))}
+                <Transformer
+                  ref={trRef}
+                  keepRatio
+                  rotateEnabled
+                  enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
+                  boundBoxFunc={(oldBox, newBox) => (newBox.width < 10 || newBox.height < 10 ? oldBox : newBox)}
                 />
-              ))}
-              <Transformer
-                ref={trRef}
-                keepRatio
-                rotateEnabled
-                enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
-                boundBoxFunc={(oldBox, newBox) => (newBox.width < 10 || newBox.height < 10 ? oldBox : newBox)}
-              />
-            </Layer>
-          </Stage>
+              </Layer>
+            </Stage>
+          </div>
         )}
 
         {/* Panel del elemento seleccionado — flota sobre el lienzo, nunca

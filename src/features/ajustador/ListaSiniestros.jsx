@@ -106,8 +106,10 @@ export default function ListaSiniestros({ onAtender }) {
         {/* Lista de siniestros */}
         {!loading && !error && filtrados.map((s) => {
           const atendido  = esCerrado(s);
-          const tieneUbic = !!s.ubicacion && !!s.coords;
-          const mapsUrl   = tieneUbic ? `https://maps.google.com/?q=${s.coords.lat},${s.coords.lng}` : null;
+          const tieneUbic = !!s.ubicacion;
+          const mapsUrl   = tieneUbic
+            ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.ubicacion)}`
+            : null;
 
           return (
             <div
@@ -150,16 +152,6 @@ export default function ListaSiniestros({ onAtender }) {
                     </div>
                     <span className="truncate">{s.ubicacion}</span>
                   </a>
-                ) : s.ubicacion ? (
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <div className="w-6 h-6 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                      </svg>
-                    </div>
-                    <span className="truncate">{s.ubicacion}</span>
-                  </div>
                 ) : s.telefono ? (
                   <a href={`tel:${s.telefono}`} className="flex items-center gap-1.5 text-xs font-semibold">
                     <div className="w-6 h-6 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
