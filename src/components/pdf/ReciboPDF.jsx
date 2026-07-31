@@ -171,7 +171,7 @@ function SeccionRecibo({
               }}
             >
               No.:{" "}
-              {formaPago === "CONTADO"
+              {formaPago === "CONTADO" || pagoDe === pagoTotal
                 ? pad8(noRecibo)
                 : `${pagoDe} de ${pagoTotal}`}
             </Text>
