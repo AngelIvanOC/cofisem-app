@@ -9,7 +9,7 @@ import { getFirmaSignedUrl } from "./evidencias";
 
 const SEL_PASE_MEDICO = `
   numero_siniestro, fecha_siniestro, ajustador_id,
-  pase_medico_lesionado_id,
+  pase_medico_lesionado_id, pase_medico_numero,
   pase_medico_clinica_nombre, pase_medico_clinica_telefono,
   pase_medico_clinica_domicilio, pase_medico_fecha_expedicion,
   firma_ajustador_url, firma_lesionado_url,
@@ -58,6 +58,7 @@ export function buildPaseMedicoPDF(data) {
 
   return {
     numeroSiniestro: data.numero_siniestro,
+    numeroPase: data.pase_medico_numero,
     fechaExpedicion: data.pase_medico_fecha_expedicion,
     fechaPercance: data.fecha_siniestro,
     asegurado: { nombre: [cl.nombre, cl.apellido].filter(Boolean).join(" ") },

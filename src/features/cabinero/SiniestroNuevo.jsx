@@ -81,7 +81,7 @@ export default function SiniestroNuevo({ usuario }) {
       const horaInicio = horaInicioRef.current ?? horaFin;
       const minutos    = ((horaFin - horaInicio) / 60000).toFixed(2);
 
-      await crearSiniestro({
+      const creado = await crearSiniestro({
         polizaId:          poliza.id,
         clienteId:         poliza.clienteId,
         folio:             form.nroReporte,
@@ -91,6 +91,7 @@ export default function SiniestroNuevo({ usuario }) {
       });
 
       setResultado({
+        siniestroId:  creado.id,
         folio:        form.nroReporte,
         ajustador:    form.ajustador || null,
         horaInicio:   fmtTime(horaInicio),

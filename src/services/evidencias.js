@@ -8,6 +8,7 @@ import { getState } from "../auth";
 
 const BUCKET        = "siniestros-evidencia";
 const FIRMAS_BUCKET = "siniestros-firmas";
+const AUDIO_BUCKET   = "siniestros-audio";
 
 const COMPRESSION_OPTS = {
   maxSizeMB:        0.4,     // objetivo 400 KB por foto
@@ -256,6 +257,36 @@ export async function registrarArribo(siniestroId, { lat, lng, precision, fotoLa
     })
     .eq("id", siniestroId);
   if (error) throw error;
+}
+
+// ── Sube el audio adjunto al siniestro (un solo audio por siniestro,
+// se sobrescribe si ya había uno) y guarda su storage_path en
+// siniestros.audio_url ────────────────────────────────────────
+export async function subirAudioSiniestro({ siniestroId, numeroSiniestro, file }) {
+  const ext  = file.name?.split(".").pop() || "webm";
+  const path = `${numeroSiniestro}/audio.${ext}`;
+
+  const { error: storageErr } = await supabase.storage
+    .from(AUDIO_BUCKET)
+    .upload(path, file, { contentType: file.type || "audio/webm", upsert: true });
+  if (storageErr) throw storageErr;
+
+  const { error: dbErr } = await supabase
+    .from("siniestros")
+    .update({ audio_url: path })
+    .eq("id", siniestroId);
+  if (dbErr) throw dbErr;
+
+  return path;
+}
+
+// ── URL firmada temporal (1 hora) para reproducir el audio ────
+export async function getAudioSignedUrl(storagePath) {
+  const { data, error } = await supabase.storage
+    .from(AUDIO_BUCKET)
+    .createSignedUrl(storagePath, 3600);
+  if (error) throw error;
+  return data.signedUrl;
 }
 
 // ── Todas las evidencias de un siniestro ─────────────────────

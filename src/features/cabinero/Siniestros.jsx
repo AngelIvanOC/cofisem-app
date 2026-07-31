@@ -1,16 +1,24 @@
 import { useState, useMemo, useEffect } from "react";
+import { pdf } from "@react-pdf/renderer";
+import { FileText, Loader2 } from "lucide-react";
 import { STATUS_CLS } from "./constants/estilos";
 import { fetchSiniestros, asignarAjustador } from "../../services/siniestros";
+import { fetchPolizaById, buildPolizaPDF } from "../../services/polizas";
+import { fetchConfigCostos } from "../../services/configuracion";
+import { generateQR } from "../../utils/generateQR";
+import PolizaPDF from "../../components/pdf/PolizaPDF";
 import ModalDetalle from "./components/ModalDetalle";
+import BotonAudioSiniestro from "./components/BotonAudioSiniestro";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 
-export default function Siniestros() {
+export default function Siniestros({ usuario }) {
   const [siniestros,    setSiniestros]    = useState([]);
   const [cargando,      setCargando]      = useState(true);
   const [filtroEstatus, setFiltroEstatus] = useState("Todos");
   const [busqueda,      setBusqueda]      = useState("");
   const [modalSiniestro, setModalSiniestro] = useState(null);
+  const [loadingPolizaId, setLoadingPolizaId] = useState(null);
 
   useEffect(() => {
     fetchSiniestros()
@@ -47,6 +55,33 @@ export default function Siniestros() {
     if (sin?.id && aj?.id) {
       asignarAjustador(sin.id, aj).catch(() => {});
     }
+  };
+
+  // Abre el PDF como documento propio en una pestaña nueva — ver nota en
+  // ReporteExito.jsx sobre por qué no se embebe en un iframe.
+  const handleVerPoliza = async (e, s) => {
+    e.stopPropagation();
+    const nuevaVentana = window.open("", "_blank");
+    setLoadingPolizaId(s.id);
+    try {
+      const [full, config] = await Promise.all([fetchPolizaById(s.polizaId), fetchConfigCostos()]);
+      const base      = buildPolizaPDF(full, usuario?.oficinas, config);
+      const qrDataUrl = await generateQR(`${window.location.origin}/gaman/verificar/${full.constancia}`);
+      const datos     = { ...base, qrDataUrl };
+      const blob = await pdf(<PolizaPDF poliza={datos} />).toBlob();
+      const url  = URL.createObjectURL(blob);
+      if (nuevaVentana) nuevaVentana.location.href = url;
+      else window.open(url, "_blank");
+    } catch (err) {
+      nuevaVentana?.close();
+      alert("No se pudo cargar la póliza: " + err.message);
+    } finally {
+      setLoadingPolizaId(null);
+    }
+  };
+
+  const handleAudioSubido = (folio, path) => {
+    setSiniestros((prev) => prev.map((s) => (s.folio === folio ? { ...s, audioUrl: path } : s)));
   };
 
   return (
@@ -215,6 +250,24 @@ export default function Siniestros() {
                             />
                           </svg>
                         </button>
+                        {s.polizaId && (
+                          <button
+                            onClick={(e) => handleVerPoliza(e, s)}
+                            disabled={loadingPolizaId === s.id}
+                            title="Ver póliza"
+                            className="w-7 h-7 rounded-lg text-gray-300 hover:text-[#13193a] hover:bg-gray-100 flex items-center justify-center transition-colors disabled:opacity-40"
+                          >
+                            {loadingPolizaId === s.id
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <FileText className="w-4 h-4" />}
+                          </button>
+                        )}
+                        <BotonAudioSiniestro
+                          siniestroId={s.id}
+                          numeroSiniestro={s.folio}
+                          audioUrl={s.audioUrl}
+                          onUploaded={(path) => handleAudioSubido(s.folio, path)}
+                        />
                         {!s.ajustador && (
                           <button
                             onClick={() => setModalSiniestro(s)}

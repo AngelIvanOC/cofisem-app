@@ -253,7 +253,7 @@ export async function fetchSiniestros() {
       id, numero_siniestro, tipo_siniestro, descripcion, estatus,
       fecha_siniestro, ubicacion, ajustador_id,
       arribo_fecha, arribo_lat, arribo_lng, created_at,
-      municipio, estado, colonia,
+      municipio, estado, colonia, audio_url,
       polizas(
         id, constancia, numero_poliza, placas, anio, notas,
         clientes(nombre, apellido, telefono),
@@ -289,6 +289,7 @@ export async function fetchSiniestros() {
       estatus:          s.estatus || "Reportado",
       polizaId:         p.id,
       polizaConstancia: p.constancia || p.numero_poliza || "—",
+      audioUrl:         s.audio_url    ?? null,
       cobertura:        p.coberturas?.nombre ?? "—",
       telefono:         cl.telefono ?? "—",
       arribo_fecha:     s.arribo_fecha ?? null,
@@ -546,6 +547,18 @@ export async function guardarDatosAjuste(siniestroId, datos) {
   if (error) throw error;
 }
 
+// ── Folio consecutivo del pase (Taller/Médico, contadores
+// independientes) — se pide hasta que el ajustador FINALIZA el
+// siniestro, no al activar el toggle del documento, para no quemar
+// folios de pases que se activan y luego se cancelan. Ver
+// archivos_apoyo/migracion_folios_pase.sql (tabla folios_pase +
+// función siguiente_folio, UPDATE...RETURNING atómico).
+export async function obtenerSiguienteFolio(tipoPase) {
+  const { data, error } = await supabase.rpc("siguiente_folio", { p_tipo: tipoPase });
+  if (error) throw error;
+  return data;
+}
+
 // ── Guardar Pase Taller (paso 6 del ajustador) ────────────────
 // El taller elegido de la tabla `servicios` (ver fetchTalleres en
 // services/servicios.js) o capturado manualmente se
@@ -600,6 +613,7 @@ export async function guardarPaseMedico(siniestroId, datos) {
     .from("siniestros")
     .update({
       pase_medico_lesionado_id:      datos.lesionadoId          || null,
+      pase_medico_numero:            datos.numeroPase           || null,
       pase_medico_clinica_nombre:    datos.clinicaNombre        || null,
       pase_medico_clinica_telefono:  datos.clinicaTel           || null,
       pase_medico_clinica_domicilio: datos.clinicaDir           || null,

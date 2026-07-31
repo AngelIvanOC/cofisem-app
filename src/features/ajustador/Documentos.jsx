@@ -8,7 +8,7 @@
 // médico/clínica asignada + fecha de expedición.
 // ============================================================
 import { useState, useEffect, useRef } from "react";
-import { guardarPaseTaller, guardarPaseMedico, fetchLesionados, guardarFirmas, cerrarSiniestro } from "../../services/siniestros";
+import { guardarPaseTaller, guardarPaseMedico, fetchLesionados, guardarFirmas, cerrarSiniestro, obtenerSiguienteFolio } from "../../services/siniestros";
 import { fetchTalleres } from "../../services/servicios";
 import { subirFirma } from "../../services/evidencias";
 import { Campo, CampoSistema, Sep, ToggleRow, CLINICAS_LISTA } from "./shared";
@@ -153,7 +153,7 @@ function PaseTaller({ siniestro, value, onChange, talleres }) {
 
       <Sep label="Datos del pase" />
       <div className="grid grid-cols-2 gap-3">
-        <Campo label="Número de pase" placeholder="MC 0000" value={value.numeroPase} onChange={(v) => set({ numeroPase: v })} />
+        <CampoSistema label="Número de pase" value={value.numeroPase} placeholder="Se asigna al finalizar" />
         <Campo label="Clave" placeholder="000" value={value.clave} onChange={(v) => set({ clave: v })} />
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -268,7 +268,10 @@ function PaseMedico({ value, onChange, lesionados }) {
         </div>
       )}
 
-      <Campo label="Fecha de expedición" type="date" value={value.fechaExpedicion} onChange={(v) => set({ fechaExpedicion: v })} />
+      <div className="grid grid-cols-2 gap-3">
+        <CampoSistema label="Número de pase" value={value.numeroPase} placeholder="Se asigna al finalizar" />
+        <Campo label="Fecha de expedición" type="date" value={value.fechaExpedicion} onChange={(v) => set({ fechaExpedicion: v })} />
+      </div>
     </div>
   );
 }
@@ -356,11 +359,14 @@ function ModalFirma({ label, onConfirmar, onCerrar }) {
   );
 }
 
+// numeroPase NO se captura aquí — se asigna solo (folio consecutivo,
+// ver obtenerSiguienteFolio) hasta que el ajustador finaliza el
+// siniestro, no es un dato que se escriba a mano.
 const PASE_TALLER_DEFAULT = {
   definicion: "Asegurado", destino: "Taller",
   tallerIdx: "", tallerNombre: "", tallerTel: "", tallerCalle: "", tallerColonia: "",
   tipoResolucion: "Reparación",
-  numeroPase: "", clave: "", vehiculoTipo: "", vehiculoPuertas: "",
+  clave: "", vehiculoTipo: "", vehiculoPuertas: "",
   fechaExpedicion: hoyISO(), ordenCondicionada: "",
 };
 
@@ -402,8 +408,18 @@ export default function Documentos({ siniestro, onFinalizar }) {
     setCerrando(true);
     setErrorCierre(null);
     try {
-      if (docs.taller) await guardarPaseTaller(siniestro.id, paseTaller);
-      if (docs.medico) await guardarPaseMedico(siniestro.id, paseMedico);
+      // El folio se pide justo aquí, al finalizar de verdad — si el
+      // ajustador solo activó el toggle y luego lo desactivó antes de
+      // llegar hasta acá, nunca se le pidió folio y no queda un hueco
+      // en el consecutivo.
+      if (docs.taller) {
+        const numeroPase = await obtenerSiguienteFolio("taller");
+        await guardarPaseTaller(siniestro.id, { ...paseTaller, numeroPase });
+      }
+      if (docs.medico) {
+        const numeroPase = await obtenerSiguienteFolio("medico");
+        await guardarPaseMedico(siniestro.id, { ...paseMedico, numeroPase });
+      }
 
       const numeroSiniestro = siniestro.numero_siniestro ?? siniestro.folio;
       const paths = {};

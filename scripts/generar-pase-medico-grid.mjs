@@ -139,6 +139,12 @@ const FONT_SCALE_FIXES = {};
 const TEXT_FIXES = {
   "Incapacidad para Deambular                                                              Inconciencia":
     "Incapacidad para Deambular          Inconciencia",
+  // El Excel de ejemplo trae un folio real impreso ("OAAM007") — se
+  // borra para que el Skeleton no lo repita en TODOS los pases médicos;
+  // el folio real de cada uno se dibuja dinámico en el Overlay
+  // (PaseMedicoPDF.jsx, d.numeroPase), asignado por siguiente_folio()
+  // al finalizar el siniestro (ver migracion_folios_pase.sql).
+  "OAAM007": "",
 };
 
 async function extractSheet(wb, sheetName) {

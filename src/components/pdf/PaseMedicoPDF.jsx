@@ -172,7 +172,10 @@ function Overlay({ d }) {
 
   return (
     <>
-      {/* OAAM007 ya viene impreso por el Skeleton (celda roja del Excel) */}
+      {/* Folio real (ej. "OAAM003") — asignado por siguiente_folio() al
+          finalizar el siniestro, no editable. Antes venía impreso fijo
+          por el Skeleton ("OAAM007" en todos los pases médicos). */}
+      {V(3, 0, d.numeroPase, { bold: true, color: "#FF0000", fontSize: 12.72 })}
 
       {/* Asegurado / fecha de expedición */}
       {V(5, 0, d.asegurado?.nombre)}

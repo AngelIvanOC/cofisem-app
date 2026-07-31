@@ -6,12 +6,14 @@ import PolizaPDF from "../../../components/pdf/PolizaPDF";
 import { fetchPolizaById, buildPolizaPDF } from "../../../services/polizas";
 import { fetchConfigCostos } from "../../../services/configuracion";
 import { generateQR } from "../../../utils/generateQR";
+import BotonAudioSiniestro from "./BotonAudioSiniestro";
 
-export default function ReporteExito({ folio, ajustador, horaInicio, horaFin, minutos, constancia, vendedor, polizaId, usuario, vehiculoDesc, placas }) {
+export default function ReporteExito({ siniestroId, folio, ajustador, horaInicio, horaFin, minutos, constancia, vendedor, polizaId, usuario, vehiculoDesc, placas }) {
   const navigate = useNavigate();
 
   const [pdfData,    setPdfData]    = useState(null);
   const [loadingPDF, setLoadingPDF] = useState(false);
+  const [audioUrl,   setAudioUrl]   = useState(null);
 
   // Abre el PDF como documento propio en una pestaña nueva (no embebido en un
   // iframe dentro de la página) — los navegadores móviles solo renderizan PDFs
@@ -143,17 +145,30 @@ export default function ReporteExito({ folio, ajustador, horaInicio, horaFin, mi
             </div>
           </div>
 
-          {/* ── Botón Ver Póliza ── */}
-          {polizaId && (
-            <button
-              onClick={handleVerPoliza}
-              disabled={loadingPDF}
-              className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-[#13193a]/20 text-[#13193a] text-xs font-semibold hover:bg-[#13193a]/5 transition-all disabled:opacity-50"
-            >
-              {loadingPDF
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Cargando póliza...</>
-                : <><FileText className="w-3.5 h-3.5" />Ver póliza</>}
-            </button>
+          {/* ── Botones Ver Póliza / Adjuntar audio ── */}
+          {(polizaId || siniestroId) && (
+            <div className="flex gap-2.5">
+              {polizaId && (
+                <button
+                  onClick={handleVerPoliza}
+                  disabled={loadingPDF}
+                  className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border border-[#13193a]/20 text-[#13193a] text-xs font-semibold hover:bg-[#13193a]/5 transition-all disabled:opacity-50"
+                >
+                  {loadingPDF
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Cargando póliza...</>
+                    : <><FileText className="w-3.5 h-3.5" />Ver póliza</>}
+                </button>
+              )}
+              {siniestroId && (
+                <BotonAudioSiniestro
+                  siniestroId={siniestroId}
+                  numeroSiniestro={folio}
+                  audioUrl={audioUrl}
+                  onUploaded={setAudioUrl}
+                  variant="resumen"
+                />
+              )}
+            </div>
           )}
 
           {/* ── Acciones principales ── */}

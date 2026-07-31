@@ -277,7 +277,7 @@ export function Campo({ label, placeholder, value, onChange, type = "text", read
 }
 
 // ── Campo del sistema — read-only con badge azul ──────────────
-export function CampoSistema({ label, value }) {
+export function CampoSistema({ label, value, placeholder = "No registrado" }) {
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-1.5">
@@ -287,7 +287,7 @@ export function CampoSistema({ label, value }) {
         </span>
       </div>
       <div className="w-full px-3 py-2.5 rounded-xl border border-blue-100 bg-blue-50/40 text-sm font-semibold text-[#13193a]">
-        {value || <span className="text-gray-300 font-normal italic text-xs">No registrado</span>}
+        {value || <span className="text-gray-300 font-normal italic text-xs">{placeholder}</span>}
       </div>
     </div>
   );

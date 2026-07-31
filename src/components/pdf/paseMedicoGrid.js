@@ -18,7 +18,7 @@ export const RECTS = [
 {l:491.23,t:29.2,w:110.77,h:16.43,r1:1,c1:6,r2:1,c2:6,text:null,fill:null,fontSize:7,color:"#000000",align:"left",border:{t:{w:0,c:"#000000"},r:{w:0,c:"#000000"},b:{w:0,c:"#000000"},l:{w:0,c:"#000000"}}},
 {l:414.38,t:45.63,w:76.85,h:16.43,r1:2,c1:5,r2:2,c2:5,text:null,fill:null,fontSize:7,color:"#000000",align:"left",border:{t:{w:0,c:"#000000"},r:{w:0,c:"#000000"},b:{w:0,c:"#000000"},l:{w:0,c:"#000000"}}},
 {l:491.23,t:45.63,w:110.77,h:16.43,r1:2,c1:6,r2:2,c2:6,text:null,fill:null,fontSize:7,color:"#000000",align:"left",border:{t:{w:0,c:"#000000"},r:{w:0,c:"#000000"},b:{w:0,c:"#000000"},l:{w:0,c:"#000000"}}},
-{l:10,t:62.06,w:404.38,h:24.38,r1:3,c1:0,r2:3,c2:4,text:"OAAM007",fill:null,bold:true,fontSize:12.72,color:"#FF0000",align:"center",border:{t:{w:0,c:"#000000"},r:{w:0,c:"#000000"},b:{w:0.5,c:"#000000"},l:{w:0,c:"#000000"}}},
+{l:10,t:62.06,w:404.38,h:24.38,r1:3,c1:0,r2:3,c2:4,text:null,fill:null,bold:true,fontSize:12.72,color:"#FF0000",align:"center",border:{t:{w:0,c:"#000000"},r:{w:0,c:"#000000"},b:{w:0.5,c:"#000000"},l:{w:0,c:"#000000"}}},
 {l:414.38,t:62.06,w:76.85,h:24.38,r1:3,c1:5,r2:3,c2:5,text:null,fill:null,fontSize:7,color:"#000000",align:"left",border:{t:{w:0,c:"#000000"},r:{w:0,c:"#000000"},b:{w:0.5,c:"#000000"},l:{w:0,c:"#000000"}}},
 {l:491.23,t:62.06,w:110.77,h:24.38,r1:3,c1:6,r2:3,c2:6,text:null,fill:null,fontSize:7,color:"#000000",align:"left",border:{t:{w:0,c:"#000000"},r:{w:0,c:"#000000"},b:{w:0.5,c:"#000000"},l:{w:0,c:"#000000"}}},
 {l:10,t:86.44,w:404.38,h:14.84,r1:4,c1:0,r2:4,c2:4,text:"ASEGURADO",fill:"#8EB4E3",fontSize:8.9,color:"#000000",align:"center",border:{t:{w:0.5,c:"#000000"},r:{w:0.5,c:"#000000"},b:{w:0.5,c:"#000000"},l:{w:0.5,c:"#000000"}}},

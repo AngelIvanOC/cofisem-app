@@ -25,11 +25,13 @@ Font.registerHyphenationCallback((word) => [word]);
 
 const DEFAULT_BORDER = { t: { w: 0.5, c: "#000000" }, r: { w: 0.5, c: "#000000" }, b: { w: 0.5, c: "#000000" }, l: { w: 0.5, c: "#000000" } };
 
-// ── Mapa de daños: 5 lados posibles, pero solo se dibuja el diagrama de
-// los que de verdad tienen marcadores — cada uno se agranda para ocupar
-// el espacio de los que no aplican, y lleva debajo su propia leyenda
-// numerada (mismos números que ya trae cada punto, ver
-// danosSiniestroMarcadores/danosPreexistentesMarcadores, armados en
+// ── Mapa de daños: siempre se dibujan los 5 lados (igual que en
+// DanosMarcadores.jsx) — los que no tienen marcadores se ven atenuados,
+// con un "SIN DAÑOS" en diagonal encima, en vez de desaparecer del
+// todo (así se ve claramente que ESE lado se revisó y no tenía nada,
+// no que se nos olvidó revisarlo). Los que sí tienen marcadores llevan
+// su leyenda numerada debajo (mismos números que ya trae cada punto,
+// ver danosSiniestroMarcadores/danosPreexistentesMarcadores, armados en
 // pasePdf.js a partir de danos_siniestro_marcadores/danos_preexistente_marcadores).
 // El diagrama en sí es siempre el mismo dibujo genérico de referencia
 // (igual que el que usa el ajustador para marcar en DanosMarcadores.jsx,
@@ -58,34 +60,33 @@ function contenido(boxW, boxH) {
 }
 
 function filaDanos(top, marcadoresPorLabel, budget) {
-  const left0 = 10, totalW = 592, gap = 10, labelH = 10, labelGap = 2, legendGap = 3, margen = 8;
+  const left0 = 10, totalW = 592, gap = 6, labelH = 10, labelGap = 2, legendGap = 3, margen = 8;
+  const n = ORDEN_LADOS.length; // siempre 5 — se muestran todos los lados
+  const w = (totalW - gap * (n - 1)) / n;
+
   const activos = ORDEN_LADOS.filter((label) => marcadoresPorLabel?.[label]?.length);
-  if (activos.length === 0) {
-    return { slots: [], avisoRect: { l: left0, t: top, w: totalW, h: labelH + labelGap + IMG_H_MIN } };
-  }
   // La caja de la imagen se agranda tanto como el espacio vertical de la
   // fila lo permita (sin chocar con lo que sigue en la página), dejando
-  // lugar para la leyenda más larga de los lados activos — así un solo
-  // lado marcado se ve más grande que cuando hay varios, sin necesitar
-  // números fijos por cantidad de lados.
-  const maxMarcas = Math.max(...activos.map((label) => marcadoresPorLabel[label].length));
+  // lugar para la leyenda más larga de los lados con marcadores.
+  const maxMarcas = activos.length ? Math.max(...activos.map((label) => marcadoresPorLabel[label].length)) : 1;
   const legendH = maxMarcas * LEGEND_LINE_H;
   const imgH = Math.min(IMG_H_MAX, Math.max(IMG_H_MIN, budget - margen - labelH - labelGap - legendGap - legendH));
-  const n = activos.length;
-  const w = (totalW - gap * (n - 1)) / n;
-  const slots = activos.map((label, i) => {
+
+  const slots = ORDEN_LADOS.map((label, i) => {
     const l = left0 + i * (w + gap);
     const cont = contenido(w, imgH);
+    const marcadores = marcadoresPorLabel?.[label] ?? [];
     return {
       label,
       labelRect: { l, t: top, w, h: labelH },
       imgRect: { l, t: top + labelH + labelGap, w, h: imgH },
       contRect: { l: l + cont.offL, t: top + labelH + labelGap + cont.offT, w: cont.w, h: cont.h },
       legendRect: { l, t: top + labelH + labelGap + imgH + legendGap, w, h: legendH },
-      marcadores: marcadoresPorLabel[label],
+      marcadores,
+      conDanos: marcadores.length > 0,
     };
   });
-  return { slots, avisoRect: null };
+  return { slots };
 }
 
 // ── Helpers de datos ───────────────────────────────────────────
@@ -162,24 +163,53 @@ function CheckMark({ rect, active }) {
 // Espacio de un lado del mapa de daños: etiqueta (FRENTE/DETRÁS/...)
 // arriba + recuadro gris (imgRect, ancho completo de la columna) + la
 // imagen SIN deformar centrada adentro (contRect, ya resuelto por
-// contenido() en filaDanos) + los puntos que marcó el ajustador
-// (posicionados sobre contRect, no sobre la caja completa — es donde
-// de verdad está la imagen) + su leyenda numerada debajo.
-function DiagramaLado({ labelRect, imgRect, contRect, legendRect, label, marcadores }) {
+// contenido() en filaDanos). Con marcadores: puntos + leyenda numerada
+// debajo, normal. Sin marcadores: la imagen se ve atenuada (opacidad
+// baja + velo blanco) con un "SIN DAÑOS" cruzando en diagonal real
+// (esquina a esquina de la caja) — deja claro que ESE lado sí se
+// revisó y no tenía nada, no que se saltó.
+function DiagramaLado({ labelRect, imgRect, contRect, legendRect, label, marcadores, conDanos }) {
   const url = LADO_IMG[label];
+  // Ángulo real de la diagonal de la caja (de esquina superior
+  // izquierda a inferior derecha, "\") y su longitud, para que el
+  // texto rotado quede centrado y corra de punta a punta.
+  const angulo  = Math.atan2(imgRect.h, imgRect.w) * (180 / Math.PI);
+  const diagLen = Math.sqrt(imgRect.w ** 2 + imgRect.h ** 2);
+
   return (
     <>
       <View style={{ position: "absolute", left: labelRect.l, top: labelRect.t, width: labelRect.w, height: labelRect.h, alignItems: "center", justifyContent: "center" }}>
-        <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: "#374151" }}>{label}</Text>
+        <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: conDanos ? "#374151" : "#b0b5bd" }}>{label}</Text>
       </View>
       <View
         style={{
           position: "absolute", left: imgRect.l, top: imgRect.t, width: imgRect.w, height: imgRect.h,
-          borderWidth: 0.75, borderColor: "#9ca3af", backgroundColor: "#f3f4f6",
+          borderWidth: 0.75, borderColor: "#9ca3af", backgroundColor: "#f3f4f6", overflow: "hidden",
         }}
-      />
-      <Image src={url} style={{ position: "absolute", left: contRect.l, top: contRect.t, width: contRect.w, height: contRect.h }} />
-      {marcadores.map((m) => (
+      >
+        <Image
+          src={url}
+          style={{
+            position: "absolute", left: contRect.l - imgRect.l, top: contRect.t - imgRect.t,
+            width: contRect.w, height: contRect.h, opacity: conDanos ? 1 : 0.3,
+          }}
+        />
+        {!conDanos && (
+          <>
+            <View style={{ position: "absolute", left: 0, top: 0, width: imgRect.w, height: imgRect.h, backgroundColor: "rgba(255,255,255,0.45)" }} />
+            <View
+              style={{
+                position: "absolute", left: (imgRect.w - diagLen) / 2, top: imgRect.h / 2 - 7,
+                width: diagLen, height: 14, alignItems: "center", justifyContent: "center",
+                transform: `rotate(${angulo}deg)`,
+              }}
+            >
+              <Text style={{ fontSize: 7.5, fontFamily: "Helvetica-Bold", color: "#8a919c", letterSpacing: 1 }}>SIN DAÑOS</Text>
+            </View>
+          </>
+        )}
+      </View>
+      {conDanos && marcadores.map((m) => (
         <View
           key={m.numero}
           style={{
@@ -194,29 +224,24 @@ function DiagramaLado({ labelRect, imgRect, contRect, legendRect, label, marcado
           <Text style={{ fontSize: 6.5, color: "#ffffff", fontFamily: "Helvetica-Bold" }}>{m.numero}</Text>
         </View>
       ))}
-      <View style={{ position: "absolute", left: legendRect.l, top: legendRect.t, width: legendRect.w, height: legendRect.h }}>
-        {marcadores.map((m) => (
-          <Text key={m.numero} wrap={false} style={{ fontSize: 6.5, color: "#1f2937", marginBottom: 1.5 }}>
-            <Text style={{ fontFamily: "Helvetica-Bold" }}>{m.numero}. </Text>
-            {m.nota || "—"}
-          </Text>
-        ))}
-      </View>
+      {conDanos && (
+        <View style={{ position: "absolute", left: legendRect.l, top: legendRect.t, width: legendRect.w, height: legendRect.h }}>
+          {marcadores.map((m) => (
+            <Text key={m.numero} wrap={false} style={{ fontSize: 6.5, color: "#1f2937", marginBottom: 1.5 }}>
+              <Text style={{ fontFamily: "Helvetica-Bold" }}>{m.numero}. </Text>
+              {m.nota || "—"}
+            </Text>
+          ))}
+        </View>
+      )}
     </>
   );
 }
-// Fila completa de un mapa de daños (siniestro o preexistentes): dibuja
-// solo los lados con marcadores; si ninguno tiene, un solo aviso
-// centrado en vez de 5 casillas vacías.
+// Fila completa de un mapa de daños (siniestro o preexistentes) — los
+// 5 lados siempre, cada uno decide su propio estado (con daños/sin
+// daños) dentro de filaDanos().
 function FilaDanos({ top, budget, marcadoresPorLabel, prefix }) {
-  const { slots, avisoRect } = filaDanos(top, marcadoresPorLabel, budget);
-  if (!slots.length) {
-    return (
-      <View style={{ position: "absolute", left: avisoRect.l, top: avisoRect.t, width: avisoRect.w, height: avisoRect.h, alignItems: "center", justifyContent: "center" }}>
-        <Text style={{ fontSize: 8, color: "#9ca3af", fontFamily: "Helvetica-Bold" }}>Sin daños marcados</Text>
-      </View>
-    );
-  }
+  const { slots } = filaDanos(top, marcadoresPorLabel, budget);
   return slots.map((slot) => <DiagramaLado key={`${prefix}-${slot.label}`} {...slot} />);
 }
 
