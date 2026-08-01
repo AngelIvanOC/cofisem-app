@@ -2,10 +2,10 @@
 // src/features/ajustador/DatosSiniestro.jsx
 // Paso 2: Datos generales + info del asegurado (readonly, sistema)
 // ============================================================
-import { useState } from "react";
-import { Campo, CampoSistema, CampoSelect, Seccion, TIPOS_SINIESTRO, combinarDireccion } from "./shared";
+import { useState, useEffect } from "react";
+import { Campo, CampoSistema, CampoSelect, Seccion, TIPOS_SINIESTRO, combinarDireccion, soloCambios } from "./shared";
 import { CAUSAS, CIRCUNSTANCIAS } from "../cabinero/constants/catalogos";
-import { actualizarDatosSiniestro } from "../../services/siniestros";
+import { actualizarDatosSiniestro, fetchDatosSiniestro } from "../../services/siniestros";
 import DireccionCascada from "../../shared/components/DireccionCascada";
 
 const ZONAS_ACCIDENTE = ["Casco urbano", "Carr. Red. Gral.", "Carr. Peaje"];
@@ -41,18 +41,114 @@ export default function DatosSiniestro({ siniestro, onSiguiente }) {
   // preguntar. Si es el asegurado, sus datos personales ya se conocen;
   // si no, el nombre/teléfono ya los capturó el cabinero (de solo
   // lectura) y solo falta el domicilio + los datos de licencia.
-  const conductorEsAsegurado = siniestro.conductorEsTerceroReportado !== true;
+  const [conductorEsTercero, setConductorEsTercero] = useState(siniestro.conductorEsTerceroReportado ?? false);
+  const [conductorNombreReportado,   setConductorNombreReportado]   = useState(siniestro.conductorNombreReportado ?? null);
+  const [conductorTelefonoReportado, setConductorTelefonoReportado] = useState(siniestro.conductorTelefonoReportado ?? null);
+  const conductorEsAsegurado = conductorEsTercero !== true;
+  // El domicilio del conductor se guarda como texto simple (columna
+  // conductor_domicilio) — no hay desglose guardado de estado/
+  // municipio/colonia/cp para repoblar el cascada al hidratar, así que
+  // se trackea aparte (arranca con el texto ya guardado) y solo se
+  // recalcula cuando el ajustador de verdad toca el cascada/calle/
+  // número — igual que "direccion" en PanelAfectado
+  // (CapturaEvidencia.jsx), para no reportar un "cambio" falso sobre un
+  // campo que nadie tocó.
   const [conductorDireccion, setConductorDireccion] = useState({ estado: "", municipio: "", colonia: "", cp: "", calle: "", numero: "" });
-  const [licenciaTipo,       setLicenciaTipo]       = useState("");
-  const [licenciaNumero,     setLicenciaNumero]     = useState("");
-  const [licenciaFechaExp,   setLicenciaFechaExp]   = useState("");
-  const [licenciaLugarExp,   setLicenciaLugarExp]   = useState("");
-  const [fechaNacimiento,    setFechaNacimiento]    = useState("");
+  const [conductorDomicilio, setConductorDomicilio] = useState(siniestro.conductorDomicilioGuardado ?? "");
+  const [licenciaTipo,       setLicenciaTipo]       = useState(siniestro.licenciaTipoGuardado ?? "");
+  const [licenciaNumero,     setLicenciaNumero]     = useState(siniestro.licenciaNumeroGuardado ?? "");
+  const [licenciaFechaExp,   setLicenciaFechaExp]   = useState(siniestro.licenciaFechaExpGuardado ?? "");
+  const [licenciaLugarExp,   setLicenciaLugarExp]   = useState(siniestro.licenciaLugarExpGuardado ?? "");
+  const [fechaNacimiento,    setFechaNacimiento]    = useState(siniestro.fechaNacimientoGuardado ?? "");
 
   const [guardando,        setGuardando]        = useState(false);
   const [errorGuardar,     setErrorGuardar]     = useState(null);
 
   const a = siniestro.aseguradoInfo ?? { nombre: siniestro.asegurado };
+
+  // Snapshot con el que arrancó el formulario — para guardado
+  // diferencial (soloCambios). Arranca con lo que trae el prop
+  // `siniestro` (pintado inmediato) y se reemplaza abajo con datos
+  // frescos de BD en cuanto resuelve fetchDatosSiniestro.
+  const construirOriginal = (fuente) => ({
+    tipo: fuente.tipo ?? "",
+    fechaAccidente: fuente.fechaAccidente ?? fechaHoy,
+    horaAccidente: fuente.horaAccidente ?? horaHoy,
+    lugar: fuente.lugar ?? "",
+    descripcion: fuente.descripcion ?? "",
+    versionAsegurado: fuente.versionAsegurado ?? "",
+    zonaAccidente: fuente.zonaAccidente ?? "",
+    sentidoCirculacion: fuente.sentidoCirculacion ?? "",
+    causa: fuente.causa ?? "",
+    circunstancia: fuente.circunstancia ?? "",
+    estado: fuente.estado ?? "",
+    municipio: fuente.municipio ?? "",
+    colonia: fuente.colonia ?? "",
+    cp: fuente.cp ?? "",
+    conductorDomicilio: fuente.conductorEsAsegurado ? (a.direccion || "") : (fuente.conductorDomicilio ?? ""),
+    licenciaTipo: fuente.licenciaTipo ?? "",
+    licenciaNumero: fuente.licenciaNumero ?? "",
+    licenciaFechaExp: fuente.licenciaFechaExp ?? "",
+    licenciaLugarExp: fuente.licenciaLugarExp ?? "",
+    fechaNacimiento: fuente.fechaNacimiento ?? "",
+  });
+
+  const [original, setOriginal] = useState(() => construirOriginal({
+    tipo: siniestro.tipoAjustadorGuardado, fechaAccidente: siniestro.fechaSiniestroReportada,
+    horaAccidente: siniestro.horaSiniestroReportada?.slice(0, 5), lugar: siniestro.ubicacion,
+    descripcion: siniestro.descripcionReportada, versionAsegurado: siniestro.versionAseguradoGuardado,
+    zonaAccidente: siniestro.zonaAccidenteGuardada, sentidoCirculacion: siniestro.sentidoCirculacionGuardado,
+    causa: siniestro.causaReportada, circunstancia: siniestro.circunstanciaReportada,
+    estado: siniestro.ubicacionEstructurada?.estado, municipio: siniestro.ubicacionEstructurada?.municipio,
+    colonia: siniestro.ubicacionEstructurada?.colonia, cp: siniestro.ubicacionEstructurada?.cp,
+    conductorEsAsegurado, conductorDomicilio: siniestro.conductorDomicilioGuardado,
+    licenciaTipo: siniestro.licenciaTipoGuardado, licenciaNumero: siniestro.licenciaNumeroGuardado,
+    licenciaFechaExp: siniestro.licenciaFechaExpGuardado, licenciaLugarExp: siniestro.licenciaLugarExpGuardado,
+    fechaNacimiento: siniestro.fechaNacimientoGuardado,
+  }));
+
+  // El prop `siniestro` viene de la lista de "Siniestros Asignados", que
+  // solo se carga una vez al entrar a esa pantalla — si el ajustador ya
+  // guardó este paso antes, salió a otro siniestro y regresó sin
+  // recargar la página, el prop trae datos viejos (parecía que "no se
+  // guardaba nada"). Por eso este paso pide sus propios datos frescos,
+  // igual que ya hacen Partes y Evidencia/Lesionados/Cierre/Documentos.
+  useEffect(() => {
+    fetchDatosSiniestro(siniestro.id).then((row) => {
+      if (!row) return;
+      setTipo(row.tipo);
+      setFechaAccidente(row.fechaAccidente || fechaHoy);
+      setHoraAccidente(row.horaAccidente || horaHoy);
+      setLugar(row.lugar);
+      setDescripcion(row.descripcion);
+      setVersionAsegurado(row.versionAsegurado);
+      setZonaAccidente(row.zonaAccidente);
+      setSentidoCirculacion(row.sentidoCirculacion);
+      setCausa(row.causa);
+      setCircunstancia(row.circunstancia);
+      setUbicacion({ estado: row.estado, municipio: row.municipio, colonia: row.colonia, cp: row.cp });
+      setConductorEsTercero(row.conductorEsTercero);
+      setConductorNombreReportado(row.conductorNombreReportado);
+      setConductorTelefonoReportado(row.conductorTelefonoReportado);
+      setConductorDomicilio(row.conductorDomicilio);
+      setLicenciaTipo(row.licenciaTipo);
+      setLicenciaNumero(row.licenciaNumero);
+      setLicenciaFechaExp(row.licenciaFechaExp);
+      setLicenciaLugarExp(row.licenciaLugarExp);
+      setFechaNacimiento(row.fechaNacimiento);
+      setOriginal(construirOriginal({
+        ...row,
+        conductorEsAsegurado: row.conductorEsTercero !== true,
+      }));
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siniestro.id]);
+
+  const actualizarConductorDireccion = (patch) => {
+    const next = { ...conductorDireccion, ...patch };
+    setConductorDireccion(next);
+    setConductorDomicilio(combinarDireccion(next) ?? "");
+  };
 
   const handleSiguiente = async () => {
     setGuardando(true);
@@ -62,14 +158,18 @@ export default function DatosSiniestro({ siniestro, onSiguiente }) {
       // paso ya no lo decide ni lo vuelve a escribir. Domicilio del
       // conductor solo aplica cuando no es el asegurado (si lo es, ya
       // se conoce por a.direccion).
-      await actualizarDatosSiniestro(siniestro.id, {
+      const actual = {
         tipo, fechaAccidente, horaAccidente, lugar, descripcion, versionAsegurado,
         zonaAccidente, sentidoCirculacion,
         causa, circunstancia,
         estado: ubicacion.estado, municipio: ubicacion.municipio, colonia: ubicacion.colonia, cp: ubicacion.cp,
-        conductorDomicilio: conductorEsAsegurado ? a.direccion : combinarDireccion(conductorDireccion),
+        conductorDomicilio: conductorEsAsegurado ? (a.direccion || "") : conductorDomicilio,
         licenciaTipo, licenciaNumero, licenciaFechaExp, licenciaLugarExp, fechaNacimiento,
-      });
+      };
+      const cambios = soloCambios(original, actual);
+      if (Object.keys(cambios).length) {
+        await actualizarDatosSiniestro(siniestro.id, cambios);
+      }
       onSiguiente();
     } catch (err) {
       setErrorGuardar(err.message ?? "Error al guardar los datos del siniestro");
@@ -210,18 +310,18 @@ export default function DatosSiniestro({ siniestro, onSiguiente }) {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3">
-                <CampoSistema label="Nombre del conductor" value={siniestro.conductorNombreReportado} />
-                <CampoSistema label="Teléfono" value={siniestro.conductorTelefonoReportado} />
+                <CampoSistema label="Nombre del conductor" value={conductorNombreReportado} />
+                <CampoSistema label="Teléfono" value={conductorTelefonoReportado} />
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Domicilio</label>
                 <DireccionCascada
                   values={conductorDireccion}
-                  onChange={(patch) => setConductorDireccion((d) => ({ ...d, ...patch }))}
+                  onChange={actualizarConductorDireccion}
                 />
                 <div className="grid grid-cols-2 gap-3 mt-3">
-                  <Campo label="Calle" placeholder="Av. Emiliano Zapata" value={conductorDireccion.calle} onChange={(v) => setConductorDireccion((d) => ({ ...d, calle: v }))} />
-                  <Campo label="Número" placeholder="145" value={conductorDireccion.numero} onChange={(v) => setConductorDireccion((d) => ({ ...d, numero: v }))} />
+                  <Campo label="Calle" placeholder="Av. Emiliano Zapata" value={conductorDireccion.calle} onChange={(v) => actualizarConductorDireccion({ calle: v })} />
+                  <Campo label="Número" placeholder="145" value={conductorDireccion.numero} onChange={(v) => actualizarConductorDireccion({ numero: v })} />
                 </div>
               </div>
             </>

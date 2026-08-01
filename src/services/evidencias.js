@@ -56,8 +56,10 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
       fecha_siniestro, hora_siniestro, tipo_siniestro, circunstancia, descripcion,
       estado, municipio, colonia, cp,
       clasificacion_siniestro, version_asegurado, zona_accidente, sentido_circulacion,
-      croquis_data,
+      croquis_data, croquis_url,
       conductor_es_tercero, conductor_nombre, conductor_telefono,
+      conductor_domicilio, licencia_tipo, licencia_numero, licencia_fecha_exp,
+      licencia_lugar_exp, conductor_fecha_nacimiento,
       polizas(
         id, constancia, numero_poliza, placas, num_serie, anio, fecha_fin, color,
         clientes(nombre, apellido, rfc, curp, telefono, email,
@@ -145,12 +147,28 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
       zonaAccidenteGuardada:      s.zona_accidente          ?? null,
       sentidoCirculacionGuardado: s.sentido_circulacion     ?? null,
       croquisData:             s.croquis_data    ?? null,
+      // Se preserva si el ajustador vuelve a este paso sin volver a
+      // dibujar/subir el croquis — sin esto, cada re-guardado del paso
+      // "Cierre del Caso" borraba el croquis ya subido (lo pisaba con
+      // null porque el estado local de la foto nueva siempre arranca
+      // vacío).
+      croquisUrl:              s.croquis_url     ?? null,
       // Quién manejaba, ya lo decidió el cabinero al levantar el
       // reporte — el ajustador ya no vuelve a preguntarlo (ver
       // Conductor en DatosSiniestro.jsx).
       conductorEsTerceroReportado: s.conductor_es_tercero ?? false,
       conductorNombreReportado:    s.conductor_nombre     ?? null,
       conductorTelefonoReportado:  s.conductor_telefono   ?? null,
+      // Domicilio/licencia del conductor y fecha de nacimiento — los
+      // captura el ajustador (paso "Datos del Siniestro"); se guardan
+      // aparte porque, a diferencia del resto de este bloque, no vienen
+      // de lo que reportó el cabinero.
+      conductorDomicilioGuardado: s.conductor_domicilio    ?? null,
+      licenciaTipoGuardado:       s.licencia_tipo          ?? null,
+      licenciaNumeroGuardado:     s.licencia_numero        ?? null,
+      licenciaFechaExpGuardado:   s.licencia_fecha_exp     ?? null,
+      licenciaLugarExpGuardado:   s.licencia_lugar_exp     ?? null,
+      fechaNacimientoGuardado:    s.conductor_fecha_nacimiento ?? null,
       tiempo:    tiempoRelativo(s.created_at),
       estatus:   s.estatus ?? "Asignado",
       poliza:    polizaNum,

@@ -8,10 +8,10 @@
 // médico/clínica asignada + fecha de expedición.
 // ============================================================
 import { useState, useEffect, useRef } from "react";
-import { guardarPaseTaller, guardarPaseMedico, fetchLesionados, guardarFirmas, cerrarSiniestro, obtenerSiguienteFolio } from "../../services/siniestros";
+import { guardarPaseTaller, fetchPaseTaller, fetchLesionados, asignarFolioPaseMedico, guardarFirmas, cerrarSiniestro, obtenerSiguienteFolio } from "../../services/siniestros";
 import { fetchTalleres } from "../../services/servicios";
 import { subirFirma } from "../../services/evidencias";
-import { Campo, CampoSistema, Sep, ToggleRow, CLINICAS_LISTA } from "./shared";
+import { Campo, CampoSistema, Sep, soloCambios } from "./shared";
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -60,23 +60,13 @@ function PaseTaller({ siniestro, value, onChange, talleres }) {
     }
   };
 
+  // El Pase Taller solo aplica al vehículo del tercero — la aseguradora
+  // solo vende responsabilidad civil, nunca paga (ni manda a taller) el
+  // daño del propio asegurado. Ya no se pregunta de quién es el
+  // vehículo, siempre es del tercero (definicion queda fija en
+  // PASE_TALLER_DEFAULT).
   return (
     <div className="space-y-4">
-      <div>
-        <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">¿A quién pertenece el vehículo?</label>
-        <div className="flex gap-2">
-          {["Asegurado", "Tercero"].map((op) => (
-            <button
-              key={op}
-              onClick={() => set({ definicion: op })}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${value.definicion === op ? "bg-[#13193a] text-white border-[#13193a]" : "bg-white text-gray-500 border-gray-200"}`}
-            >
-              {op}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div>
         <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Destino del vehículo</label>
         <div className="flex gap-2">
@@ -172,110 +162,6 @@ function PaseTaller({ siniestro, value, onChange, talleres }) {
   );
 }
 
-// ── Pase Médico ───────────────────────────────────────────────
-// Ya no pide los datos de la lesión — se capturaron en el paso
-// Lesionados. Aquí solo se elige a cuál lesionado corresponde (se
-// muestra su lesión como resumen de solo lectura para verificar) y se
-// asigna médico/clínica + fecha de expedición.
-function PaseMedico({ value, onChange, lesionados }) {
-  const set = (patch) => onChange((v) => ({ ...v, ...patch }));
-
-  const manual  = value.clinicaIdx === "manual";
-  const clinica = !manual && value.clinicaIdx !== "" ? CLINICAS_LISTA[Number(value.clinicaIdx)] : null;
-  const lesionadoElegido = lesionados.find((l) => String(l.id) === String(value.lesionadoId)) ?? null;
-
-  const handleClinicaSelect = (val) => {
-    if (val !== "manual" && val !== "") {
-      const c = CLINICAS_LISTA[Number(val)];
-      set({ clinicaIdx: val, clinicaNombre: c.nombre, clinicaTel: c.telefono, clinicaDir: c.direccion });
-    } else if (val === "manual") {
-      set({ clinicaIdx: val, clinicaNombre: "", clinicaTel: "", clinicaDir: "" });
-    } else {
-      set({ clinicaIdx: val });
-    }
-  };
-
-  if (lesionados.length === 0) {
-    return (
-      <p className="text-xs text-gray-400 bg-gray-50 rounded-xl p-3">
-        Este siniestro no tiene lesionados capturados todavía — agrega uno en el paso "Lesionados" antes de generar el Pase Médico.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Lesionado</label>
-        <select
-          value={value.lesionadoId}
-          onChange={(e) => set({ lesionadoId: e.target.value })}
-          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all"
-        >
-          <option value="">Selecciona un lesionado...</option>
-          {lesionados.map((l) => (
-            <option key={l.id} value={l.id}>
-              {(l.nombre || `Lesionado #${l.id}`) + (l.tipo_lesionado ? ` (${l.tipo_lesionado})` : "")}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {lesionadoElegido && (
-        <div className="bg-gray-50 rounded-xl p-3 space-y-2">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Datos de la lesión (capturados en "Lesionados")</p>
-          <div className="grid grid-cols-2 gap-2">
-            <CampoSistema label="Causa" value={lesionadoElegido.causa_lesion} />
-            <CampoSistema label="Estado" value={lesionadoElegido.estado_lesionado} />
-            <CampoSistema label="Tipo de lesión" value={lesionadoElegido.tipo_lesion} />
-            <CampoSistema label="Primeros auxilios" value={lesionadoElegido.primeros_auxilios === true ? "Sí" : lesionadoElegido.primeros_auxilios === false ? "No" : ""} />
-          </div>
-          <CampoSistema label="Región del cuerpo" value={(lesionadoElegido.region_cuerpo ?? []).join(", ")} />
-          {lesionadoElegido.motivo_traslado && <CampoSistema label="Motivo de traslado" value={lesionadoElegido.motivo_traslado} />}
-        </div>
-      )}
-
-      <div>
-        <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Médico / clínica asignada</label>
-        <select
-          value={value.clinicaIdx}
-          onChange={(e) => handleClinicaSelect(e.target.value)}
-          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all"
-        >
-          <option value="">Selecciona una clínica...</option>
-          {CLINICAS_LISTA.map((c, i) => <option key={i} value={i}>{c.nombre}</option>)}
-          <option value="manual">Otra clínica (capturar manualmente)</option>
-        </select>
-      </div>
-
-      {(manual || clinica) && (
-        <div className={manual ? "space-y-3 bg-gray-50 rounded-xl p-3" : "bg-gray-50 rounded-xl p-3 space-y-1.5"}>
-          {manual ? (
-            <>
-              <Campo label="Nombre de la clínica" placeholder="Nombre" value={value.clinicaNombre} onChange={(v) => set({ clinicaNombre: v })} />
-              <div className="grid grid-cols-2 gap-3">
-                <Campo label="Teléfono" type="tel" placeholder="55 0000 0000" value={value.clinicaTel} onChange={(v) => set({ clinicaTel: v })} />
-              </div>
-              <Campo label="Dirección" placeholder="Dirección completa" value={value.clinicaDir} onChange={(v) => set({ clinicaDir: v })} />
-            </>
-          ) : (
-            <>
-              <p className="text-xs font-bold text-[#13193a]">{clinica.nombre}</p>
-              <p className="text-xs text-gray-500">{clinica.telefono}</p>
-              <p className="text-xs text-gray-400">{clinica.direccion}</p>
-            </>
-          )}
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
-        <CampoSistema label="Número de pase" value={value.numeroPase} placeholder="Se asigna al finalizar" />
-        <Campo label="Fecha de expedición" type="date" value={value.fechaExpedicion} onChange={(v) => set({ fechaExpedicion: v })} />
-      </div>
-    </div>
-  );
-}
-
 // ── Modal de firma táctil ─────────────────────────────────────
 function ModalFirma({ label, onConfirmar, onCerrar }) {
   const canvasRef  = useRef(null);
@@ -363,23 +249,21 @@ function ModalFirma({ label, onConfirmar, onCerrar }) {
 // ver obtenerSiguienteFolio) hasta que el ajustador finaliza el
 // siniestro, no es un dato que se escriba a mano.
 const PASE_TALLER_DEFAULT = {
-  definicion: "Asegurado", destino: "Taller",
+  definicion: "Tercero", destino: "Taller",
   tallerIdx: "", tallerNombre: "", tallerTel: "", tallerCalle: "", tallerColonia: "",
   tipoResolucion: "Reparación",
   clave: "", vehiculoTipo: "", vehiculoPuertas: "",
   fechaExpedicion: hoyISO(), ordenCondicionada: "",
 };
 
-const PASE_MEDICO_DEFAULT = {
-  lesionadoId: "",
-  clinicaIdx: "", clinicaNombre: "", clinicaTel: "", clinicaDir: "",
-  fechaExpedicion: hoyISO(),
-};
-
 export default function Documentos({ siniestro, onFinalizar }) {
-  const [docs,       setDocs]       = useState({ taller: false, medico: false });
+  const [docs,       setDocs]       = useState({ taller: false });
   const [paseTaller, setPaseTaller] = useState(PASE_TALLER_DEFAULT);
-  const [paseMedico, setPaseMedico] = useState(PASE_MEDICO_DEFAULT);
+  // Snapshot con el que arrancó el formulario — para guardado
+  // diferencial (soloCambios). Solo importa si el ajustador ya había
+  // activado el toggle y capturado algo antes de salir de este paso sin
+  // llegar a Finalizar (guardarPaseTaller solo se llama ahí).
+  const [originalPaseTaller, setOriginalPaseTaller] = useState(PASE_TALLER_DEFAULT);
   const [lesionados, setLesionados] = useState([]);
   const [talleres,   setTalleres]   = useState([]);
   const [firmas,     setFirmas]     = useState({ asegurado: null, afectado: null, ajustador: null, lesionado: null });
@@ -395,13 +279,53 @@ export default function Documentos({ siniestro, onFinalizar }) {
     fetchTalleres().then(setTalleres).catch(() => setTalleres([]));
   }, []);
 
-  const toggleDoc = (k) => setDocs((d) => ({ ...d, [k]: !d[k] }));
+  // Hidrata el Pase Taller si el ajustador ya lo había capturado en una
+  // visita anterior a este paso (sin llegar a Finalizar, que es cuando
+  // se guarda) — así no lo encuentra en blanco.
+  useEffect(() => {
+    fetchPaseTaller(siniestro.id).then((row) => {
+      if (!row) return;
+      const huboAlgo = Object.values(row).some((v) => v != null && v !== "");
+      if (!huboAlgo) return;
+      const tallerNombre = row.pase_taller_taller_nombre || "";
+      const hydrated = {
+        ...PASE_TALLER_DEFAULT,
+        clave:             row.pase_taller_clave             || "",
+        definicion:        row.pase_taller_definicion         || PASE_TALLER_DEFAULT.definicion,
+        destino:           row.pase_taller_destino            || PASE_TALLER_DEFAULT.destino,
+        // No se guardó el id de `servicios` elegido, solo su copia
+        // aplanada — se hidrata como "manual" para que los campos con
+        // los datos ya capturados se sigan viendo y se puedan editar.
+        tallerIdx:         tallerNombre ? "manual" : "",
+        tallerNombre,
+        tallerTel:         row.pase_taller_taller_telefono     || "",
+        tallerCalle:       row.pase_taller_taller_calle        || "",
+        tallerColonia:     row.pase_taller_taller_colonia      || "",
+        vehiculoTipo:      row.pase_taller_vehiculo_tipo       || "",
+        vehiculoPuertas:   row.pase_taller_vehiculo_puertas    || "",
+        fechaExpedicion:   row.pase_taller_fecha_expedicion    || PASE_TALLER_DEFAULT.fechaExpedicion,
+        ordenCondicionada: row.pase_taller_orden_condicionada  || "",
+        numeroPase:        row.pase_taller_numero              || "",
+      };
+      setPaseTaller(hydrated);
+      setOriginalPaseTaller(hydrated);
+      setDocs((d) => ({ ...d, taller: true }));
+    }).catch(() => {});
+  }, [siniestro.id]);
+
+  const toggleTaller = () => setDocs((d) => ({ ...d, taller: !d.taller }));
+
+  // Pase Médico ya no es un toggle manual aquí — cada lesionado decide
+  // con su propio switch "Generar Pase Médico" (paso Lesionados). Si al
+  // menos uno lo tiene activado, se sigue pidiendo la firma del
+  // lesionado.
+  const hayPaseMedico = lesionados.some((l) => l.pase_medico);
 
   const FIRMAS_CONFIG = [
     { id: "asegurado", label: "Firma del Asegurado", sub: siniestro.asegurado        },
     { id: "afectado",  label: "Firma del Afectado",  sub: "Tercero involucrado"       },
     { id: "ajustador", label: "Firma del Ajustador", sub: "Ajustador asignado"        },
-    ...(docs.medico ? [{ id: "lesionado", label: "Firma del Lesionado", sub: "Recibe el Pase Médico" }] : []),
+    ...(hayPaseMedico ? [{ id: "lesionado", label: "Firma del Lesionado", sub: "Recibe el Pase Médico" }] : []),
   ];
 
   const handleFinalizar = async () => {
@@ -411,14 +335,19 @@ export default function Documentos({ siniestro, onFinalizar }) {
       // El folio se pide justo aquí, al finalizar de verdad — si el
       // ajustador solo activó el toggle y luego lo desactivó antes de
       // llegar hasta acá, nunca se le pidió folio y no queda un hueco
-      // en el consecutivo.
+      // en el consecutivo. Cada lesionado con el switch activado recibe
+      // su propio folio — puede haber varios Pase Médico en un mismo
+      // siniestro.
       if (docs.taller) {
-        const numeroPase = await obtenerSiguienteFolio("taller");
-        await guardarPaseTaller(siniestro.id, { ...paseTaller, numeroPase });
+        const numeroPase = paseTaller.numeroPase || await obtenerSiguienteFolio("taller");
+        const cambios = soloCambios(originalPaseTaller, paseTaller);
+        await guardarPaseTaller(siniestro.id, cambios, paseTaller, { numeroPase });
       }
-      if (docs.medico) {
+      const hoy = hoyISO();
+      for (const l of lesionados) {
+        if (!l.pase_medico) continue;
         const numeroPase = await obtenerSiguienteFolio("medico");
-        await guardarPaseMedico(siniestro.id, { ...paseMedico, numeroPase });
+        await asignarFolioPaseMedico(l.id, { numeroPase, fechaExpedicion: hoy });
       }
 
       const numeroSiniestro = siniestro.numero_siniestro ?? siniestro.folio;
@@ -440,11 +369,8 @@ export default function Documentos({ siniestro, onFinalizar }) {
     <div className="px-4 py-4 space-y-5">
       <div className="space-y-3">
         <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Selecciona los documentos a generar</p>
-        <DocToggle titulo="Pase Taller" desc="Autorización para reparación del vehículo" activo={docs.taller} onToggle={() => toggleDoc("taller")}>
+        <DocToggle titulo="Pase Taller" desc="Autorización para reparación del vehículo" activo={docs.taller} onToggle={toggleTaller}>
           <PaseTaller siniestro={siniestro} value={paseTaller} onChange={setPaseTaller} talleres={talleres} />
-        </DocToggle>
-        <DocToggle titulo="Pase Médico" desc="Autorización de atención por lesiones" activo={docs.medico} onToggle={() => toggleDoc("medico")}>
-          <PaseMedico value={paseMedico} onChange={setPaseMedico} lesionados={lesionados} />
         </DocToggle>
       </div>
 

@@ -9,8 +9,8 @@
 // repetidas en los 2 pasos por separado).
 // ============================================================
 import { useState, useEffect } from "react";
-import { Campo, CampoSistema, CampoSelect, Seccion, Sep } from "./shared";
-import { guardarDatosAjuste, guardarEncuesta, fetchTiemposSiniestro, horaLocal } from "../../services/siniestros";
+import { Campo, CampoSistema, CampoSelect, Seccion, Sep, soloCambios } from "./shared";
+import { guardarDatosAjuste, guardarEncuesta, fetchDatosAjuste, fetchEncuesta, fetchTiemposSiniestro, horaLocal } from "../../services/siniestros";
 import { subirCroquis } from "../../services/evidencias";
 import CroquisSection from "./croquis/CroquisSection";
 
@@ -61,34 +61,45 @@ function CalificacionTag({ value, onChange }) {
   );
 }
 
+const encuestaVacia = () => ({
+  calificacionReporte:   "",
+  motivoReporte:         "",
+  calificacionAjustador: "",
+  motivoAjustador:       "",
+  comentarios:           "",
+});
+
+const datosAjusteVacios = () => ({
+  culpabilidad:           "",
+  solicitoGrua:           null,
+  calificacionSiniestro:  "",
+  requiereInvestigacion:  null,
+  convenioGxg:            null,
+  articuloInfringido:     "",
+  inicioAveriguacion:     null,
+  numeroAveriguacion:     "",
+  numeroPartePfp:         "",
+  solicitoAbogado:        null,
+  despachoAbogado:        "",
+  recuperacion:           "",
+  tipoRecuperacion:       "",
+  objetoGarantiaImporte:  "",
+  conclusiones:           "",
+});
+
 export default function CierreCaso({ siniestro, onSiguiente }) {
-  const [encuesta, setEncuesta] = useState({
-    calificacionReporte:   "",
-    motivoReporte:         "",
-    calificacionAjustador: "",
-    motivoAjustador:       "",
-    comentarios:           "",
-  });
+  const [encuesta, setEncuesta] = useState(encuestaVacia());
   const setE = (k, v) => setEncuesta((s) => ({ ...s, [k]: v }));
 
-  const [d, setD] = useState({
-    culpabilidad:           "",
-    solicitoGrua:           null,
-    calificacionSiniestro:  "",
-    requiereInvestigacion:  null,
-    convenioGxg:            null,
-    articuloInfringido:     "",
-    inicioAveriguacion:     null,
-    numeroAveriguacion:     "",
-    numeroPartePfp:         "",
-    solicitoAbogado:        null,
-    despachoAbogado:        "",
-    recuperacion:           "",
-    tipoRecuperacion:       "",
-    objetoGarantiaImporte:  "",
-    conclusiones:           "",
-  });
+  const [d, setD] = useState(datosAjusteVacios());
   const set = (k, v) => setD((s) => ({ ...s, [k]: v }));
+
+  // Snapshots con los que arrancó el formulario — para guardado
+  // diferencial (soloCambios). Sin esta hidratación, cada vez que el
+  // ajustador volvía a entrar aquí el formulario arrancaba en blanco
+  // aunque ya hubiera datos guardados.
+  const [originalD,        setOriginalD]        = useState(datosAjusteVacios());
+  const [originalEncuesta, setOriginalEncuesta]  = useState(encuestaVacia());
 
   const [croquisDataUrl, setCroquisDataUrl] = useState(null);
   const [croquisEscena,  setCroquisEscena]  = useState(siniestro.croquisData ?? null);
@@ -104,27 +115,36 @@ export default function CierreCaso({ siniestro, onSiguiente }) {
     fetchTiemposSiniestro(siniestro.id).then(setTiempos).catch(() => setTiempos({}));
   }, [siniestro.id]);
 
+  useEffect(() => {
+    fetchDatosAjuste(siniestro.id).then((row) => {
+      if (row) { setD(row); setOriginalD(row); }
+    }).catch(() => {});
+    fetchEncuesta(siniestro.id).then((row) => {
+      if (row) { setEncuesta(row); setOriginalEncuesta(row); }
+    }).catch(() => {});
+  }, [siniestro.id]);
+
   const handleSiguiente = async () => {
     setGuardando(true);
     setErrorGuardar(null);
     try {
-      let croquisUrl = null;
+      let croquisUrl = siniestro.croquisUrl ?? null;
       if (croquisDataUrl) {
         croquisUrl = await subirCroquis({
           numeroSiniestro: siniestro.numero_siniestro ?? siniestro.folio,
           dataUrl: croquisDataUrl,
         });
       }
-      await guardarDatosAjuste(siniestro.id, {
-        ...d,
+      const cambiosD = soloCambios(originalD, d);
+      await guardarDatosAjuste(siniestro.id, cambiosD, {
         croquisUrl,
         croquisData: croquisEscena,
         horaTomado:  horaLocal(tiempos?.hora_inicio_reporte),
         horaPasado:  horaLocal(tiempos?.created_at),
         horaLlegada: horaLocal(tiempos?.arribo_fecha),
       });
-      await guardarEncuesta(siniestro.id, {
-        ...encuesta,
+      const cambiosEncuesta = soloCambios(originalEncuesta, encuesta);
+      await guardarEncuesta(siniestro.id, cambiosEncuesta, {
         horaReporte: horaLocal(tiempos?.hora_inicio_reporte),
         horaLlegada: horaLocal(tiempos?.arribo_fecha),
       });

@@ -4,9 +4,9 @@
 //   Cada foto se comprime y sube a Supabase Storage en tiempo real
 // ============================================================
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Campo, CampoSistema, Sep, AfectadoTag, combinarDireccion, sumaMontosDanos, formatMonto } from "./shared";
+import { Campo, CampoSistema, Sep, AfectadoTag, combinarDireccion, sumaMontosDanos, formatMonto, soloCambios } from "./shared";
 import { subirEvidencia, eliminarEvidencia } from "../../services/evidencias";
-import { guardarPartesInvolucradas } from "../../services/siniestros";
+import { guardarPartesInvolucradas, fetchPartesInvolucradas } from "../../services/siniestros";
 import DireccionCascada from "../../shared/components/DireccionCascada";
 import { getTodasMarcas, getTiposPorMarca } from "../../services/vehiculos";
 import DanosMarcadores from "./danos/DanosMarcadores";
@@ -159,14 +159,6 @@ function PanelNA({ siniestro, datos, onDatos }) {
   const dan  = useEvidencias(sid, num, "NA", "danos");
   const serie = useEvidencias(sid, num, "NA", "numero_serie");
 
-  // "Monto estimado del daño" se calcula solo, sumando el monto que se
-  // le puso a cada punto marcado en "Daños del Siniestro" (los de
-  // "Daños Preexistentes" no llevan monto, solo nota) — se muestra en
-  // vivo con este valor derivado y se guarda en cuanto cambian los
-  // marcadores (ver onChange de DanosMarcadores más abajo), no hace
-  // falta un useEffect.
-  const sumaDanos = sumaMontosDanos(datos.danosSiniestro);
-
   return (
     <div className="border-2 border-gray-100 rounded-2xl overflow-hidden">
       <div className="bg-[#13193a] px-4 py-3">
@@ -205,16 +197,13 @@ function PanelNA({ siniestro, datos, onDatos }) {
             items={serie.items} onAdd={serie.agregar} onRemove={serie.eliminar} />
         </div>
 
-        <Sep label="Mapa de daños" />
-        <div className="space-y-3">
-          <DanosMarcadores
-            titulo="Daños del Siniestro"
-            value={datos.danosSiniestro}
-            onChange={(v) => { onDatos("danosSiniestro", v); onDatos("montoEstimado", sumaMontosDanos(v)); }}
-          />
-          <DanosMarcadores titulo="Daños Preexistentes" value={datos.danosPreexistente} onChange={(v) => onDatos("danosPreexistente", v)} soloNota />
-        </div>
-
+        {/* Sin mapa de daños ni pase a taller para NA — la aseguradora
+            solo vende responsabilidad civil, nunca paga el daño del
+            propio asegurado. "Descripción de daños"/"¿Abrir reserva?"/
+            "Monto estimado" se quedan porque alimentan la Declaración
+            del Accidente (reporte factual del siniestro, no una
+            autorización de pago) — "Monto estimado" vuelve a ser un
+            campo manual porque ya no hay marcadores de los que sumarlo. */}
         <Sep label="Daños del vehículo asegurado" />
         <div className="space-y-3">
           <Campo label="Descripción de daños" placeholder="Describe los daños del vehículo..." rows={2}
@@ -234,7 +223,8 @@ function PanelNA({ siniestro, datos, onDatos }) {
               ))}
             </div>
           </div>
-          <CampoSistema label="Monto estimado del daño" value={formatMonto(sumaDanos)} />
+          <Campo label="Monto estimado del daño" type="number" placeholder="0.00"
+            value={datos.montoEstimado} onChange={(v) => onDatos("montoEstimado", v)} />
         </div>
       </div>
     </div>
@@ -476,6 +466,7 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
 }
 
 const datosAfectadoVacio = () => ({
+  _dbId: null,
   nombre: "", edad: "", sexo: "", telefono: "", email: "",
   rfc: "", curp: "", direccion: "",
   direccionEstado: "", direccionMunicipio: "", direccionColonia: "", direccionCp: "", direccionCalle: "", direccionNumero: "",
@@ -491,7 +482,6 @@ const datosAfectadoVacio = () => ({
 
 const datosNAVacio = () => ({
   descripcionDano: "", abrirReserva: null, montoEstimado: "",
-  danosSiniestro: {}, danosPreexistente: {},
 });
 
 export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
@@ -502,11 +492,37 @@ export default function CapturaDatosEvidencia({ siniestro, onSiguiente }) {
   const [guardando,    setGuardando]    = useState(false);
   const [errorGuardar, setErrorGuardar] = useState(null);
 
+  // Snapshots con los que arrancó el formulario — para guardado
+  // diferencial (soloCambios) y reconciliación de filas de terceros. Sin
+  // esta hidratación, cada vez que el ajustador volvía a entrar aquí el
+  // formulario arrancaba en blanco y, al picar Continuar, se perdían los
+  // terceros ya guardados (el guardado anterior borraba e insertaba todo).
+  const [originalNA,       setOriginalNA]       = useState(datosNAVacio());
+  const [originalTerceros, setOriginalTerceros] = useState({});
+
+  useEffect(() => {
+    fetchPartesInvolucradas(siniestro.id).then(({ datosNA: naRow, terceros }) => {
+      if (naRow) {
+        setDatosNA(naRow);
+        setOriginalNA(naRow);
+      }
+      if (terceros.length) {
+        const ids = terceros.map((_, i) => `AF${i + 1}`);
+        const map = {};
+        terceros.forEach((t, i) => { map[ids[i]] = t; });
+        setAfectadosIds(ids);
+        setAfectados(map);
+        setOriginalTerceros(map);
+      }
+    }).catch(() => {});
+  }, [siniestro.id]);
+
   const handleSiguiente = async () => {
     setGuardando(true);
     setErrorGuardar(null);
     try {
-      await guardarPartesInvolucradas(siniestro.id, afectadosIds, afectados, datosNA);
+      const cambiosNA = soloCambios(originalNA, datosNA);
+      await guardarPartesInvolucradas(siniestro.id, { cambiosNA, afectadosIds, afectados, originalTerceros });
       onSiguiente();
     } catch (err) {
       setErrorGuardar(err.message ?? "Error al guardar las partes involucradas");

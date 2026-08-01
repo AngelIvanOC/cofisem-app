@@ -29,3 +29,24 @@ export async function fetchTalleres() {
     colonia: s.direcciones?.colonia ?? "",
   }));
 }
+
+// ── Hospitales/clínicas activos, más reciente primero ──────────
+// Pase Médico espera un solo campo "domicilio" (a diferencia de Pase
+// Taller, que separa calle/colonia en columnas propias) — se arma
+// uniendo calle + colonia + municipio + estado.
+export async function fetchHospitales() {
+  const { data, error } = await supabase
+    .from("servicios")
+    .select("id, nombre, calle, telefono, direcciones(colonia, municipio, estado)")
+    .eq("tipo", "hospital")
+    .eq("activo", true)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  return (data ?? []).map((s) => ({
+    id: s.id,
+    nombre: s.nombre,
+    telefono: s.telefono,
+    domicilio: [s.calle, s.direcciones?.colonia, s.direcciones?.municipio, s.direcciones?.estado].filter(Boolean).join(", "),
+  }));
+}

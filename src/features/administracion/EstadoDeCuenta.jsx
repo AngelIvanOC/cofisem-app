@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { supabase } from "../../supabaseClient";
 import { FileText, Loader2, Search, Download, Printer } from "lucide-react";
 
@@ -213,28 +213,212 @@ export default function EstadoDeCuenta() {
   const totalConIva = grandTotal + iva;
   const periodo = rango.s ? formatPeriodo(rango.s, rango.e) : "";
 
-  const exportarExcel = () => {
+  // Mismos colores que la tabla en pantalla y el PDF, en ARGB para ExcelJS.
+  const XL_DARK  = "FF13193A";
+  const XL_MID   = "FF1E2A50";
+  const XL_LIGHT = "FF2D3D6B";
+  const XL_SUB   = "FF3D5080";
+  const XL_ZEBRA = "FFF8FAFC";
+  const XL_GRIS  = "FFF3F4F6";
+  const XL_AZULC = "FFEFF6FF";
+  const XL_BORDE = { style: "thin", color: { argb: "FFDDE3F0" } };
+  const XL_BORDES = { top: XL_BORDE, bottom: XL_BORDE, left: XL_BORDE, right: XL_BORDE };
+
+  const xlFill = (argb) => ({ type: "pattern", pattern: "solid", fgColor: { argb } });
+  const xlBlanco = { color: { argb: "FFFFFFFF" }, bold: true, size: 9 };
+  const xlNegro = { color: { argb: "FF000000" }, size: 9 };
+  const xlNegroBold = { color: { argb: "FF000000" }, bold: true, size: 9 };
+  const xlMoneda = '"$"#,##0.00';
+
+  function estilizarFila(row, { fill, font, align = "center", cols = 5, numFmtCols = [] } = {}) {
+    for (let c = 1; c <= cols; c++) {
+      const cell = row.getCell(c);
+      if (fill) cell.fill = xlFill(fill);
+      cell.font = font ?? xlNegro;
+      cell.border = XL_BORDES;
+      cell.alignment = { horizontal: c === 1 ? "left" : align, vertical: "middle" };
+      if (numFmtCols.includes(c)) cell.numFmt = xlMoneda;
+    }
+  }
+
+  const exportarExcel = async () => {
     if (!datos || datos.length === 0) return;
-    const filas = [
-      [periodo],
-      ["CONCEPTO", "Cant. $100", "S-Total $100", "Cant. $50", "S-Total $50"],
-      ...datos.map((o) => [
-        o.nombre,
-        o.carros,
-        o.carros * PRECIO_CARRO,
-        o.motos,
-        o.motos * PRECIO_MOTO,
-      ]),
-      ["CONSTANCIAS", totCarros, stCarros, totMotos, stMotos],
-      [],
-      ["TOTAL PENDIENTE DE PAGO", "", "", "", grandTotal],
-      ["IVA (16%)", "", "", "", iva],
-      ["TOTAL + IVA", "", "", "", totalConIva],
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Estado de Cuenta");
+    ws.columns = [
+      { width: 34 },
+      { width: 14 },
+      { width: 16 },
+      { width: 14 },
+      { width: 16 },
     ];
-    const ws = XLSX.utils.aoa_to_sheet(filas);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Estado de Cuenta");
-    XLSX.writeFile(wb, `estado-cuenta-${rango.s}.xlsx`);
+
+    let r = 1;
+
+    // — Periodo —
+    ws.mergeCells(r, 1, r, 5);
+    ws.getCell(r, 1).value = periodo;
+    estilizarFila(ws.getRow(r), { fill: XL_DARK, font: { ...xlBlanco, size: 11 } });
+    ws.getRow(r).height = 22;
+    r++;
+
+    // — Header resumen: CONCEPTO (alto completo) | VENTA / $100-$50 / Cant.-S-Total —
+    const filaConcepto = r;
+    ws.mergeCells(r, 1, r + 2, 1);
+    ws.getCell(r, 1).value = "CONCEPTO";
+    ws.mergeCells(r, 2, r, 5);
+    ws.getCell(r, 2).value = "VENTA";
+    r++;
+    ws.mergeCells(r, 2, r, 3);
+    ws.getCell(r, 2).value = "$100";
+    ws.mergeCells(r, 4, r, 5);
+    ws.getCell(r, 4).value = "$50";
+    r++;
+    ["Cant.", "S-Total", "Cant.", "S-Total"].forEach((h, i) => {
+      ws.getCell(r, i + 2).value = h;
+    });
+    r++;
+    for (let rr = filaConcepto; rr < r; rr++) {
+      const bg = rr === filaConcepto ? XL_MID : rr === filaConcepto + 1 ? XL_LIGHT : XL_SUB;
+      estilizarFila(ws.getRow(rr), { fill: bg, font: xlBlanco });
+    }
+
+    // — Filas de datos —
+    datos.forEach((o, i) => {
+      const row = ws.getRow(r);
+      row.getCell(1).value = o.nombre;
+      row.getCell(2).value = o.carros;
+      row.getCell(3).value = o.carros * PRECIO_CARRO;
+      row.getCell(4).value = o.motos;
+      row.getCell(5).value = o.motos * PRECIO_MOTO;
+      estilizarFila(row, { fill: i % 2 === 1 ? XL_ZEBRA : null, numFmtCols: [3, 5] });
+      r++;
+    });
+
+    // — CONSTANCIAS —
+    {
+      const row = ws.getRow(r);
+      row.getCell(1).value = "CONSTANCIAS";
+      row.getCell(2).value = totCarros;
+      row.getCell(3).value = stCarros;
+      row.getCell(4).value = totMotos;
+      row.getCell(5).value = stMotos;
+      estilizarFila(row, { fill: XL_GRIS, font: xlNegroBold, numFmtCols: [3, 5] });
+      r++;
+    }
+
+    // — TOTAL PENDIENTE DE PAGO —
+    {
+      ws.mergeCells(r, 1, r, 4);
+      ws.getCell(r, 1).value = "TOTAL PENDIENTE DE PAGO";
+      ws.getCell(r, 5).value = grandTotal;
+      estilizarFila(ws.getRow(r), { fill: XL_AZULC, font: xlNegroBold, numFmtCols: [5] });
+      r++;
+    }
+
+    // — IVA —
+    {
+      ws.mergeCells(r, 1, r, 4);
+      const label = ws.getCell(r, 1);
+      label.value = "IVA (16%)";
+      label.font = { ...xlNegro, color: { argb: "FF4B5563" } };
+      label.alignment = { horizontal: "right", vertical: "middle" };
+
+      const val = ws.getCell(r, 5);
+      val.value = iva;
+      val.numFmt = xlMoneda;
+      val.font = { ...xlNegro, color: { argb: "FF4B5563" } };
+      val.fill = xlFill(XL_AZULC);
+      val.border = XL_BORDES;
+      val.alignment = { horizontal: "center", vertical: "middle" };
+      r++;
+    }
+
+    // — TOTAL + IVA —
+    {
+      ws.mergeCells(r, 1, r, 4);
+      const label = ws.getCell(r, 1);
+      label.value = "TOTAL + IVA";
+      label.font = xlNegroBold;
+      label.alignment = { horizontal: "right", vertical: "middle" };
+
+      const val = ws.getCell(r, 5);
+      val.value = totalConIva;
+      val.numFmt = xlMoneda;
+      val.font = xlBlanco;
+      val.fill = xlFill(XL_DARK);
+      val.border = XL_BORDES;
+      val.alignment = { horizontal: "center", vertical: "middle" };
+      r++;
+    }
+
+    r += 2;
+
+    // — Detalle por oficina — mismos datos que usa el PDF —
+    const mapaOficinas = new Map();
+    for (const p of polizasRaw) {
+      const { key, nombre } = claveYNombre(p);
+      if (!mapaOficinas.has(key)) mapaOficinas.set(key, { nombre, polizas: [] });
+      mapaOficinas.get(key).polizas.push(p);
+    }
+    const oficinasOrdenadas = [...mapaOficinas.values()].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre),
+    );
+    const fmtFechaXl = (str) => {
+      if (!str) return "—";
+      return new Date(str).toLocaleDateString("es-MX", {
+        day: "2-digit", month: "2-digit", year: "numeric",
+      });
+    };
+
+    ws.mergeCells(r, 1, r, 5);
+    ws.getCell(r, 1).value = "DETALLE POR OFICINA";
+    ws.getCell(r, 1).font = { ...xlNegroBold, size: 11 };
+    r += 2;
+
+    oficinasOrdenadas.forEach((of) => {
+      // Cabecera de la oficina — celda combinada azul marino, letra blanca,
+      // abarcando las 5 columnas (No. Póliza / Cobertura / Precio Total /
+      // Forma de Pago / Fecha Emisión).
+      ws.mergeCells(r, 1, r, 5);
+      ws.getCell(r, 1).value = of.nombre;
+      estilizarFila(ws.getRow(r), { fill: XL_DARK, font: { ...xlBlanco, size: 10 } });
+      ws.getRow(r).height = 20;
+      r++;
+
+      ["No. Póliza", "Cobertura", "Precio Total", "Forma de Pago", "Fecha Emisión"].forEach((h, i) => {
+        ws.getCell(r, i + 1).value = h;
+      });
+      estilizarFila(ws.getRow(r), { fill: XL_MID, font: xlBlanco });
+      r++;
+
+      of.polizas.forEach((p, i) => {
+        const row = ws.getRow(r);
+        row.getCell(1).value = p.constancia || "—";
+        row.getCell(2).value = p.coberturas?.nombre || "—";
+        row.getCell(3).value = Number(p.coberturas?.prima_total ?? 0);
+        row.getCell(4).value = p.forma_pago || "—";
+        row.getCell(5).value = fmtFechaXl(p.created_at);
+        estilizarFila(row, { fill: i % 2 === 1 ? XL_ZEBRA : null, numFmtCols: [3] });
+        row.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+        row.getCell(3).alignment = { horizontal: "right", vertical: "middle" };
+        r++;
+      });
+
+      r++; // espacio entre oficinas
+    });
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `estado-cuenta-${rango.s}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const exportarPDF = () => {
@@ -363,12 +547,33 @@ export default function EstadoDeCuenta() {
       <h2 style="margin-top:32px;margin-bottom:4px;font-size:14px">Detalle por Oficina</h2>
       ${seccionesOficinas}
 
-      <script>window.onload=()=>{window.print();}<\/script>
       </body></html>`;
 
-    const w = window.open("", "_blank", "width=1000,height=750");
-    w.document.write(html);
-    w.document.close();
+    // Se imprime desde un iframe oculto anclado a esta misma página, en vez
+    // de una pestaña nueva en about:blank — así el pie de página que agrega
+    // el navegador al imprimir muestra la URL real de la app en vez de
+    // "about:blank".
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument;
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    const limpiar = () => iframe.remove();
+    iframe.contentWindow.addEventListener("afterprint", limpiar);
+    // Respaldo por si "afterprint" no dispara en algún navegador.
+    setTimeout(limpiar, 60000);
+
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
   };
 
   const inp =

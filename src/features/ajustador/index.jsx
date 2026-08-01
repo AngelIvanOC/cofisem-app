@@ -26,6 +26,7 @@ import PaseTallerPDF from "../../components/pdf/PaseTallerPDF";
 import { fetchPaseTallerData, buildPaseTallerPDF } from "../../services/pasePdf";
 import PaseMedicoPDF from "../../components/pdf/PaseMedicoPDF";
 import { fetchPaseMedicoData, buildPaseMedicoPDF } from "../../services/paseMedicoPdf";
+import { fetchLesionados } from "../../services/siniestros";
 
 const NOMBRE_PASO = [
   "Confirmar Arribo",
@@ -46,9 +47,14 @@ function Exito({ siniestro, docs, onVolver }) {
   const [errorPDF,       setErrorPDF]       = useState(null);
   const [pasePDF,        setPasePDF]        = useState(null);
   const [errorPasePDF,   setErrorPasePDF]   = useState(null);
-  const [paseMedicoPDF,      setPaseMedicoPDF]      = useState(null);
-  const [errorPaseMedicoPDF, setErrorPaseMedicoPDF] = useState(null);
-  const [descargandoTodos,   setDescargandoTodos]   = useState(false);
+  // Pase Médico ya no es uno por siniestro — es uno por cada lesionado
+  // que haya quedado con el switch "Generar Pase Médico" activado (0,
+  // 1 o varios). lesionadosConPase: [{id, nombre}]; paseMedicoPDFs y
+  // errorPaseMedicoPDFs se indexan por ese mismo id.
+  const [lesionadosConPase,    setLesionadosConPase]    = useState([]);
+  const [paseMedicoPDFs,       setPaseMedicoPDFs]       = useState({});
+  const [errorPaseMedicoPDFs,  setErrorPaseMedicoPDFs]  = useState({});
+  const [descargandoTodos,     setDescargandoTodos]     = useState(false);
 
   useEffect(() => {
     fetchDeclaracionData(siniestro.id)
@@ -64,11 +70,18 @@ function Exito({ siniestro, docs, onVolver }) {
   }, [siniestro.id, docs?.taller]);
 
   useEffect(() => {
-    if (!docs?.medico) return;
-    fetchPaseMedicoData(siniestro.id)
-      .then((raw) => setPaseMedicoPDF(buildPaseMedicoPDF(raw)))
-      .catch((err) => setErrorPaseMedicoPDF(err.message ?? "Error al preparar el Pase Médico"));
-  }, [siniestro.id, docs?.medico]);
+    fetchLesionados(siniestro.id)
+      .then((rows) => {
+        const conPase = rows.filter((l) => l.pase_medico_numero);
+        setLesionadosConPase(conPase);
+        conPase.forEach((l) => {
+          fetchPaseMedicoData(l.id)
+            .then((raw) => setPaseMedicoPDFs((p) => ({ ...p, [l.id]: buildPaseMedicoPDF(raw) })))
+            .catch((err) => setErrorPaseMedicoPDFs((p) => ({ ...p, [l.id]: err.message ?? "Error al preparar el Pase Médico" })));
+        });
+      })
+      .catch(() => {});
+  }, [siniestro.id]);
 
   // Genera cada PDF listo bajo demanda (pdf(...).toBlob()) y dispara su
   // descarga con un <a> sintético, en secuencia — un solo botón para no
@@ -96,16 +109,20 @@ function Exito({ siniestro, docs, onVolver }) {
         const blob = await pdf(<PaseTallerPDF data={pasePDF} />).toBlob();
         descargarBlob(blob, `pase-taller-${numero}.pdf`);
       }
-      if (docs?.medico && paseMedicoPDF) {
-        const blob = await pdf(<PaseMedicoPDF data={paseMedicoPDF} />).toBlob();
-        descargarBlob(blob, `pase-medico-${numero}.pdf`);
+      for (const l of lesionadosConPase) {
+        const data = paseMedicoPDFs[l.id];
+        if (!data) continue;
+        const blob = await pdf(<PaseMedicoPDF data={data} />).toBlob();
+        descargarBlob(blob, `pase-medico-${numero}-${l.nombre || l.id}.pdf`);
       }
     } finally {
       setDescargandoTodos(false);
     }
   };
 
-  const todosListos = !!declaracionPDF && (!docs?.taller || !!pasePDF) && (!docs?.medico || !!paseMedicoPDF);
+  const todosListos = !!declaracionPDF
+    && (!docs?.taller || !!pasePDF)
+    && lesionadosConPase.every((l) => !!paseMedicoPDFs[l.id]);
 
   return (
     <div className="flex flex-col items-center justify-center px-8 text-center py-16">
@@ -181,27 +198,31 @@ function Exito({ siniestro, docs, onVolver }) {
           )
         )}
 
-        {docs?.medico && (
-          paseMedicoPDF ? (
+        {lesionadosConPase.map((l) => {
+          const data = paseMedicoPDFs[l.id];
+          const numero = siniestro.numero_siniestro ?? siniestro.folio ?? siniestro.id;
+          const etiqueta = l.nombre || `Lesionado #${l.id}`;
+          return data ? (
             <PDFDownloadLink
-              document={<PaseMedicoPDF data={paseMedicoPDF} />}
-              fileName={`pase-medico-${siniestro.numero_siniestro ?? siniestro.folio ?? siniestro.id}.pdf`}
+              key={l.id}
+              document={<PaseMedicoPDF data={data} />}
+              fileName={`pase-medico-${numero}-${etiqueta}.pdf`}
               style={{ textDecoration: "none" }}
             >
               {({ loading: pdfLoading }) => (
                 <span className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-bold hover:bg-[#1e2a50] cursor-pointer select-none">
-                  {pdfLoading ? "Preparando PDF..." : "Descargar Pase Médico (PDF)"}
+                  {pdfLoading ? "Preparando PDF..." : `Descargar Pase Médico — ${etiqueta} (PDF)`}
                 </span>
               )}
             </PDFDownloadLink>
-          ) : errorPaseMedicoPDF ? (
-            <p className="text-xs text-red-500">{errorPaseMedicoPDF}</p>
+          ) : errorPaseMedicoPDFs[l.id] ? (
+            <p key={l.id} className="text-xs text-red-500">{errorPaseMedicoPDFs[l.id]}</p>
           ) : (
-            <span className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#13193a]/50 text-white text-sm font-bold cursor-wait select-none">
-              Preparando pase médico...
+            <span key={l.id} className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#13193a]/50 text-white text-sm font-bold cursor-wait select-none">
+              {`Preparando Pase Médico — ${etiqueta}...`}
             </span>
-          )
-        )}
+          );
+        })}
       </div>
 
       {todosListos && (

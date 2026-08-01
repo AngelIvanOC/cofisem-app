@@ -189,17 +189,10 @@ export const TIPOS_SINIESTRO = [
   "Otro",
 ];
 
-// TALLERES_LISTA se dio de baja — el paso "Documentos" ahora trae los
-// talleres reales de la tabla `servicios` (tipo='taller') vía
-// fetchTalleres() en services/servicios.js.
-
-export const CLINICAS_LISTA = [
-  { nombre: "Clínica Reforma",        telefono: "777 302 2505", direccion: "C. Ocotepec 517, Cuernavaca, Morelos 62260" },
-  { nombre: "Clínica IMSS Zona Norte",telefono: "777 500 6677", direccion: "Av. Plan de Ayala 1203, Cuernavaca, Morelos" },
-  { nombre: "Hospital San Miguel",    telefono: "777 600 7788", direccion: "Calle Morelos 34, Col. Centro, Cuernavaca, Morelos" },
-  { nombre: "Cruz Roja Cuernavaca",   telefono: "777 700 8899", direccion: "Av. Domingo Diez 1120, Cuernavaca, Morelos" },
-  { nombre: "MédicaVial Jiutepec",   telefono: "777 800 9900", direccion: "Av. Zapata 67, Jiutepec, Morelos" },
-];
+// TALLERES_LISTA y CLINICAS_LISTA se dieron de baja — el paso
+// "Documentos"/"Lesionados" ahora trae talleres y hospitales reales de
+// la tabla `servicios` (tipo='taller'/'hospital') vía
+// fetchTalleres()/fetchHospitales() en services/servicios.js.
 
 export const VISTAS_AUTO = [
   { id: "frente",    label: "Frente"    },
@@ -384,6 +377,27 @@ export function AfectadoTag({ label, active, onClick }) {
 // Fila de botones tipo "chip" para elegir una opción de una lista corta
 // (Sí/No, Atropello/Colisión, etc.) — usada en el paso de Lesionados y
 // en Documentos (Pase Taller/Médico).
+// Compara el snapshot con el que arrancó un formulario (`original`)
+// contra su estado actual (`actual`) y devuelve solo las llaves que de
+// verdad cambiaron — para que cada paso mande a guardar nada más lo
+// que el ajustador tocó, en vez de reescribir todos sus campos cada
+// vez que se avanza. Arrays/objetos se comparan por contenido (no por
+// referencia); ambos lados deben venir en la MISMA forma (los mismos
+// valores "vacío" — típicamente "" — para que un campo nunca tocado
+// no aparezca como "cambiado" solo por comparar "" contra null).
+export function soloCambios(original, actual) {
+  const cambios = {};
+  for (const k of Object.keys(actual)) {
+    const av = original?.[k];
+    const bv = actual[k];
+    const distintos = (Array.isArray(av) || Array.isArray(bv))
+      ? JSON.stringify(av ?? []) !== JSON.stringify(bv ?? [])
+      : av !== bv;
+    if (distintos) cambios[k] = bv;
+  }
+  return cambios;
+}
+
 export function ToggleRow({ label, options, current, onPick }) {
   return (
     <div>
