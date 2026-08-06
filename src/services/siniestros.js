@@ -876,6 +876,16 @@ const CAMPOS_TALLER = ["tallerNombre", "tallerCalle", "tallerColonia", "tallerTe
 export async function guardarPaseTaller(siniestroId, cambios, actual, sistema = {}) {
   const payload = payloadDesdeCambios(cambios, MAPA_PASE_TALLER);
 
+  // "definicion" ya no tiene control en la UI (siempre es del tercero,
+  // ver PASE_TALLER_DEFAULT en Documentos.jsx) — como nunca cambia
+  // contra su propio snapshot inicial, soloCambios() jamás lo mete en
+  // `cambios` y se queda NULL en BD para siempre. Se manda siempre fijo
+  // en vez de depender del diff: pasePdf.js decide con este valor si lee
+  // los marcadores de daños del tercero o del asegurado, y con NULL
+  // termina leyendo del lado equivocado (siempre vacío) — todos los
+  // lados salen "SIN DAÑOS" aunque sí se hayan marcado en el tercero.
+  payload.pase_taller_definicion = actual?.definicion || "Tercero";
+
   const esTaller      = actual?.destino === "Taller";
   const tallerTocado  = CAMPOS_TALLER.some((k) => k in cambios);
   if ("destino" in cambios || tallerTocado) {

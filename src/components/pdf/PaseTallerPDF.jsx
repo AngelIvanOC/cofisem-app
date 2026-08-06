@@ -150,12 +150,21 @@ function TextBox({ rect, value, align = "flex-start" }) {
 // original iba suelta a la izquierda del cuadro, pero a pedido se
 // cambió a este estilo más estándar.
 const CHECK_BOX_SIZE = 7;
+// La "X" necesita quedar claramente más chica que la caja (7 - 2×0.5 de
+// borde ≈ 6pt de alto útil) — heredar rect.fontSize (8.11pt o más, el
+// tamaño real de la celda en el Excel) no cabe ahí y react-pdf/textkit
+// la borra en silencio en vez de desbordarla (mismo bug ya resuelto con
+// un tamaño fijo chico en el CheckMark de PaseMedicoPDF.jsx). Probado a
+// mano contra este mismo box: 5.5pt TODAVÍA se borra en silencio, 4pt
+// sí cabe y se ve — no hay margen tan holgado como sugiere el cálculo
+// de "alto útil" de arriba.
+const CHECK_MARK_FONT_SIZE = 4;
 function CheckMark({ rect, active }) {
   if (!rect) return null;
   return (
     <View style={boxStyle(rect, { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", backgroundColor: "transparent", borderTopWidth: 0, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 0, padding: 2 })}>
       <View style={{ width: CHECK_BOX_SIZE, height: CHECK_BOX_SIZE, borderWidth: 0.5, borderColor: "#000000", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        {active ? <Text style={{ fontSize: rect.fontSize }}>X</Text> : null}
+        {active ? <Text style={{ fontSize: CHECK_MARK_FONT_SIZE }}>X</Text> : null}
       </View>
     </View>
   );

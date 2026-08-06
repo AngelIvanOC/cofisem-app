@@ -56,6 +56,7 @@ const AdminPagos           = lazy(() => import("./pages/administracion/AdminPago
 const AdminUsuarios        = lazy(() => import("./pages/administracion/AdminUsuarios"));
 const AdminConfiguracion   = lazy(() => import("./pages/administracion/AdminConfiguracion"));
 const AdminEstadoCuenta    = lazy(() => import("./pages/administracion/EstadoDeCuenta"));
+const AdminFormatos        = lazy(() => import("./pages/administracion/AdminFormatos"));
 
 // ── CABINERO SINIESTROS ───────────────────────────────────────
 const CabineroDashboard = lazy(() => import("./pages/cabinero/CabineroDashboard"));
@@ -106,6 +107,7 @@ const RUTAS_POR_ROL = {
     "/gaman/clientes",
     "/gaman/vendedores",
     "/gaman/estado-cuenta",
+    "/gaman/formatos",
   ],
   CABINERO_SINIESTROS: [
     "/gaman/dashboard",
@@ -393,6 +395,16 @@ export default function App() {
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/gaman/estado-cuenta">
                   <AdminEstadoCuenta />
+                </RutaProtegida>
+              }
+            />
+
+            {/* Formatos y pases (admin) */}
+            <Route
+              path="/gaman/formatos"
+              element={
+                <RutaProtegida rolNombre={rolNombre} path="/gaman/formatos">
+                  <AdminFormatos />
                 </RutaProtegida>
               }
             />

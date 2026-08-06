@@ -39,7 +39,10 @@ const SEL_PASE_TALLER = `
 const LADO_ORDEN  = ["frente", "derecha", "atras", "izquierda", "arriba"];
 const LADO_LABEL  = { frente: "FRENTE", derecha: "DERECHA", atras: "DETRÁS", izquierda: "IZQUIERDA", arriba: "ARRIBA" };
 
-function marcadoresPorLabel(marcadoresPorLadoId) {
+// Exportada para reutilizarse fuera del flujo del ajustador (ver
+// AdminFormatos.jsx, que arma este mismo mapa de daños a mano sin
+// pasar por un siniestro real en BD).
+export function marcadoresPorLabel(marcadoresPorLadoId) {
   const resultado = {};
   let n = 0;
   for (const ladoId of LADO_ORDEN) {

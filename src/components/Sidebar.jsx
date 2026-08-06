@@ -34,6 +34,7 @@ import {
   Sliders,
   Briefcase,
   Table,
+  FileStack,
 } from "lucide-react";
 
 // ── Iconos (Lucide React) ────────────────────────────────────
@@ -58,6 +59,7 @@ const ICONS = {
   "edit-square": ClipboardList,
   briefcase: Briefcase,
   table: Table,
+  "file-stack": FileStack,
 };
 
 // Renderiza el ícono Lucide correspondiente
