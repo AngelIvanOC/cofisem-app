@@ -51,6 +51,56 @@ function splitFecha(str) {
   return [m[1], m[2], m[3].slice(2)];
 }
 
+// ── Firmas (ajustador / asegurado / reclamante) ─────────────────
+// Las 3 se capturan con el mismo lienzo táctil (ModalFirma, siempre
+// 460x200 = proporción 2.3:1 real, confirmado en los 3 PNG guardados
+// en Storage) — no hay motivo para que se vean de tamaños distintos.
+// Las celdas que trae el Excel para cada una sí son muy distintas entre
+// sí (unas apenas 11-14pt de alto, otras 37pt), así que encoger cada
+// firma nada más a SU propia celda (como hacía ImgBox con
+// maxWidth/maxHeight) las dejaba de 3 tamaños diferentes. Aquí se fija
+// un tamaño ÚNICO para las 3 — se ignora rect.w/rect.h para el
+// tamaño (solo se usa el CENTRO de la celda como ancla) y no hay
+// overflow:hidden — si la celda original es más chica que el tamaño
+// fijo, la firma la sobrepasa (puede tapar la celda de al lado) en vez
+// de encogerse o, peor, deformarse para caber.
+const FIRMA_W = 92;
+const FIRMA_H = 40; // 92/40 = 2.3, la proporción real de los 3 PNG
+function ImgBoxFirma({ rect, url }) {
+  if (!rect || !url) return null;
+  const cx = rect.l + rect.w / 2;
+  const cy = rect.t + rect.h / 2;
+  return (
+    <Image
+      src={url}
+      style={{ position: "absolute", left: cx - FIRMA_W / 2, top: cy - FIRMA_H / 2, width: FIRMA_W, height: FIRMA_H }}
+    />
+  );
+}
+// Celdas "Nombre y Firma del Ajustador" / "...del reclamante" — a
+// diferencia de "Firma del Asegurado" (que solo pide la firma), estas
+// dos reparten la misma celda en dos mitades: el nombre en texto a la
+// izquierda, la firma (mismo tamaño fijo que las otras 2, ver
+// ImgBoxFirma) centrada en la mitad derecha.
+function NombreYFirma({ rect, nombre, url, fontSize }) {
+  if (!rect) return null;
+  const mitad = rect.l + rect.w / 2;
+  const cy = rect.t + rect.h / 2;
+  return (
+    <>
+      <View style={{ position: "absolute", left: rect.l + 2, top: rect.t, width: rect.w / 2 - 4, height: rect.h, justifyContent: "center" }}>
+        <Text wrap={false} style={{ fontSize }}>{nombre || ""}</Text>
+      </View>
+      {url && (
+        <Image
+          src={url}
+          style={{ position: "absolute", left: mitad + (rect.w / 2 - FIRMA_W) / 2, top: cy - FIRMA_H / 2, width: FIRMA_W, height: FIRMA_H }}
+        />
+      )}
+    </>
+  );
+}
+
 // ── Helpers de geometría ───────────────────────────────────────
 function R(rects, r1, c1) {
   return rects.find((x) => x.r1 === r1 && x.c1 === c1);
@@ -62,6 +112,40 @@ function bbox(rects, r1, c1, r2, c2) {
   const b = R(rects, r2, c2);
   if (!a || !b) return null;
   return { l: a.l, t: a.t, w: (b.l + b.w) - a.l, h: (b.t + b.h) - a.t };
+}
+// ── Crecer las 3 fotos "Calca" de alto (nunca de ancho, para no
+// desproporcionar el recorte de ImgBoxCover) sin taparse con lo que
+// sigue — el recuadro crece hacia abajo (el top se queda fijo) y todo
+// lo que venía después de su borde inferior original, en ESTA página
+// (Carátula), se recorre hacia abajo esa misma cantidad. La columna
+// paralela "Descripción de daño" (4 filas angostas al lado de cada
+// Calca) reparte ese mismo crecimiento ENTRE LAS 4, en vez de cargarlo
+// todo a la última — así el cambio se nota menos ahí también, no solo
+// se ve una fila de repente más alta que sus 3 vecinas.
+// No toca la página Reverso (lesionados/ajuste/encuesta/firmas) —
+// vive en su propia página, completamente aparte.
+const CALCA_DELTA = 10;
+const CALCA_PUNTOS = [
+  { r1: 29, colRows: [29, 30, 31, 32] }, // Calca Vehículo Asegurado
+  { r1: 49, colRows: [49, 50, 51, 52] }, // Calca tercero 1
+  { r1: 67, colRows: [67, 68, 69, 70] }, // Calca tercero 2
+];
+function ajustarAltoCalcas(rectsOriginales) {
+  let rects = rectsOriginales;
+  for (const { r1, colRows } of CALCA_PUNTOS) {
+    const calca = rects.find((r) => r.r1 === r1 && r.c1 === 0);
+    if (!calca) continue;
+    const borde = calca.t + calca.h;
+    const porFila = CALCA_DELTA / colRows.length;
+    rects = rects.map((r) => {
+      if (r.r1 === r1 && r.c1 === 0) return { ...r, h: r.h + CALCA_DELTA };
+      const idx = r.c1 === 8 ? colRows.indexOf(r.r1) : -1;
+      if (idx !== -1) return { ...r, t: r.t + porFila * idx, h: r.h + porFila };
+      if (r.t >= borde - 0.01) return { ...r, t: r.t + CALCA_DELTA };
+      return r;
+    });
+  }
+  return rects;
 }
 
 // ── Primitivas visuales ────────────────────────────────────────
@@ -109,17 +193,58 @@ function makePrimitives(fonts) {
       </View>
     );
   }
-  // Sin relleno: el recuadro de firma del ajustador en el Reverso tiene
-  // el logo GAMAN dibujado detrás (posición real del Excel) — si esta
-  // caja pintara blanco opaco lo taparía por completo mientras no haya
-  // firma cargada, cuando en el Excel real se ve transparentado ahí.
-  function ImgBox({ rect, url, placeholder }) {
+  // Foto del número de serie (VIN) — a diferencia de una firma, aquí SÍ
+  // conviene recortar en vez de encoger: la guía de encuadre de la cámara
+  // (CamaraGuiada.jsx) ya centra el VIN dentro de un recuadro ancho y
+  // bajo, pero la FOTO capturada sigue siendo el cuadro completo de la
+  // cámara (típicamente vertical) — con solo maxWidth/maxHeight (encoger
+  // preservando proporción, sin recortar) esa foto vertical se encoge
+  // hasta que su ALTO quepa en una celda baja, dejando un VIN diminuto
+  // con mucho aire a los lados.
+  // Aquí se llena TODO el ancho de la celda y se recorta lo que sobre de
+  // alto, centrado — mismo resultado que object-fit:cover, que react-pdf
+  // no trae de fábrica. `aspectRatio` (ancho/alto real de la foto,
+  // medido de antemano en declaracionPdf.js) es indispensable: sin la
+  // proporción real no se puede calcular cuánto recortar arriba/abajo
+  // para que quede centrado en vez de pegado a una esquina.
+  // `focoY` (0-1, default 0.5 = centrado): a qué fracción de la foto
+  // (de arriba hacia abajo) apunta el CENTRO del recorte. >0.5 mueve el
+  // recorte hacia abajo (se ve más lo que hay debajo del centro de la
+  // foto); <0.5 lo mueve hacia arriba. Se usa nada más en el caso de
+  // recorte por alto (foto vertical) — recortar por ancho no lo pidió
+  // nadie, se queda centrado como antes.
+  function ImgBoxCover({ rect, url, aspectRatio, placeholder, focoY = 0.5 }) {
     if (!rect) return null;
+    if (!url) {
+      return (
+        <View style={boxStyle(rect, { alignItems: "center", justifyContent: "center", overflow: "hidden", backgroundColor: "transparent" })}>
+          {placeholder ? <Text style={{ fontSize: fonts.checkOpt, color: "#999999" }}>{placeholder}</Text> : null}
+        </View>
+      );
+    }
+    const boxRatio = rect.w / rect.h;
+    const ratio = aspectRatio || boxRatio; // sin medida real, cae a "llenar sin recortar"
+    let w, h, offL = 0, offT = 0;
+    if (ratio >= boxRatio) {
+      // la foto es proporcionalmente más ancha que la celda → se ajusta
+      // por alto, sobra ancho a los lados, se recorta izquierda/derecha
+      h = rect.h;
+      w = h * ratio;
+      offL = (rect.w - w) / 2;
+    } else {
+      // la foto es proporcionalmente más angosta/alta que la celda (el
+      // caso típico: foto de celular en vertical) → se ajusta por ancho,
+      // sobra alto, se recorta arriba/abajo, centrado en `focoY` en vez
+      // de siempre en el 50% — clamp para nunca dejar un hueco en blanco
+      // arriba o abajo si focoY empuja el recorte fuera de la foto.
+      w = rect.w;
+      h = w / ratio;
+      offT = rect.h / 2 - focoY * h;
+      offT = Math.max(rect.h - h, Math.min(0, offT));
+    }
     return (
-      <View style={boxStyle(rect, { alignItems: "center", justifyContent: "center", overflow: "hidden", backgroundColor: "transparent" })}>
-        {url
-          ? <Image src={url} style={{ maxWidth: rect.w - 4, maxHeight: rect.h - 4 }} />
-          : placeholder ? <Text style={{ fontSize: fonts.checkOpt, color: "#999999" }}>{placeholder}</Text> : null}
+      <View style={boxStyle(rect, { alignItems: "flex-start", justifyContent: "flex-start", overflow: "hidden", padding: 0 })}>
+        <Image src={url} style={{ position: "absolute", left: offL, top: offT, width: w, height: h }} />
       </View>
     );
   }
@@ -199,7 +324,7 @@ function makePrimitives(fonts) {
       </View>
     );
   }
-  return { Value, TextBox, ImgBox, ImgBoxFill, Check, CheckRow, LabelPlusBool, MoneyCell };
+  return { Value, TextBox, ImgBoxFill, ImgBoxCover, Check, CheckRow, LabelPlusBool, MoneyCell };
 }
 
 // ── Esqueleto: dibuja TODAS las celdas tal cual el Excel ──────
@@ -235,9 +360,9 @@ function Skeleton({ rects }) {
 }
 
 // ── Overlay Carátula (valores reales sobre el esqueleto) ──────
-function CaratulaOverlay({ d }) {
-  const RC = CARATULA_RECTS;
-  const { Value, TextBox, ImgBox, Check, CheckRow, LabelPlusBool, MoneyCell } = makePrimitives(DATA_FONT.caratula);
+function CaratulaOverlay({ d, rects }) {
+  const RC = rects;
+  const { Value, TextBox, ImgBoxCover, Check, CheckRow, LabelPlusBool, MoneyCell } = makePrimitives(DATA_FONT.caratula);
   const t0 = d.terceros[0] ?? {};
   const t1 = d.terceros[1] ?? {};
   const V = (r1, c1, value, label) => <Value key={`${r1}_${c1}`} rect={R(RC, r1, c1)} value={value} label={label} />;
@@ -328,7 +453,7 @@ function CaratulaOverlay({ d }) {
       {V(27, 7, d.vehiculo.placas)}
       {V(27, 8, d.vehiculo.serie)}
       {V(27, 12, d.vehiculo.motor)}
-      <ImgBox rect={R(RC, 29, 0)} url={d.vehiculo.serieUrl} placeholder="Sin diagrama" />
+      <ImgBoxCover rect={R(RC, 29, 0)} url={d.vehiculo.serieUrl} aspectRatio={d.vehiculo.serieAspect} placeholder="Sin diagrama" focoY={0.55} />
       <TextBox rect={bbox(RC, 29, 8, 33, 8)} value={d.vehiculo.descripcionDano} />
       <CheckRow rect={R(RC, 33, 0)} label="¿Abrir reserva?" options={["Sí", "No"]} activeIdx={d.vehiculo.abrirReserva === true ? 0 : d.vehiculo.abrirReserva === false ? 1 : -1} />
       <MoneyCell rect={R(RC, 33, 6)} value={d.vehiculo.montoEstimado} />
@@ -359,7 +484,7 @@ function CaratulaOverlay({ d }) {
       {V(46, 8, t0.ajustadorTercero)}
       <LabelPlusBool rect={R(RC, 46, 12)} label="Orden de reparación" value={boolLabel(t0.ordenReparacion)} />
       <LabelPlusBool rect={R(RC, 47, 12)} label="Convenio GXG" value={boolLabel(t0.convenioGxg)} />
-      <ImgBox rect={R(RC, 49, 0)} url={t0.serieUrl} placeholder="Sin diagrama" />
+      <ImgBoxCover rect={R(RC, 49, 0)} url={t0.serieUrl} aspectRatio={t0.serieAspect} placeholder="Sin diagrama" focoY={0.55} />
       <TextBox rect={bbox(RC, 49, 8, 53, 8)} value={t0.descripcionDano} />
       <CheckRow rect={R(RC, 53, 0)} label="¿Abrir reserva?" options={["Sí", "No"]} activeIdx={t0.abrirReserva === true ? 0 : t0.abrirReserva === false ? 1 : -1} />
       <MoneyCell rect={R(RC, 53, 6)} value={t0.montoEstimado} />
@@ -388,14 +513,14 @@ function CaratulaOverlay({ d }) {
       {V(64, 8, t1.ajustadorTercero)}
       <LabelPlusBool rect={R(RC, 64, 12)} label="Orden de reparación" value={boolLabel(t1.ordenReparacion)} />
       <LabelPlusBool rect={R(RC, 65, 12)} label="Convenio GXG" value={boolLabel(t1.convenioGxg)} />
-      <ImgBox rect={R(RC, 67, 0)} url={t1.serieUrl} placeholder="Sin diagrama" />
+      <ImgBoxCover rect={R(RC, 67, 0)} url={t1.serieUrl} aspectRatio={t1.serieAspect} placeholder="Sin diagrama" focoY={0.55} />
       <TextBox rect={bbox(RC, 67, 8, 71, 8)} value={t1.descripcionDano} />
       <CheckRow rect={R(RC, 71, 0)} label="¿Abrir reserva?" options={["Sí", "No"]} activeIdx={t1.abrirReserva === true ? 0 : t1.abrirReserva === false ? 1 : -1} />
       <MoneyCell rect={R(RC, 71, 6)} value={t1.montoEstimado} />
 
-      {/* Lugar/fecha + firma reclamante */}
+      {/* Lugar/fecha + nombre y firma reclamante */}
       {V(73, 0, [d.accidente.lugar, d.accidente.fecha].filter(Boolean).join(", "))}
-      <ImgBox rect={R(RC, 73, 8)} url={t0.firmaUrl} />
+      <NombreYFirma rect={R(RC, 73, 8)} nombre={t0.propietarioNombre || t0.conductorNombre} url={t0.firmaUrl} fontSize={DATA_FONT.caratula.value} />
 
       {/* Logo GAMAN (posición real del Excel) */}
       <Image src={GAMAN_LOGO} style={{ position: "absolute", left: LOGO_CARATULA.l, top: LOGO_CARATULA.t, width: LOGO_CARATULA.w, height: LOGO_CARATULA.h }} />
@@ -413,7 +538,7 @@ function CaratulaOverlay({ d }) {
 // ── Overlay Reverso ────────────────────────────────────────────
 function ReversoOverlay({ d }) {
   const RC = REVERSO_RECTS;
-  const { Value, TextBox, ImgBox, ImgBoxFill, Check, CheckRow, MoneyCell } = makePrimitives(DATA_FONT.reverso);
+  const { Value, TextBox, ImgBoxFill, Check, CheckRow, MoneyCell } = makePrimitives(DATA_FONT.reverso);
   const V = (r1, c1, value, label) => <Value key={`${r1}_${c1}`} rect={R(RC, r1, c1)} value={value} label={label} />;
   const lesionados = [0, 1, 2, 3].map((i) => d.lesionados[i] ?? null);
 
@@ -488,11 +613,30 @@ function ReversoOverlay({ d }) {
         </>
       )}
 
-      {/* Lugar/fecha + firma ajustador */}
+      {/* Lugar/fecha + nombre y firma ajustador */}
       <TextBox rect={R(RC, 57, 0)} value={[d.accidente.lugar, d.accidente.fecha].filter(Boolean).join(", ")} />
       {/* Logo GAMAN (posición real del Excel, detrás del recuadro de firma) */}
       <Image src={GAMAN_LOGO} style={{ position: "absolute", left: LOGO_REVERSO.l, top: LOGO_REVERSO.t, width: LOGO_REVERSO.w, height: LOGO_REVERSO.h }} />
-      <ImgBox rect={bbox(RC, 57, 6, 59, 13)} url={d.firmaAjustadorUrl} />
+      {/* El logo ocupa el arranque de esta celda (posición real del Excel)
+          — si el nombre se reparte sobre el rect completo le cae encima
+          al logo y se vuelve ilegible, así que la mitad "nombre/firma"
+          se calcula sobre el espacio que sobra DESPUÉS del logo, no
+          sobre el ancho total de la celda. */}
+      {(() => {
+        const rectAj = bbox(RC, 57, 6, 59, 13);
+        const libreL = LOGO_REVERSO.l + LOGO_REVERSO.w + 4;
+        const rectAjSinLogo = rectAj && { ...rectAj, l: libreL, w: rectAj.l + rectAj.w - libreL };
+        return <NombreYFirma rect={rectAjSinLogo} nombre={d.ajuste.ajustadorNombre} url={d.firmaAjustadorUrl} fontSize={DATA_FONT.reverso.value} />;
+      })()}
+
+      {/* Firma del Asegurado — columna 12 de esta fila, pero es un campo
+          independiente de siniestros.firma_asegurado_url (se captura en
+          el paso "Documentos" del ajustador), NO de la encuesta de
+          satisfacción (siniestros_encuesta). Antes vivía adentro del
+          `{d.encuesta && ...}` de abajo, así que si nadie llenó la
+          encuesta (algo aparte y posterior al cierre del siniestro) la
+          firma tampoco se dibujaba, aunque sí existiera. */}
+      <ImgBoxFirma rect={R(RC, 63, 12)} url={d.firmaAseguradoUrl} />
 
       {/* Encuesta */}
       {d.encuesta && (
@@ -500,7 +644,6 @@ function ReversoOverlay({ d }) {
           {V(63, 0, d.encuesta.horaReporte)}
           <CheckRow rect={R(RC, 63, 1)} options={["Excelente", "Bien", "Deficiente"]} activeIdx={["Excelente", "Bien", "Deficiente"].findIndex((o) => eq(d.encuesta.calificacionReporte, o))} />
           {V(63, 4, d.encuesta.motivoReporte)}
-          <ImgBox rect={R(RC, 63, 12)} url={d.firmaAseguradoUrl} />
           {V(65, 0, d.encuesta.horaLlegada)}
           <CheckRow rect={R(RC, 65, 1)} options={["Excelente", "Bien", "Deficiente"]} activeIdx={["Excelente", "Bien", "Deficiente"].findIndex((o) => eq(d.encuesta.calificacionAjustador, o))} />
           {V(65, 4, d.encuesta.motivoAjustador)}
@@ -518,11 +661,12 @@ function ReversoOverlay({ d }) {
 // márgenes y el centrado horizontal/vertical reales de cada hoja
 // "horneados" en sus coordenadas, así que la página no necesita padding.
 function Caratula({ d }) {
+  const rects = ajustarAltoCalcas(CARATULA_RECTS);
   return (
     <Page size={[PAGE_SIZE.w, PAGE_SIZE.h]} style={{ fontFamily: "Helvetica" }}>
       <View style={{ position: "relative", width: PAGE_SIZE.w, height: PAGE_SIZE.h }}>
-        <Skeleton rects={CARATULA_RECTS} />
-        <CaratulaOverlay d={d} />
+        <Skeleton rects={rects} />
+        <CaratulaOverlay d={d} rects={rects} />
       </View>
     </Page>
   );

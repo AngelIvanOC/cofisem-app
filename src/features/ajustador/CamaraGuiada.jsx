@@ -81,20 +81,35 @@ export default function CamaraGuiada({ titulo, instructivo, onCapturar, onCerrar
         <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
 
         {listo && !error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-6">
-            <p className="text-white text-xs font-semibold text-center mb-3 bg-black/55 px-3 py-1.5 rounded-full max-w-xs">
-              {instructivo}
-            </p>
-            {/* Recuadro largo tipo placa — para una sola línea de
-                caracteres (el VIN completo mide 17), con esquinas
-                reforzadas para que se note claro dónde encuadrar. */}
-            <div className="w-full max-w-md h-[13vh] min-h-[64px] max-h-[110px] border-[3px] border-red-500 rounded-lg relative">
-              <span className="absolute -top-1 -left-1 w-5 h-5 border-t-[3px] border-l-[3px] border-red-400 rounded-tl-lg" />
-              <span className="absolute -top-1 -right-1 w-5 h-5 border-t-[3px] border-r-[3px] border-red-400 rounded-tr-lg" />
-              <span className="absolute -bottom-1 -left-1 w-5 h-5 border-b-[3px] border-l-[3px] border-red-400 rounded-bl-lg" />
-              <span className="absolute -bottom-1 -right-1 w-5 h-5 border-b-[3px] border-r-[3px] border-red-400 rounded-br-lg" />
+          <>
+            {/* Texto instructivo — en SU PROPIA capa, arriba, para no
+                empujar el recuadro guía hacia abajo (si comparten el
+                mismo flex-col, el bloque texto+recuadro se centra como
+                UNO SOLO y el recuadro queda descentrado). */}
+            <div className="absolute top-6 left-0 right-0 flex justify-center px-6 pointer-events-none">
+              <p className="text-white text-xs font-semibold text-center bg-black/55 px-3 py-1.5 rounded-full max-w-xs">
+                {instructivo}
+              </p>
             </div>
-          </div>
+            {/* Recuadro largo tipo placa, centrado en AMBOS ejes del área
+                de video — para una sola línea de caracteres (el VIN
+                completo mide 17), con esquinas reforzadas para que se
+                note claro dónde encuadrar. Tiene que quedar en el centro
+                exacto: la foto se captura completa (canvas.drawImage del
+                frame crudo, sin recortar al recuadro) y luego el PDF la
+                recorta centrada (ImgBoxCover en DeclaracionAccidentePDF.jsx)
+                — si el recuadro guía no coincide con ese centro, el VIN
+                que el ajustador encuadró aquí puede quedar fuera del
+                recorte final. */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-6">
+              <div className="w-full max-w-md h-[13vh] min-h-[64px] max-h-[110px] border-[3px] border-red-500 rounded-lg relative">
+                <span className="absolute -top-1 -left-1 w-5 h-5 border-t-[3px] border-l-[3px] border-red-400 rounded-tl-lg" />
+                <span className="absolute -top-1 -right-1 w-5 h-5 border-t-[3px] border-r-[3px] border-red-400 rounded-tr-lg" />
+                <span className="absolute -bottom-1 -left-1 w-5 h-5 border-b-[3px] border-l-[3px] border-red-400 rounded-bl-lg" />
+                <span className="absolute -bottom-1 -right-1 w-5 h-5 border-b-[3px] border-r-[3px] border-red-400 rounded-br-lg" />
+              </div>
+            </div>
+          </>
         )}
 
         {error && (

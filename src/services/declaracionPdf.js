@@ -18,6 +18,40 @@ function fmtHora(t) {
   return t ? t.slice(0, 5) : null;
 }
 
+// ── Convierte la foto del número de serie a blanco y negro y de paso
+// mide su proporción real (ancho/alto) — un solo <img> cargado para
+// las dos cosas. react-pdf no trae filtros de imagen de fábrica (ver
+// DeclaracionAccidentePDF.jsx), así que el blanco y negro se resuelve
+// aquí, con un canvas, antes de que la URL le llegue al PDF. La
+// proporción real hace falta para que el recorte "cover" (ImgBoxCover)
+// quede centrado en vez de pegado a una esquina.
+function procesarFotoSerie(url) {
+  if (!url) return Promise.resolve({ url: null, aspect: null });
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const aspect = w && h ? w / h : null;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.filter = "grayscale(1)";
+        ctx.drawImage(img, 0, 0);
+        resolve({ url: canvas.toDataURL("image/jpeg", 0.9), aspect });
+      } catch {
+        // CORS u otro error al leer el canvas de vuelta — se queda a
+        // color en vez de tronar la generación del PDF por esto.
+        resolve({ url, aspect });
+      }
+    };
+    img.onerror = () => resolve({ url, aspect: null });
+    img.src = url;
+  });
+}
+
 const SEL_DECLARACION = `
   *,
   polizas(
@@ -64,17 +98,23 @@ export async function fetchDeclaracionData(siniestroId) {
     return foto ? await getSignedUrl(foto.storage_path) : null;
   };
 
-  const serieUrlNA = await serieUrlDe("NA");
+  const serieNA = await procesarFotoSerie(await serieUrlDe("NA"));
+  const serieUrlNA = serieNA.url;
+  const serieAspectNA = serieNA.aspect;
 
   const terceros = await Promise.all(
-    (data.siniestros_terceros ?? []).map(async (t, i) => ({
-      ...t,
-      firmaUrl: t.firma_reclamante_url ? await getFirmaSignedUrl(t.firma_reclamante_url) : null,
-      serieUrl: await serieUrlDe(`AF${i + 1}`),
-    })),
+    (data.siniestros_terceros ?? []).map(async (t, i) => {
+      const serie = await procesarFotoSerie(await serieUrlDe(`AF${i + 1}`));
+      return {
+        ...t,
+        firmaUrl: t.firma_reclamante_url ? await getFirmaSignedUrl(t.firma_reclamante_url) : null,
+        serieUrl: serie.url,
+        serieAspect: serie.aspect,
+      };
+    }),
   );
 
-  return { ...data, firmaAseguradoUrl, firmaAjustadorUrl, croquisUrl, serieUrlNA, terceros };
+  return { ...data, firmaAseguradoUrl, firmaAjustadorUrl, croquisUrl, serieUrlNA, serieAspectNA, terceros };
 }
 
 // ── 2. Da forma a los props que consume DeclaracionAccidentePDF ───
@@ -170,6 +210,7 @@ export function buildDeclaracionPDF(data) {
       // un texto libre capturado aparte.
       lugarEnvio:        data.pase_taller_taller_nombre || "N/A",
       serieUrl:          data.serieUrlNA,
+      serieAspect:       data.serieAspectNA,
     },
     terceros: (data.terceros ?? []).map((t) => ({
       propietarioNombre:    t.propietario_nombre,
@@ -201,6 +242,7 @@ export function buildDeclaracionPDF(data) {
       declaracion:          t.declaracion,
       firmaUrl:             t.firmaUrl,
       serieUrl:             t.serieUrl,
+      serieAspect:          t.serieAspect,
     })),
     lesionados: (data.siniestros_lesionados ?? []).map((l) => ({
       nombre:           l.nombre,
