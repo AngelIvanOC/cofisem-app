@@ -335,7 +335,7 @@ function SeccionRecibo({
           >
             Reporte de Siniestros Cabina: 800 999 1509 - Dep.Banco: AFIRME
             {"   "}Cuenta: 143124789{"   "}Clave Interbancaria
-            062540001431247890{"   "}contacto@gamanseguros.mx
+            062540001431247890{"   "}ventas1@grupocofisem.com
           </Text>
 
           <Text
