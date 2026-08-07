@@ -6,7 +6,12 @@ import Seccion from "./Seccion";
 import DatoCard from "./DatoCard";
 import SeccionConductorNA from "./SeccionConductorNA";
 import SeccionLocalizacion from "./SeccionLocalizacion";
+import TerceroCard from "./TerceroCard";
 import { Check, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
+
+function terceroVacio(id) {
+  return { id, vehiculoDesc: "", vehiculoModelo: "", vehiculoColor: "", vehiculoPlacas: "" };
+}
 
 function generarFolio() {
   const n   = new Date();
@@ -56,6 +61,18 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
   const [localizacion, setLocalizacion] = useState({
     estado: "", municipio: "", cp: "", colonia: "", calle: "", numero: "", referencia: "",
   });
+
+  // Vehículo(s) de terceros — datos que el cabinero alcanza a tomar por
+  // teléfono al reportar; el ajustador los ve ya precargados al llegar
+  // al siniestro (misma tabla siniestros_terceros) y puede corregirlos.
+  // Siempre arranca con uno (igual que "Partes involucradas" del
+  // ajustador, que siempre trae al menos un tercero) — "+ Agregar" es
+  // solo para sumar más, no hace falta picarlo para que aparezca el 1º.
+  const [terceros, setTerceros] = useState([terceroVacio(1)]);
+  const terceroIdRef = useRef(1);
+  const agregarTercero    = () => setTerceros((t) => [...t, terceroVacio(++terceroIdRef.current)]);
+  const eliminarTercero   = (id) => setTerceros((t) => (t.length <= 1 ? t : t.filter((x) => x.id !== id)));
+  const actualizarTercero = (id, k, v) => setTerceros((t) => t.map((x) => (x.id === id ? { ...x, [k]: v } : x)));
 
   return (
     <div className="space-y-4 pb-10">
@@ -156,6 +173,34 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
         </div>
       </Seccion>
 
+      {/* Vehículo(s) de terceros */}
+      <Seccion
+        titulo="Vehículo(s) de Terceros"
+        subtitulo="Si hubo otra parte involucrada, captura los datos de su vehículo"
+        accion={
+          <button
+            type="button"
+            onClick={agregarTercero}
+            className="flex items-center gap-1.5 text-xs font-bold text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-all shrink-0"
+          >
+            + Agregar
+          </button>
+        }
+      >
+        <div className="space-y-3">
+          {terceros.map((t, i) => (
+            <TerceroCard
+              key={t.id}
+              tercero={t}
+              index={i}
+              onChange={actualizarTercero}
+              onRemove={eliminarTercero}
+              permitirEliminar={terceros.length > 1}
+            />
+          ))}
+        </div>
+      </Seccion>
+
       {/* Localización */}
       <SeccionLocalizacion data={localizacion} onChange={setLocalizacion} />
 
@@ -197,7 +242,7 @@ export default function FormSiniestro({ poliza, onBack, onSubmit, loading }) {
         </button>
         <button
           type="button"
-          onClick={() => onSubmit({ ...siniestro, nroReporte, conductorNA, localizacion })}
+          onClick={() => onSubmit({ ...siniestro, nroReporte, conductorNA, localizacion, terceros })}
           disabled={loading}
           className="flex items-center gap-2 px-8 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all disabled:opacity-60 shadow-lg shadow-[#13193a]/15"
         >

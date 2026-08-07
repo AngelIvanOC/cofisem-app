@@ -21,12 +21,11 @@
 // ============================================================
 import { useState, useEffect, useMemo, useRef } from "react";
 import Swal from "sweetalert2";
-import { FileStack, Wrench, Stethoscope, Download, Loader2, RefreshCcw, RefreshCw, Eye } from "lucide-react";
+import { Ticket, Wrench, Stethoscope, Download, Loader2, RefreshCw, Eye } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
 import PaseTallerPDF from "../../components/pdf/PaseTallerPDF";
 import PaseMedicoPDF from "../../components/pdf/PaseMedicoPDF";
 import { fetchTalleres, fetchHospitales } from "../../services/servicios";
-import { obtenerSiguienteFolio } from "../../services/siniestros";
 import { marcadoresPorLabel } from "../../services/pasePdf";
 import { Campo, ToggleRow, Sep, REGIONES_CUERPO } from "../ajustador/shared";
 import DanosMarcadores from "../ajustador/danos/DanosMarcadores";
@@ -156,46 +155,6 @@ function BotonDescargar({ onDescargar, label }) {
   );
 }
 
-// ── Botón "Asignar folio" — consume la numeración oficial (misma
-// secuencia que usan los ajustadores al finalizar un siniestro), así
-// que pide confirmación antes de quemar el número. ───────────────
-function BotonFolio({ tipo, onAsignado }) {
-  const [cargando, setCargando] = useState(false);
-  const handle = async () => {
-    const conf = await Swal.fire({
-      icon: "question",
-      title: "¿Asignar folio real?",
-      text: "Se toma el siguiente número de la numeración oficial de pases (la misma que usan los ajustadores) y no se puede deshacer.",
-      showCancelButton: true,
-      confirmButtonText: "Sí, asignar",
-      cancelButtonText: "Cancelar",
-      confirmButtonColor: "#13193a",
-    });
-    if (!conf.isConfirmed) return;
-    setCargando(true);
-    try {
-      const folio = await obtenerSiguienteFolio(tipo);
-      onAsignado(folio);
-    } catch (e) {
-      Swal.fire({ icon: "error", title: "Error", text: e.message, confirmButtonColor: "#13193a" });
-    } finally {
-      setCargando(false);
-    }
-  };
-  return (
-    <button
-      type="button"
-      onClick={handle}
-      disabled={cargando}
-      title="Asignar el siguiente folio oficial"
-      className="shrink-0 flex items-center gap-1.5 px-3 rounded-xl border-2 border-[#13193a]/15 text-[#13193a] text-xs font-bold hover:bg-[#13193a]/5 transition-all disabled:opacity-60"
-    >
-      {cargando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
-      Asignar
-    </button>
-  );
-}
-
 // ── Layout de dos paneles: formulario a la izquierda, PDF a la
 // derecha — en pantallas angostas se apilan (el PDF queda con una
 // altura fija razonable para no forzar scroll infinito). ──────────
@@ -304,14 +263,7 @@ function GeneradorPaseTaller() {
 
       <Sep label="Datos del pase" />
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Número de pase</label>
-          <div className="flex gap-2">
-            <input type="text" value={f.numeroPase} onChange={(e) => set({ numeroPase: e.target.value })} placeholder="Manual o asignar"
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all" />
-            <BotonFolio tipo="taller" onAsignado={(folio) => set({ numeroPase: String(folio) })} />
-          </div>
-        </div>
+        <Campo label="Número de pase" placeholder="Ej. OT00123" value={f.numeroPase} onChange={(v) => set({ numeroPase: v })} />
         <Campo label="Clave" placeholder="000" value={f.clave} onChange={(v) => set({ clave: v })} />
       </div>
 
@@ -442,14 +394,7 @@ function GeneradorPaseMedico() {
       <Sep label="Siniestro y póliza" />
       <div className="grid grid-cols-2 gap-3">
         <Campo label="Número de siniestro" value={f.numeroSiniestro} onChange={(v) => set({ numeroSiniestro: v })} />
-        <div>
-          <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Número de pase</label>
-          <div className="flex gap-2">
-            <input type="text" value={f.numeroPase} onChange={(e) => set({ numeroPase: e.target.value })} placeholder="Manual o asignar"
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all" />
-            <BotonFolio tipo="medico" onAsignado={(folio) => set({ numeroPase: String(folio) })} />
-          </div>
-        </div>
+        <Campo label="Número de pase" placeholder="Ej. OAAM001" value={f.numeroPase} onChange={(v) => set({ numeroPase: v })} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Campo label="Fecha de expedición" type="date" value={f.fechaExpedicion} onChange={(v) => set({ fechaExpedicion: v })} />
@@ -541,7 +486,7 @@ export default function AdminFormatos() {
     <div className="p-6 h-full flex flex-col gap-5 bg-gray-50">
       <div className="flex items-center gap-3">
         <div className="w-11 h-11 rounded-xl bg-[#13193a]/8 flex items-center justify-center shrink-0">
-          <FileStack className="w-5 h-5 text-[#13193a]" />
+          <Ticket className="w-5 h-5 text-[#13193a]" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-[#13193a]">Formatos y pases</h1>

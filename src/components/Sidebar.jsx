@@ -31,10 +31,10 @@ import {
   X,
   PlusCircle,
   TrendingUp,
-  Sliders,
+  Settings2,
   Briefcase,
   Table,
-  FileStack,
+  Ticket,
 } from "lucide-react";
 
 // ── Iconos (Lucide React) ────────────────────────────────────
@@ -55,11 +55,11 @@ const ICONS = {
   x: X,
   "plus-circle": PlusCircle,
   "trending-up": TrendingUp,
-  sliders: Sliders,
+  tools: Settings2,
   "edit-square": ClipboardList,
   briefcase: Briefcase,
   table: Table,
-  "file-stack": FileStack,
+  ticket: Ticket,
 };
 
 // Renderiza el ícono Lucide correspondiente

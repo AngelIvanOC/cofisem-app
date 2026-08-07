@@ -27,8 +27,8 @@ export const NAV_POR_ROL = {
     { label: "Reportes",      path: "/gaman/reportes",        icon: "bar-chart"  },
     { label: "Clientes",      path: "/gaman/clientes",        icon: "briefcase"  },
     { label: "Vendedores",    path: "/gaman/vendedores",      icon: "hard-hat"   },
-    { label: "Formatos",      path: "/gaman/formatos",        icon: "file-stack" },
-    { label: "Ajustes",       path: "/gaman/configuracion",   icon: "sliders"    },
+    { label: "Formatos",      path: "/gaman/formatos",        icon: "ticket"     },
+    { label: "Ajustes",       path: "/gaman/configuracion",   icon: "tools"      },
   ],
 
   // ── CABINERO SINIESTROS ───────────────────────────────────

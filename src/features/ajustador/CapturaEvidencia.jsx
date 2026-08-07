@@ -10,18 +10,32 @@ import { guardarPartesInvolucradas, fetchPartesInvolucradas } from "../../servic
 import DireccionCascada from "../../shared/components/DireccionCascada";
 import { getTodasMarcas, getTiposPorMarca } from "../../services/vehiculos";
 import DanosMarcadores from "./danos/DanosMarcadores";
+import CamaraGuiada from "./CamaraGuiada";
 
 // ── Botón de evidencia con upload real ───────────────────────
 // Cada item: { localUrl, storagePath, uploading, error }
-function BtnEvidencia({ label, icon, items, onAdd, onRemove }) {
+// `guiaCamara` (opcional): { titulo, instructivo } — cuando viene, el
+// botón abre la cámara en vivo con guía de encuadre (CamaraGuiada) en
+// vez de mandar directo a la app de cámara nativa del celular, que no
+// permite dibujar ninguna guía encima. Se deja "o elegir de galería"
+// como respaldo por si la cámara en vivo falla (permiso negado, etc.).
+function BtnEvidencia({ label, icon, items, onAdd, onRemove, guiaCamara }) {
   const ref = useRef();
+  const [camaraAbierta, setCamaraAbierta] = useState(false);
+
+  const agregarArchivo = (file) => {
+    const localUrl = URL.createObjectURL(file);
+    onAdd({ localUrl, storagePath: null, uploading: true, error: null, file });
+  };
 
   const handleFiles = (e) => {
-    Array.from(e.target.files || []).forEach((file) => {
-      const localUrl = URL.createObjectURL(file);
-      onAdd({ localUrl, storagePath: null, uploading: true, error: null, file });
-    });
+    Array.from(e.target.files || []).forEach(agregarArchivo);
     e.target.value = "";
+  };
+
+  const handleCapturar = (file) => {
+    agregarArchivo(file);
+    setCamaraAbierta(false);
   };
 
   const uploadCount  = items.filter((i) => i.uploading).length;
@@ -35,12 +49,12 @@ function BtnEvidencia({ label, icon, items, onAdd, onRemove }) {
         type="file"
         accept="image/*"
         multiple
-        capture="environment"
+        capture={guiaCamara ? undefined : "environment"}
         className="hidden"
         onChange={handleFiles}
       />
       <button
-        onClick={() => ref.current?.click()}
+        onClick={() => (guiaCamara ? setCamaraAbierta(true) : ref.current?.click())}
         className="w-full py-8 border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center gap-1.5 hover:border-[#13193a]/25 hover:bg-gray-50 transition-all active:scale-[0.98]"
       >
         <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
@@ -68,6 +82,25 @@ function BtnEvidencia({ label, icon, items, onAdd, onRemove }) {
           </span>
         )}
       </button>
+
+      {guiaCamara && (
+        <button
+          type="button"
+          onClick={() => ref.current?.click()}
+          className="w-full mt-1 text-center text-[10px] text-gray-400 hover:text-[#13193a] underline underline-offset-2"
+        >
+          o elegir de galería
+        </button>
+      )}
+
+      {camaraAbierta && (
+        <CamaraGuiada
+          titulo={guiaCamara.titulo ?? label}
+          instructivo={guiaCamara.instructivo}
+          onCapturar={handleCapturar}
+          onCerrar={() => setCamaraAbierta(false)}
+        />
+      )}
 
       {items.length > 0 && (
         <div className="flex gap-1.5 mt-2 flex-wrap">
@@ -194,7 +227,8 @@ function PanelNA({ siniestro, datos, onDatos }) {
           <BtnEvidencia label="Daños" icon="🔍"
             items={dan.items} onAdd={dan.agregar} onRemove={dan.eliminar} />
           <BtnEvidencia label="Núm. de serie" icon="🔢"
-            items={serie.items} onAdd={serie.agregar} onRemove={serie.eliminar} />
+            items={serie.items} onAdd={serie.agregar} onRemove={serie.eliminar}
+            guiaCamara={{ titulo: "Número de serie (VIN)", instructivo: "Encuadra los 17 caracteres del número de serie dentro del recuadro" }} />
         </div>
 
         {/* Sin mapa de daños ni pase a taller para NA — la aseguradora
@@ -359,6 +393,12 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
 
         <Sep label="Datos del vehículo afectado" />
         <div className="space-y-3">
+          {/* Texto libre — es lo que de verdad se guarda (vehiculo_desc). Si
+              cabina ya capturó una descripción al reportar el siniestro,
+              aparece aquí directo, se pueda o no mapear a un catálogo
+              exacto abajo. Los selects de marca/submarca son solo un atajo
+              opcional para estandarizarla contra el catálogo AMIS. */}
+          <Campo label="Descripción del vehículo (marca / submarca)" placeholder="Ej. Nissan Versa" value={datos.vehiculo} onChange={(v) => onDatos("vehiculo", v)} />
           <SelectVehiculoAmis
             marca={datos.vehiculoMarca}
             submarca={datos.vehiculoSubmarca}
@@ -448,7 +488,8 @@ function PanelAfectado({ idx, afId, siniestro, datos, onDatos }) {
           <BtnEvidencia label="Daños" icon="🔍"
             items={dan.items} onAdd={dan.agregar} onRemove={dan.eliminar} />
           <BtnEvidencia label="Núm. de serie" icon="🔢"
-            items={serie.items} onAdd={serie.agregar} onRemove={serie.eliminar} />
+            items={serie.items} onAdd={serie.agregar} onRemove={serie.eliminar}
+            guiaCamara={{ titulo: "Número de serie (VIN)", instructivo: "Encuadra los 17 caracteres del número de serie dentro del recuadro" }} />
         </div>
 
         <Sep label="Mapa de daños" />

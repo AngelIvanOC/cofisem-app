@@ -181,7 +181,7 @@ export async function buscarPolizaParaSiniestro(valor) {
 
 // ── Insertar nuevo siniestro ───────────────────────────────────
 export async function crearSiniestro({ polizaId, clienteId, folio, form, reportadoPor, horaInicioReporte }) {
-  const { causa, circunstancia, detalles, ajustadorId, conductorNA, localizacion } = form;
+  const { causa, circunstancia, detalles, ajustadorId, conductorNA, localizacion, terceros } = form;
 
   // Cadena condensada para display rápido
   const ubicacion = [
@@ -241,6 +241,25 @@ export async function crearSiniestro({ polizaId, clienteId, folio, form, reporta
     .select("id, numero_siniestro")
     .single();
   if (error) throw error;
+
+  // Vehículo(s) de terceros capturados por cabina — misma tabla y
+  // columnas que usa después el ajustador (fetchPartesInvolucradas /
+  // guardarPartesInvolucradas), así que al llegar al siniestro ya las
+  // ve precargadas y solo las corrige si hace falta. Se descartan filas
+  // que se hayan agregado y dejado completamente en blanco.
+  const filasTerceros = (terceros ?? [])
+    .filter((t) => t.vehiculoDesc || t.vehiculoColor || t.vehiculoModelo || t.vehiculoPlacas)
+    .map((t) => ({
+      siniestro_id:    data.id,
+      vehiculo_desc:   t.vehiculoDesc   || null,
+      vehiculo_color:  t.vehiculoColor  || null,
+      vehiculo_modelo: t.vehiculoModelo || null,
+      vehiculo_placas: t.vehiculoPlacas || null,
+    }));
+  if (filasTerceros.length) {
+    const { error: errTerceros } = await supabase.from("siniestros_terceros").insert(filasTerceros);
+    if (errTerceros) throw errTerceros;
+  }
 
   return data;
 }
