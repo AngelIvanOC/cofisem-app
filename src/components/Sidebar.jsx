@@ -143,7 +143,7 @@ function DesktopSidebar({ usuario, rolNombre, navItems }) {
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <p className="text-white font-bold text-sm leading-none">Cofisem</p>
+            <p className="text-white font-bold text-sm leading-none">Gaman</p>
             <p className="text-white/40 text-[10px] mt-0.5 leading-none">
               Gestión de Seguros
             </p>
@@ -280,7 +280,7 @@ function MobileDrawer({ usuario, rolNombre, navItems }) {
             <LogoSVG size={14} />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-none">Cofisem</p>
+            <p className="text-white font-bold text-sm leading-none">Gaman</p>
             {paginaActiva && (
               <p className="text-white/45 text-[10px] leading-none mt-0.5">
                 {paginaActiva.label}
@@ -415,7 +415,7 @@ function AjustadorBottomNav({ navItems }) {
             <LogoSVG size={14} />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-none">Cofisem</p>
+            <p className="text-white font-bold text-sm leading-none">Gaman</p>
             <p className="text-white/40 text-[10px] leading-none mt-0.5">
               Ajustador
             </p>

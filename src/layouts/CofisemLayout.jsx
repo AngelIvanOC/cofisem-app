@@ -155,13 +155,13 @@ export default function CofisemLayout() {
           <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
             <img
               src={iconoGaman}
-              alt="Cofisem"
+              alt="Gaman"
               className="w-5 h-5 object-contain"
             />
           </div>
           <div>
             <p className="text-white font-bold text-sm leading-none tracking-tight">
-              COFISEM
+              GAMAN
             </p>
             <p className="text-white/35 text-[10px] mt-0.5 leading-none">
               Sistema de gestión
