@@ -2,88 +2,48 @@
 // src/features/supervisor/SupervisorCostos.jsx
 // Control global de costos — todos los siniestros
 // ============================================================
-import { useState } from "react";
-import { CATEGORIAS_CONFIG } from "./SupervisorSiniestros";
-
-const MOCK = [
-  {
-    folio:"SN-10234", asegurado:"Carlos Gómez", vehiculo:"Toyota Corolla 2022",
-    tipo:"Colisión", estatus:"En proceso", fecha:"17/03/2026",
-    costos:[
-      { categoriaId:"taller", items:[
-        { id:1, descripcion:"Carrocería delantera",    fecha:"18/03/2026", monto:8500, estatus:"pendiente", notas:"Taller El Norte" },
-        { id:2, descripcion:"Pintura cofre y defensa", fecha:"18/03/2026", monto:3200, estatus:"pendiente", notas:"" },
-      ]},
-      { categoriaId:"grua", items:[
-        { id:3, descripcion:"Servicio de grúa",        fecha:"17/03/2026", monto:1500, estatus:"pagado",    notas:"Grúas Morelos" },
-      ]},
-    ],
-  },
-  {
-    folio:"SN-10231", asegurado:"Ana Martínez", vehiculo:"Honda Civic 2020",
-    tipo:"Daño a terceros", estatus:"Sin asignar", fecha:"17/03/2026",
-    costos:[],
-  },
-  {
-    folio:"SN-10227", asegurado:"Roberto Díaz", vehiculo:"Nissan Tsuru 2018",
-    tipo:"Robo total", estatus:"Jurídico", fecha:"17/03/2026",
-    costos:[],
-  },
-  {
-    folio:"SN-10220", asegurado:"Laura González", vehiculo:"KIA Sportage 2021",
-    tipo:"Volcadura", estatus:"Sin asignar", fecha:"17/03/2026",
-    costos:[],
-  },
-  {
-    folio:"SN-10215", asegurado:"Miguel Ortega", vehiculo:"VW Jetta 2019",
-    tipo:"Colisión", estatus:"Completado", fecha:"16/03/2026",
-    costos:[
-      { categoriaId:"taller", items:[
-        { id:10, descripcion:"Puerta delantera derecha",     fecha:"17/03/2026", monto:4800, estatus:"pagado", notas:"Taller Central" },
-        { id:11, descripcion:"Pintura y ajuste salpicadera", fecha:"17/03/2026", monto:2100, estatus:"pagado", notas:"" },
-      ]},
-      { categoriaId:"finiquito", items:[
-        { id:12, descripcion:"Pago al afectado (Juan Cruz)", fecha:"16/03/2026", monto:8200, estatus:"pagado", notas:"Transferencia SPEI" },
-      ]},
-      { categoriaId:"admin", items:[
-        { id:13, descripcion:"Peritaje vehicular",           fecha:"16/03/2026", monto:1200, estatus:"pagado", notas:"Perito: Ing. Salazar" },
-      ]},
-    ],
-  },
-  {
-    folio:"SN-10208", asegurado:"Luis Torres", vehiculo:"VW Vento 2020",
-    tipo:"Colisión", estatus:"Jurídico", fecha:"16/03/2026",
-    costos:[
-      { categoriaId:"medico", items:[
-        { id:20, descripcion:"Urgencias Carlos Peña",  fecha:"16/03/2026", monto:3500,  estatus:"pagado",    notas:"Hospital IMSS" },
-        { id:21, descripcion:"Estudios radiológicos",  fecha:"17/03/2026", monto:1800,  estatus:"pendiente", notas:"" },
-      ]},
-      { categoriaId:"legal", items:[
-        { id:22, descripcion:"Honorarios abogado",     fecha:"16/03/2026", monto:12000, estatus:"pendiente", notas:"Lic. Jorge Méndez" },
-        { id:23, descripcion:"Fianza vehicular",       fecha:"16/03/2026", monto:5000,  estatus:"pagado",    notas:"Corralón municipal" },
-      ]},
-      { categoriaId:"grua", items:[
-        { id:24, descripcion:"Remolque a corralón",    fecha:"16/03/2026", monto:1200,  estatus:"pagado",    notas:"" },
-      ]},
-    ],
-  },
-];
-
-function totales(costos = []) {
-  const items     = costos.flatMap(c => c.items);
-  const pagado    = items.filter(i => i.estatus==="pagado").reduce((s,i)=>s+i.monto,0);
-  const pendiente = items.filter(i => i.estatus==="pendiente").reduce((s,i)=>s+i.monto,0);
-  return { pagado, pendiente, total: pagado+pendiente };
-}
+import { useState, useEffect } from "react";
+import { fetchSiniestros, fetchCostosTodos } from "../../services/siniestros";
+import { CATEGORIAS_CONFIG, calcTotalesCostos } from "./SupervisorSiniestros";
 
 const STATUS_CLS = {
-  "Sin asignar": "bg-red-50 text-red-600 border-red-200",
-  "Asignado":    "bg-blue-50 text-blue-700 border-blue-200",
-  "En proceso":  "bg-indigo-50 text-indigo-700 border-indigo-200",
-  "Jurídico":    "bg-purple-50 text-purple-700 border-purple-200",
-  "Completado":  "bg-emerald-50 text-emerald-700 border-emerald-200",
-  "Cancelado":   "bg-gray-100 text-gray-500 border-gray-200",
+  "Reportado":           "bg-red-50    text-red-600    border-red-200",
+  "Asignado":            "bg-blue-50   text-blue-700   border-blue-200",
+  "Pendiente de arribo": "bg-amber-50  text-amber-700  border-amber-200",
+  "En proceso":          "bg-indigo-50 text-indigo-700 border-indigo-200",
+  "Cerrado":             "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
+
+// Agrupa las filas planas de fetchCostosTodos() en { categoriaId, nombre,
+// dot, items:[...] } por siniestro — el shape que ya sabe pintar el
+// desglose de categorías (mismo patrón que TabCostos en SupervisorSiniestros).
+function agruparPorSiniestro(costosTodos) {
+  const porSiniestro = {};
+  costosTodos.forEach((c) => {
+    porSiniestro[c.siniestroId] ??= {};
+    const porCat = porSiniestro[c.siniestroId];
+    porCat[c.categoriaId] ??= { categoriaId: c.categoriaId, categoriaNombre: c.categoriaNombre, items: [] };
+    porCat[c.categoriaId].items.push({
+      id: c.id, descripcion: c.descripcion, fecha: c.fecha, monto: c.monto,
+      estatus: c.estatus, notas: c.notas, servicioNombre: c.servicioNombre,
+      montoEstimado: c.montoEstimado, origen: c.origen,
+    });
+  });
+  const resultado = {};
+  Object.entries(porSiniestro).forEach(([sid, porCat]) => {
+    resultado[sid] = Object.values(porCat);
+  });
+  return resultado;
+}
+
+function catInfo(categoriaId, categoriaNombre) {
+  return CATEGORIAS_CONFIG.find(c => c.id === categoriaId)
+    ?? { id: categoriaId, nombre: categoriaNombre ?? categoriaId, dot: "bg-gray-400" };
+}
+
+function totalesGrupo(costos) {
+  return calcTotalesCostos(costos.flatMap(c => c.items));
+}
 
 // ── Modal de detalle por siniestro (solo lectura) ─────────────
 function ModalDetalle({ s, onClose }) {
@@ -93,11 +53,7 @@ function ModalDetalle({ s, onClose }) {
     return init;
   });
   const toggle = (id) => setExpandidos(p => ({ ...p, [id]: !p[id] }));
-  const { pagado, pendiente, total } = totales(s.costos);
-
-  const catsConItems = CATEGORIAS_CONFIG.filter(cat =>
-    s.costos.find(c => c.categoriaId === cat.id)?.items?.length > 0
-  );
+  const { pagado, pendiente, total } = totalesGrupo(s.costos);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -139,13 +95,14 @@ function ModalDetalle({ s, onClose }) {
           </div>
 
           {/* Categorías */}
-          {catsConItems.map(cat => {
-            const items = s.costos.find(c => c.categoriaId === cat.id)?.items ?? [];
-            const sub   = items.filter(i => i.estatus!=="cancelado").reduce((t,i) => t+i.monto, 0);
-            const open  = expandidos[cat.id] ?? true;
+          {s.costos.map(c => {
+            const cat   = catInfo(c.categoriaId, c.categoriaNombre);
+            const items = c.items;
+            const sub   = items.filter(i => i.estatus!=="cancelado" && i.monto != null).reduce((t,i) => t+i.monto, 0);
+            const open  = expandidos[c.categoriaId] ?? true;
             return (
-              <div key={cat.id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-                <button onClick={() => toggle(cat.id)}
+              <div key={c.categoriaId} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                <button onClick={() => toggle(c.categoriaId)}
                   className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50/60 text-left transition-colors">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${cat.dot}`}/>
                   <span className="flex-1 text-sm font-semibold text-[#13193a]">{cat.nombre}</span>
@@ -161,16 +118,34 @@ function ModalDetalle({ s, onClose }) {
                     {items.map(item => (
                       <div key={item.id} className="flex items-start gap-3 px-4 py-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-gray-700">{item.descripcion}</p>
-                          <p className="text-[11px] text-gray-400 mt-0.5">{item.fecha}{item.notas?` · ${item.notas}`:""}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-xs font-semibold text-gray-700">{item.descripcion}</p>
+                            {item.origen === "ajustador" && (
+                              <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full shrink-0">
+                                Del ajustador
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            {item.fecha ?? "—"}{item.servicioNombre ? ` · ${item.servicioNombre}` : ""}{item.notas?` · ${item.notas}`:""}
+                          </p>
+                          {item.montoEstimado != null && (
+                            <p className="text-[11px] text-blue-600 font-semibold mt-0.5">Estimado: ${item.montoEstimado.toLocaleString("es-MX")}</p>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                            item.estatus==="pagado"    ? "text-emerald-700 border-emerald-200" :
-                            item.estatus==="pendiente" ? "text-amber-700 border-amber-200" :
-                                                         "text-gray-400 border-gray-200"
-                          }`}>{item.estatus}</span>
-                          <span className="text-sm font-bold text-gray-700 tabular-nums">${item.monto.toLocaleString("es-MX")}</span>
+                          {item.monto == null ? (
+                            <span className="text-[10px] font-semibold text-gray-400 px-2 py-0.5 rounded-full border border-gray-200">Falta monto real</span>
+                          ) : (
+                            <>
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                item.estatus==="pagado"    ? "text-emerald-700 border-emerald-200" :
+                                item.estatus==="pendiente" ? "text-amber-700 border-amber-200" :
+                                                             "text-gray-400 border-gray-200"
+                              }`}>{item.estatus}</span>
+                              <span className="text-sm font-bold text-gray-700 tabular-nums">${item.monto.toLocaleString("es-MX")}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -194,26 +169,59 @@ function ModalDetalle({ s, onClose }) {
 
 // ── Página principal ──────────────────────────────────────────
 export default function SupervisorCostos() {
-  const [datos]        = useState(MOCK);
+  const [datos, setDatos]         = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
   const [busqueda, setBusqueda]   = useState("");
   const [filtroEst, setFiltroEst] = useState("Todos");
   const [filtroCat, setFiltroCat] = useState("Todos");
   const [seleccionado, setSeleccionado] = useState(null);
 
-  const totalPagado    = datos.reduce((s,d) => s+totales(d.costos).pagado,    0);
-  const totalPendiente = datos.reduce((s,d) => s+totales(d.costos).pendiente, 0);
+  useEffect(() => {
+    Promise.all([fetchSiniestros(), fetchCostosTodos()])
+      .then(([sin, cost]) => {
+        const agrupado = agruparPorSiniestro(cost);
+        setDatos(sin.map(s => ({ ...s, costos: agrupado[s.id] ?? [] })));
+      })
+      .catch((e) => setError(e.message ?? "Error al cargar costos"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalPagado    = datos.reduce((s,d) => s+totalesGrupo(d.costos).pagado,    0);
+  const totalPendiente = datos.reduce((s,d) => s+totalesGrupo(d.costos).pendiente, 0);
+  const totalEstimado  = datos.reduce((s,d) => s+totalesGrupo(d.costos).estimado,  0);
   const totalGeneral   = totalPagado + totalPendiente;
   const conCostos      = datos.filter(d => d.costos.length > 0).length;
 
   const filtrados = datos.filter(d => {
-    const mb = d.folio.includes(busqueda) || d.asegurado.toLowerCase().includes(busqueda.toLowerCase());
+    const q  = busqueda.toLowerCase();
+    const mb = !q || d.folio.toLowerCase().includes(q) || d.asegurado.toLowerCase().includes(q);
     const me = filtroEst==="Todos" || d.estatus===filtroEst;
     const mc = filtroCat==="Todos" || d.costos.some(c => c.categoriaId===filtroCat);
     return mb && me && mc;
   });
 
-  const ESTATUS_OPTS = ["Todos","Sin asignar","Asignado","En proceso","Jurídico","Completado","Cancelado"];
+  const ESTATUS_OPTS = ["Todos","Reportado","Asignado","Pendiente de arribo","En proceso","Cerrado"];
   const selCls = "px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/10";
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-50">
+        <div className="w-8 h-8 border-2 border-[#13193a]/20 border-t-[#13193a] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-white rounded-2xl border border-red-100 p-6 text-center max-w-sm mx-auto">
+          <p className="text-sm font-semibold text-red-600">No se pudieron cargar los costos</p>
+          <p className="text-xs text-gray-400 mt-1">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 min-h-full bg-gray-50 space-y-5">
@@ -223,10 +231,10 @@ export default function SupervisorCostos() {
       </div>
 
       {/* Métricas globales */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="bg-[#13193a] border border-[#13193a] rounded-2xl p-4">
           <p className="text-2xl font-bold text-white tabular-nums">${totalGeneral.toLocaleString("es-MX")}</p>
-          <p className="text-xs font-semibold text-white/60 mt-0.5">Total erogado</p>
+          <p className="text-xs font-semibold text-white/60 mt-0.5">Total erogado real</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-2xl p-4">
           <p className="text-2xl font-bold text-emerald-600 tabular-nums">${totalPagado.toLocaleString("es-MX")}</p>
@@ -237,30 +245,36 @@ export default function SupervisorCostos() {
           <p className="text-xs font-semibold text-gray-400 mt-0.5">Pendiente de pago</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-2xl p-4">
+          <p className="text-2xl font-bold text-blue-600 tabular-nums">${totalEstimado.toLocaleString("es-MX")}</p>
+          <p className="text-xs font-semibold text-gray-400 mt-0.5">Estimado (ajustador)</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-2xl p-4">
           <p className="text-2xl font-bold text-[#13193a] tabular-nums">{conCostos}</p>
           <p className="text-xs font-semibold text-gray-400 mt-0.5">Casos con costos</p>
         </div>
       </div>
 
       {/* Desglose por categoría */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">Desglose por categoría</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {CATEGORIAS_CONFIG.map(cat => {
-            const sub = datos.flatMap(d =>
-              (d.costos.find(c => c.categoriaId===cat.id)?.items ?? []).filter(i => i.estatus!=="cancelado")
-            ).reduce((s,i) => s+i.monto, 0);
-            if (sub === 0) return null;
-            return (
-              <div key={cat.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white">
-                <span className={`w-2 h-2 rounded-full shrink-0 ${cat.dot}`}/>
-                <p className="text-xs font-semibold text-gray-600 flex-1 truncate">{cat.nombre}</p>
-                <p className="text-sm font-bold text-[#13193a] tabular-nums shrink-0">${sub.toLocaleString("es-MX")}</p>
-              </div>
-            );
-          })}
+      {conCostos > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">Desglose por categoría</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {CATEGORIAS_CONFIG.map(cat => {
+              const sub = datos.flatMap(d =>
+                (d.costos.find(c => c.categoriaId===cat.id)?.items ?? []).filter(i => i.estatus!=="cancelado")
+              ).reduce((s,i) => s+i.monto, 0);
+              if (sub === 0) return null;
+              return (
+                <div key={cat.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-white">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${cat.dot}`}/>
+                  <p className="text-xs font-semibold text-gray-600 flex-1 truncate">{cat.nombre}</p>
+                  <p className="text-sm font-bold text-[#13193a] tabular-nums shrink-0">${sub.toLocaleString("es-MX")}</p>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Tabla */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -289,13 +303,11 @@ export default function SupervisorCostos() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtrados.map((d, i) => {
-                const { pagado, pendiente, total } = totales(d.costos);
-                const catsActivas = d.costos
-                  .map(c => CATEGORIAS_CONFIG.find(p => p.id===c.categoriaId))
-                  .filter(Boolean);
+              {filtrados.map((d) => {
+                const { pagado, pendiente, total } = totalesGrupo(d.costos);
+                const catsActivas = d.costos.map(c => catInfo(c.categoriaId, c.categoriaNombre));
                 return (
-                  <tr key={i} onClick={() => setSeleccionado(d)}
+                  <tr key={d.id} onClick={() => setSeleccionado(d)}
                     className="hover:bg-gray-50/60 transition-colors cursor-pointer">
                     <td className="px-4 py-3.5 font-mono text-xs font-bold text-[#13193a]">{d.folio}</td>
                     <td className="px-4 py-3.5 text-xs font-semibold text-gray-700 whitespace-nowrap">{d.asegurado}</td>
@@ -349,7 +361,7 @@ export default function SupervisorCostos() {
         <div className="px-5 py-3 border-t border-gray-100 flex justify-between items-center">
           <p className="text-xs text-gray-400">{filtrados.length} siniestros</p>
           <p className="text-xs font-bold text-[#13193a]">
-            Total filtrado: ${filtrados.reduce((s,d) => s+totales(d.costos).total, 0).toLocaleString("es-MX")}
+            Total filtrado: ${filtrados.reduce((s,d) => s+totalesGrupo(d.costos).total, 0).toLocaleString("es-MX")}
           </p>
         </div>
       </div>

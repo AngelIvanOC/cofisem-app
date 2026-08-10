@@ -262,6 +262,9 @@ export async function getSignedUrl(storagePath) {
 
 // ── Guarda coordenadas de arribo en el siniestro ─────────────
 export async function registrarArribo(siniestroId, { lat, lng, precision, fotoLat, fotoLng }) {
+  const { data: actual } = await supabase
+    .from("siniestros").select("estatus").eq("id", siniestroId).maybeSingle();
+
   const { error } = await supabase
     .from("siniestros")
     .update({
@@ -275,6 +278,34 @@ export async function registrarArribo(siniestroId, { lat, lng, precision, fotoLa
     })
     .eq("id", siniestroId);
   if (error) throw error;
+
+  // Bitácora de la línea de tiempo — secundaria, no debe tumbar el flujo.
+  // "Arribo" y "En proceso" ocurren en el mismo instante real (la
+  // confirmación de arribo es lo que dispara "En proceso"), pero se
+  // registran como dos pasos separados —1 segundo aparte— para que la
+  // línea de tiempo (5 pasos: Reportado/Asignado/Arribo/En proceso/
+  // Cerrado) los muestre distintos en vez de saltarse "Arribo".
+  const ahora        = new Date();
+  const cambiadoPor   = getState().usuario?.id ?? null;
+  const { error: errArribo } = await supabase.from("siniestros_historial").insert({
+    siniestro_id:  siniestroId,
+    estatus_ant:   actual?.estatus ?? null,
+    estatus_nuevo: "Arribo",
+    notas:         "Arribo confirmado con foto y GPS",
+    cambiado_por:  cambiadoPor,
+    cambiado_at:   ahora.toISOString(),
+  });
+  if (errArribo) console.error("No se pudo registrar historial del siniestro:", errArribo);
+
+  const { error: errProceso } = await supabase.from("siniestros_historial").insert({
+    siniestro_id:  siniestroId,
+    estatus_ant:   "Arribo",
+    estatus_nuevo: "En proceso",
+    notas:         null,
+    cambiado_por:  cambiadoPor,
+    cambiado_at:   new Date(ahora.getTime() + 1000).toISOString(),
+  });
+  if (errProceso) console.error("No se pudo registrar historial del siniestro:", errProceso);
 }
 
 // ── Sube el audio adjunto al siniestro (un solo audio por siniestro,

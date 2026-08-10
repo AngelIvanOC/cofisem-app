@@ -42,6 +42,9 @@ const CorteOperador      = lazy(() => import("./features/corte/CorteOperador"));
 const CorteAnalista      = lazy(() => import("./features/corte/CorteAnalista"));
 const PoliciasDia        = lazy(() => import("./features/cofisem/PoliciasDia"));
 
+// ── VENCIMIENTOS (compartido: administración, analista, operador) ─────
+const Vencimientos = lazy(() => import("./features/vencimientos/Vencimientos"));
+
 // ── ANALISTA ──────────────────────────────────────────────────
 const AnalistaDashboard = lazy(() => import("./pages/analista/AnalistaDashboard"));
 const AnalistaPolizas   = lazy(() => import("./pages/analista/AnalistaPolizas"));
@@ -90,12 +93,14 @@ const RUTAS_POR_ROL = {
     "/gaman/cotizaciones/nueva",
     "/gaman/vendedores",
     "/gaman/pagos",
+    "/gaman/vencimientos",
   ],
   ANALISTA: [
     "/gaman/dashboard",
     "/gaman/polizas",
     "/gaman/pagos",
     "/gaman/reportes",
+    "/gaman/vencimientos",
   ],
   ADMINISTRACION: [
     "/gaman/dashboard",
@@ -108,6 +113,7 @@ const RUTAS_POR_ROL = {
     "/gaman/vendedores",
     "/gaman/estado-cuenta",
     "/gaman/formatos",
+    "/gaman/vencimientos",
   ],
   CABINERO_SINIESTROS: [
     "/gaman/dashboard",
@@ -232,6 +238,15 @@ function PagosRoute({ rolNombre, usuario }) {
 
 function ReportesRoute() {
   return <PaginaEnConstruccion titulo="Reportes" icono="reportes" />;
+}
+
+function VencimientosRoute({ rolNombre, usuario }) {
+  switch (rolNombre) {
+    case "OPERADOR":       return <Vencimientos usuario={usuario} soloOficina />;
+    case "ANALISTA":
+    case "ADMINISTRACION": return <Vencimientos usuario={usuario} />;
+    default:                return <PaginaEnConstruccion titulo="Vencimientos" />;
+  }
 }
 
 function SiniestrosRoute({ rolNombre, usuario }) {
@@ -365,6 +380,16 @@ export default function App() {
               element={
                 <RutaProtegida rolNombre={rolNombre} path="/gaman/reportes">
                   <ReportesRoute rolNombre={rolNombre} />
+                </RutaProtegida>
+              }
+            />
+
+            {/* Vencimientos */}
+            <Route
+              path="/gaman/vencimientos"
+              element={
+                <RutaProtegida rolNombre={rolNombre} path="/gaman/vencimientos">
+                  <VencimientosRoute rolNombre={rolNombre} usuario={usuario} />
                 </RutaProtegida>
               }
             />

@@ -1,88 +1,31 @@
 // ============================================================
-// src/pages/supervisor/SupervisorAjustadores.jsx
+// src/features/supervisor/SupervisorAjustadores.jsx
 // Supervisor: Carga de trabajo y rendimiento de ajustadores
 // ============================================================
-import { useState } from "react";
-
-const AJUSTADORES_DATA = [
-  {
-    id: "AJ-01", nombre: "Félix Hernández", telefono: "777 100 1111", zona: "Jiutepec / Cuernavaca",
-    activos: 2, completados: 18, tiempoPromedio: "2.8h", calificacion: 4.7,
-    disponible: true,
-    siniestrosActivos: [
-      { folio:"SN-10234", asegurado:"Carlos Gómez",    tipo:"Colisión",   estatus:"En proceso",          inicio:"08:15" },
-      { folio:"SN-10227", asegurado:"Roberto Díaz",    tipo:"Robo total", estatus:"Jurídico",            inicio:"07:30" },
-    ],
-    historial: [
-      { folio:"SN-10215", tipo:"Colisión",       duracion:"1.5h", calif:5, fecha:"16/03/2026" },
-      { folio:"SN-10198", tipo:"Daño a terceros",duracion:"2.1h", calif:4, fecha:"15/03/2026" },
-      { folio:"SN-10185", tipo:"Volcadura",       duracion:"3.2h", calif:5, fecha:"14/03/2026" },
-    ],
-  },
-  {
-    id: "AJ-02", nombre: "Luis Martínez", telefono: "777 100 2222", zona: "Temixco / Cuautla",
-    activos: 3, completados: 22, tiempoPromedio: "3.1h", calificacion: 4.5,
-    disponible: true,
-    siniestrosActivos: [
-      { folio:"SN-10219", asegurado:"Pedro Ruiz",      tipo:"Colisión",   estatus:"Pendiente de arribo", inicio:"10:30" },
-      { folio:"SN-10218", asegurado:"Sofía Torres",    tipo:"Cristales",  estatus:"En proceso",          inicio:"09:00" },
-      { folio:"SN-10216", asegurado:"Miguel Herrera",  tipo:"Robo parcial",estatus:"En proceso",         inicio:"07:45" },
-    ],
-    historial: [
-      { folio:"SN-10215", tipo:"Colisión",       duracion:"2.0h", calif:5, fecha:"16/03/2026" },
-      { folio:"SN-10201", tipo:"Incendio",        duracion:"4.5h", calif:4, fecha:"15/03/2026" },
-    ],
-  },
-  {
-    id: "AJ-03", nombre: "Ana García", telefono: "777 100 3333", zona: "Cuernavaca centro",
-    activos: 1, completados: 15, tiempoPromedio: "2.4h", calificacion: 4.9,
-    disponible: true,
-    siniestrosActivos: [
-      { folio:"SN-10208", asegurado:"Luis Torres",     tipo:"Colisión",   estatus:"Jurídico",            inicio:"11:00" },
-    ],
-    historial: [
-      { folio:"SN-10199", tipo:"Daño a terceros",duracion:"1.8h", calif:5, fecha:"16/03/2026" },
-      { folio:"SN-10188", tipo:"Colisión",        duracion:"2.3h", calif:5, fecha:"14/03/2026" },
-    ],
-  },
-  {
-    id: "AJ-04", nombre: "Roberto Vega", telefono: "777 100 4444", zona: "Jiutepec / Xochitepec",
-    activos: 0, completados: 9, tiempoPromedio: "3.8h", calificacion: 4.1,
-    disponible: true,
-    siniestrosActivos: [],
-    historial: [
-      { folio:"SN-10192", tipo:"Volcadura",       duracion:"4.0h", calif:4, fecha:"15/03/2026" },
-    ],
-  },
-  {
-    id: "AJ-05", nombre: "Sofía Torres", telefono: "777 100 5555", zona: "Todas las zonas",
-    activos: 4, completados: 31, tiempoPromedio: "2.2h", calificacion: 4.8,
-    disponible: false,
-    siniestrosActivos: [
-      { folio:"SN-10244", asegurado:"Ana Guzmán",      tipo:"Colisión",   estatus:"En proceso",          inicio:"06:30" },
-      { folio:"SN-10241", asegurado:"Carlos Peña",     tipo:"Robo parcial",estatus:"En proceso",         inicio:"07:00" },
-      { folio:"SN-10239", asegurado:"María Solís",     tipo:"Cristales",  estatus:"En proceso",          inicio:"08:00" },
-      { folio:"SN-10235", asegurado:"Jorge Vásquez",   tipo:"Daño a terceros",estatus:"En proceso",      inicio:"08:45" },
-    ],
-    historial: [
-      { folio:"SN-10229", tipo:"Colisión",       duracion:"1.9h", calif:5, fecha:"16/03/2026" },
-      { folio:"SN-10221", tipo:"Volcadura",       duracion:"2.8h", calif:5, fecha:"15/03/2026" },
-      { folio:"SN-10210", tipo:"Robo total",      duracion:"3.1h", calif:5, fecha:"14/03/2026" },
-    ],
-  },
-];
+import { useState, useEffect } from "react";
+import {
+  fetchAjustadores,
+  fetchCargaAjustadores,
+  fetchSiniestros,
+  fetchCalificacionesAjustadores,
+  promedioHorasArribo,
+  fmtHoras,
+} from "../../services/siniestros";
 
 const MAX_ACTIVOS = 4;
 
-function Estrellas({ n }) {
+// La encuesta solo guarda Excelente/Bien/Deficiente (no hay estrella 1-5
+// en la BD) — se muestra como % de calificaciones "Excelente" en vez de
+// inventar un promedio numérico que no existe.
+function Calificacion({ calif }) {
+  if (!calif || calif.total === 0) {
+    return <span className="text-[11px] text-gray-300">Sin calificar</span>;
+  }
+  const pct = Math.round((calif.excelente / calif.total) * 100);
   return (
-    <div className="flex items-center gap-0.5">
-      {[1,2,3,4,5].map(i => (
-        <svg key={i} className={`w-3 h-3 ${i <= Math.round(n) ? "text-amber-400" : "text-gray-200"}`} fill="currentColor" viewBox="0 0 20 20">
-          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-        </svg>
-      ))}
-      <span className="text-[11px] text-gray-500 ml-0.5 font-semibold">{n}</span>
+    <div className="text-right">
+      <p className="text-sm font-bold text-emerald-600 tabular-nums">{pct}%</p>
+      <p className="text-[10px] text-gray-400">excelente ({calif.total})</p>
     </div>
   );
 }
@@ -104,18 +47,79 @@ function BarraCarga({ activos, max }) {
 const STATUS_CLS = {
   "Pendiente de arribo": "bg-amber-50  text-amber-700  border-amber-200",
   "En proceso":          "bg-blue-50   text-blue-700   border-blue-200",
-  "Jurídico":            "bg-purple-50 text-purple-700 border-purple-200",
   "Asignado":            "bg-gray-100  text-gray-600   border-gray-200",
 };
 
 export default function SupervisorAjustadores() {
-  const [ajustadores] = useState(AJUSTADORES_DATA);
+  const [ajustadores, setAjustadores] = useState([]);
+  const [carga, setCarga]             = useState({});
+  const [siniestros, setSiniestros]   = useState([]);
+  const [calificaciones, setCalificaciones] = useState({});
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
   const [seleccionado, setSeleccionado] = useState(null);
 
-  const totalActivos    = ajustadores.reduce((s, a) => s + a.activos, 0);
-  const totalDisponibles = ajustadores.filter(a => a.activos < MAX_ACTIVOS && a.disponible).length;
-  const llenos          = ajustadores.filter(a => a.activos >= MAX_ACTIVOS).length;
-  const promCalif       = (ajustadores.reduce((s, a) => s + a.calificacion, 0) / ajustadores.length).toFixed(1);
+  useEffect(() => {
+    Promise.all([
+      fetchAjustadores(),
+      fetchCargaAjustadores(),
+      fetchSiniestros(),
+      fetchCalificacionesAjustadores(),
+    ])
+      .then(([ajs, carg, sin, calif]) => {
+        setAjustadores(ajs);
+        setCarga(carg);
+        setSiniestros(sin);
+        setCalificaciones(calif);
+      })
+      .catch((e) => setError(e.message ?? "Error al cargar ajustadores"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const lista = ajustadores.map((aj) => {
+    const propios = siniestros.filter((s) => s.ajustadorId === aj.id);
+    return {
+      ...aj,
+      // No hay columna de zona en la BD todavía.
+      zona: "-",
+      tiempoPromedio: fmtHoras(promedioHorasArribo(propios)),
+      activos: carga[aj.id] ?? 0,
+      completados: propios.filter((s) => s.estatus === "Cerrado").length,
+      siniestrosActivos: propios
+        .filter((s) => s.estatus !== "Cerrado")
+        .sort((a, b) => new Date(b.reportadoFecha ?? 0) - new Date(a.reportadoFecha ?? 0)),
+      historial: propios
+        .filter((s) => s.estatus === "Cerrado")
+        .sort((a, b) => new Date(b.reportadoFecha ?? 0) - new Date(a.reportadoFecha ?? 0))
+        .slice(0, 5),
+      calif: calificaciones[aj.id] ?? { excelente: 0, bien: 0, deficiente: 0, total: 0 },
+    };
+  });
+
+  const totalActivos     = lista.reduce((s, a) => s + a.activos, 0);
+  const totalDisponibles = lista.filter((a) => a.activos < MAX_ACTIVOS).length;
+  const llenos           = lista.filter((a) => a.activos >= MAX_ACTIVOS).length;
+  const califTotal = lista.reduce((acc, a) => ({ excelente: acc.excelente + a.calif.excelente, total: acc.total + a.calif.total }), { excelente: 0, total: 0 });
+  const promCalif  = califTotal.total ? `${Math.round((califTotal.excelente / califTotal.total) * 100)}%` : "-";
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-50">
+        <div className="w-8 h-8 border-2 border-[#13193a]/20 border-t-[#13193a] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-white rounded-2xl border border-red-100 p-6 text-center max-w-sm mx-auto">
+          <p className="text-sm font-semibold text-red-600">No se pudieron cargar los ajustadores</p>
+          <p className="text-xs text-gray-400 mt-1">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 min-h-full bg-gray-50 space-y-5">
@@ -127,7 +131,7 @@ export default function SupervisorAjustadores() {
       {/* Métricas globales */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { l:"Siniestros activos",  v:totalActivos,    a:"blue"    },
+          { l:"Siniestros activos",  v:totalActivos,     a:"blue"    },
           { l:"Con capacidad",       v:totalDisponibles, a:"emerald" },
           { l:"Sin capacidad",       v:llenos,           a:"red"     },
           { l:"Calificación prom.",  v:promCalif,        a:"amber"   },
@@ -142,12 +146,16 @@ export default function SupervisorAjustadores() {
         })}
       </div>
 
-      {/* Grid de ajustadores */}
-      <div className={`grid grid-cols-1 lg:grid-cols-${seleccionado ? 2 : 1} gap-5`}>
-        
+      {lista.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+          <p className="text-sm font-semibold text-gray-400">No hay ajustadores activos registrados.</p>
+        </div>
+      ) : (
+      <div className={`grid grid-cols-1 ${seleccionado ? "lg:grid-cols-2" : ""} gap-5`}>
+
         {/* Lista de ajustadores */}
         <div className="space-y-3">
-          {ajustadores.map(aj => {
+          {lista.map(aj => {
             const lleno = aj.activos >= MAX_ACTIVOS;
             const isSelected = seleccionado?.id === aj.id;
             return (
@@ -155,7 +163,6 @@ export default function SupervisorAjustadores() {
                 className={[
                   "w-full bg-white border rounded-2xl p-5 text-left hover:shadow-md transition-all duration-150",
                   isSelected ? "border-[#13193a] ring-2 ring-[#13193a]/10 shadow-md" : "border-gray-100 shadow-sm hover:border-gray-200",
-                  !aj.disponible ? "opacity-70" : "",
                 ].join(" ")}>
                 <div className="flex items-start gap-4">
                   {/* Avatar */}
@@ -169,14 +176,11 @@ export default function SupervisorAjustadores() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-bold text-[#13193a]">{aj.nombre}</p>
-                      {!aj.disponible && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">Inactivo</span>
-                      )}
                       {lleno && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">Sin capacidad</span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{aj.zona} · {aj.telefono}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{aj.zona} · {aj.telefono ?? "-"}</p>
 
                     {/* Barra de carga */}
                     <div className="mt-3 space-y-1.5">
@@ -191,10 +195,10 @@ export default function SupervisorAjustadores() {
                   </div>
 
                   {/* Stats derecha */}
-                  <div className="text-right shrink-0 space-y-1">
-                    <Estrellas n={aj.calificacion}/>
-                    <p className="text-[11px] text-gray-400">{aj.tiempoPromedio} prom.</p>
-                    <p className="text-[11px] text-gray-400">{aj.completados} completados</p>
+                  <div className="shrink-0 space-y-1">
+                    <Calificacion calif={aj.calif}/>
+                    <p className="text-[11px] text-gray-400 text-right">{aj.tiempoPromedio} prom.</p>
+                    <p className="text-[11px] text-gray-400 text-right">{aj.completados} cerrados</p>
                   </div>
                 </div>
               </button>
@@ -208,7 +212,7 @@ export default function SupervisorAjustadores() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
               <div>
                 <p className="text-sm font-bold text-[#13193a]">{seleccionado.nombre}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{seleccionado.zona}</p>
+                {seleccionado.telefono && <p className="text-xs text-gray-400 mt-0.5">{seleccionado.telefono}</p>}
               </div>
               <button onClick={() => setSeleccionado(null)} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -219,9 +223,9 @@ export default function SupervisorAjustadores() {
               {/* Estadísticas */}
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { l:"Activos",      v:seleccionado.activos,        color:"text-blue-700"   },
-                  { l:"Completados",  v:seleccionado.completados,    color:"text-emerald-700" },
-                  { l:"Tiempo prom.", v:seleccionado.tiempoPromedio, color:"text-[#13193a]"   },
+                  { l:"Activos",     v:seleccionado.activos,        color:"text-blue-700"    },
+                  { l:"Cerrados",    v:seleccionado.completados,    color:"text-emerald-700" },
+                  { l:"Tiempo prom.",v:seleccionado.tiempoPromedio, color:"text-[#13193a]"   },
                 ].map(s => (
                   <div key={s.l} className="bg-gray-50 rounded-xl p-3 border border-gray-100 text-center">
                     <p className={`text-xl font-bold ${s.color}`}>{s.v}</p>
@@ -235,8 +239,8 @@ export default function SupervisorAjustadores() {
                 <div>
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Siniestros activos</p>
                   <div className="space-y-2">
-                    {seleccionado.siniestrosActivos.map((s, i) => (
-                      <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                    {seleccionado.siniestrosActivos.map((s) => (
+                      <div key={s.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className="font-mono text-xs font-bold text-[#13193a]">{s.folio}</p>
@@ -244,7 +248,7 @@ export default function SupervisorAjustadores() {
                           </div>
                           <p className="text-xs text-gray-600 mt-0.5">{s.asegurado} · {s.tipo}</p>
                         </div>
-                        <p className="text-xs text-gray-400 shrink-0">Desde {s.inicio}</p>
+                        <p className="text-xs text-gray-400 shrink-0">{s.fecha}</p>
                       </div>
                     ))}
                   </div>
@@ -257,27 +261,29 @@ export default function SupervisorAjustadores() {
               )}
 
               {/* Historial reciente */}
-              <div>
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Historial reciente</p>
-                <div className="space-y-2">
-                  {seleccionado.historial.map((h, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="font-mono text-xs font-bold text-[#13193a]">{h.folio}</p>
-                          <p className="text-xs text-gray-500">{h.tipo}</p>
+              {seleccionado.historial.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Historial reciente</p>
+                  <div className="space-y-2">
+                    {seleccionado.historial.map((h) => (
+                      <div key={h.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-mono text-xs font-bold text-[#13193a]">{h.folio}</p>
+                            <p className="text-xs text-gray-500">{h.tipo}</p>
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-0.5">{h.fecha}</p>
                         </div>
-                        <p className="text-[11px] text-gray-400 mt-0.5">{h.fecha} · {h.duracion}</p>
                       </div>
-                      <Estrellas n={h.calif}/>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

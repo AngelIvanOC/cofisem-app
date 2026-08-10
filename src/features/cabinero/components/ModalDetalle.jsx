@@ -3,6 +3,7 @@ import { STATUS_CLS } from "../constants/estilos";
 import PanelAsignar from "./PanelAsignar";
 import { supabase } from "../../../supabaseClient";
 import { fetchEvidencias, getSignedUrl } from "../../../services/evidencias";
+import { useHistorialSiniestro, PASOS_TIMELINE } from "../../../hooks/useHistorialSiniestro";
 
 function fmtEtapa(iso) {
   if (!iso) return "Pendiente";
@@ -313,15 +314,15 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
   // Datos derivados
   const arriboDone  = !!live.arribo_fecha;
   const procesoDone = ["Cerrado", "Resuelto"].includes(live.estatus);
-  const cerradoDone = live.estatus === "Cerrado";
   const fotoLlegada = evidencias.find((e) => e.tipo === "llegada");
 
-  const etapas = [
-    { label: "Reportado",  time: fmtEtapa(live.reportadoFecha), done: true        },
-    { label: "Arribo",     time: fmtEtapa(live.arribo_fecha),   done: arriboDone  },
-    { label: "En proceso", time: "Pendiente",                   done: procesoDone },
-    { label: "Cerrado",    time: "Pendiente",                   done: cerradoDone },
-  ];
+  // Seguimiento — mismos 5 pasos y misma fuente real (siniestros_historial,
+  // con Realtime) que usa supervisor, pero con el diseño propio de cabinero.
+  const { historial } = useHistorialSiniestro(s.id);
+  const etapas = PASOS_TIMELINE.map((paso) => {
+    const ev = historial.find((h) => h.estatus_nuevo === paso.estatus);
+    return { label: paso.label, time: ev ? fmtEtapa(ev.cambiado_at) : "Pendiente", done: !!ev };
+  });
 
   // Participantes únicos: NA siempre primero, luego AF1, AF2...
   const participantes = (() => {

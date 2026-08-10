@@ -1,5 +1,22 @@
 import { supabase } from "../supabaseClient";
 import { calcularEstatus } from "./polizas";
+import { getState } from "../auth";
+
+// ── Registra un cambio de estatus en la línea de tiempo del siniestro
+// (siniestros_historial). Es bitácora secundaria: si falla, no debe
+// tumbar la operación principal (asignar, arribar, cerrar...), solo
+// se registra en consola.
+async function registrarHistorial(siniestroId, estatusAnt, estatusNuevo, notas, cambiadoPor, cambiadoAt) {
+  const { error } = await supabase.from("siniestros_historial").insert({
+    siniestro_id: siniestroId,
+    estatus_ant:  estatusAnt   || null,
+    estatus_nuevo: estatusNuevo || null,
+    notas:        notas        || null,
+    cambiado_por: cambiadoPor  || null,
+    ...(cambiadoAt ? { cambiado_at: cambiadoAt } : {}),
+  });
+  if (error) console.error("No se pudo registrar historial del siniestro:", error);
+}
 
 // ── Helpers ────────────────────────────────────────────────────
 function fmtFecha(str) {
@@ -242,6 +259,19 @@ export async function crearSiniestro({ polizaId, clienteId, folio, form, reporta
     .single();
   if (error) throw error;
 
+  // "Reportado" siempre queda marcado, aunque el ajustador se elija en el
+  // mismo momento de levantar el reporte — en ese caso "Asignado" se
+  // registra 1 segundo después, para que el orden en la línea de tiempo
+  // tenga sentido (Reportado siempre antes que Asignado).
+  const ahora = new Date();
+  await registrarHistorial(data.id, null, "Reportado", "Reporte levantado por cabina", reportadoPor, ahora.toISOString());
+  if (ajustadorId) {
+    await registrarHistorial(
+      data.id, "Reportado", "Asignado", "Asignado desde cabina", reportadoPor,
+      new Date(ahora.getTime() + 1000).toISOString(),
+    );
+  }
+
   // Vehículo(s) de terceros capturados por cabina — misma tabla y
   // columnas que usa después el ajustador (fetchPartesInvolucradas /
   // guardarPartesInvolucradas), así que al llegar al siniestro ya las
@@ -272,7 +302,7 @@ export async function fetchSiniestros() {
       id, numero_siniestro, tipo_siniestro, descripcion, estatus,
       fecha_siniestro, ubicacion, ajustador_id,
       arribo_fecha, arribo_lat, arribo_lng, created_at,
-      municipio, estado, colonia, audio_url,
+      municipio, estado, colonia, audio_url, vehiculo_descripcion_dano,
       polizas(
         id, constancia, numero_poliza, placas, anio, notas,
         clientes(nombre, apellido, telefono),
@@ -304,7 +334,11 @@ export async function fetchSiniestros() {
       vehiculo,
       fecha:            fmtFecha(s.fecha_siniestro),
       ubicacion:        s.ubicacion || "—",
+      tipo:             s.tipo_siniestro || "—",
+      descripcion:      s.descripcion || "",
+      danos:            s.vehiculo_descripcion_dano || "-",
       ajustador:        ajNombre,
+      ajustadorId:      s.ajustador_id ?? null,
       estatus:          s.estatus || "Reportado",
       polizaId:         p.id,
       polizaConstancia: p.constancia || p.numero_poliza || "—",
@@ -531,12 +565,31 @@ export async function guardarPartesInvolucradas(siniestroId, { cambiosNA, afecta
     }
   }
 
+  // Espejo en Costos del daño estimado del vehículo asegurado — se lee
+  // el valor ya guardado (no el diff) para que quede sincronizado sin
+  // importar si cambió justo en este guardado. Es bitácora secundaria:
+  // si falla, NUNCA debe tumbar el guardado real de terceros/NA.
+  try {
+    const { data: sinActual } = await supabase
+      .from("siniestros").select("vehiculo_monto_estimado_dano").eq("id", siniestroId).maybeSingle();
+    if (sinActual) {
+      await sincronizarEstimadoCosto({
+        siniestroId, origenCampo: "vehiculo_asegurado", origenRegistroId: null,
+        categoriaId: "taller", descripcion: "Daño estimado — vehículo asegurado",
+        montoEstimado: sinActual.vehiculo_monto_estimado_dano,
+      });
+    }
+  } catch (e) {
+    console.error("No se pudo sincronizar el estimado a Costos:", e);
+  }
+
   const original    = originalTerceros ?? {};
   const dbIdsVigentes = new Set();
 
   for (const id of afectadosIds ?? []) {
     const d   = afectados[id];
     const row = filaTercero(siniestroId, d);
+    const descripcionTercero = `Daño estimado — Tercero${d.nombre ? ` (${d.nombre})` : ""}`;
 
     if (d._dbId) {
       dbIdsVigentes.add(d._dbId);
@@ -546,9 +599,28 @@ export async function guardarPartesInvolucradas(siniestroId, { cambiosNA, afecta
         const { error } = await supabase.from("siniestros_terceros").update(row).eq("id", d._dbId);
         if (error) throw error;
       }
+      try {
+        await sincronizarEstimadoCosto({
+          siniestroId, origenCampo: "vehiculo_tercero", origenRegistroId: d._dbId,
+          categoriaId: "taller", descripcion: descripcionTercero,
+          montoEstimado: d.montoEstimado,
+        });
+      } catch (e) {
+        console.error("No se pudo sincronizar el estimado a Costos:", e);
+      }
     } else {
-      const { error } = await supabase.from("siniestros_terceros").insert(row);
+      const { data: nuevo, error } = await supabase.from("siniestros_terceros").insert(row).select("id").single();
       if (error) throw error;
+      dbIdsVigentes.add(nuevo.id);
+      try {
+        await sincronizarEstimadoCosto({
+          siniestroId, origenCampo: "vehiculo_tercero", origenRegistroId: nuevo.id,
+          categoriaId: "taller", descripcion: descripcionTercero,
+          montoEstimado: d.montoEstimado,
+        });
+      } catch (e) {
+        console.error("No se pudo sincronizar el estimado a Costos:", e);
+      }
     }
   }
 
@@ -557,6 +629,13 @@ export async function guardarPartesInvolucradas(siniestroId, { cambiosNA, afecta
   if (dbIdsABorrar.length) {
     const { error } = await supabase.from("siniestros_terceros").delete().in("id", dbIdsABorrar);
     if (error) throw error;
+    for (const dbId of dbIdsABorrar) {
+      try {
+        await eliminarEstimadoCosto({ siniestroId, origenCampo: "vehiculo_tercero", origenRegistroId: dbId });
+      } catch (e) {
+        console.error("No se pudo limpiar el estimado en Costos:", e);
+      }
+    }
   }
 }
 
@@ -630,6 +709,24 @@ export async function fetchTerceros(siniestroId) {
   return data ?? [];
 }
 
+// ── Terceros con el detalle completo — para la vista de supervisor
+// (vehículo, daños, aseguradora, declaración), a diferencia de
+// fetchTerceros() que solo trae la identidad básica para el paso
+// "Lesionados" del ajustador.
+export async function fetchTercerosDetalle(siniestroId) {
+  const { data, error } = await supabase
+    .from("siniestros_terceros")
+    .select(`
+      id, propietario_nombre, propietario_domicilio, propietario_telefono,
+      vehiculo_desc, vehiculo_color, vehiculo_modelo, vehiculo_placas,
+      aseguradora_nombre, poliza_tercero, descripcion_dano, monto_estimado_dano, declaracion
+    `)
+    .eq("siniestro_id", siniestroId)
+    .order("id", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
 // Arma la fila completa de un lesionado — reconciliación a nivel de fila
 // (ver guardarLesionados), así que se manda completa tanto en INSERT
 // como en UPDATE. region_cuerpo/causa_lesion/estado_lesionado/
@@ -685,10 +782,21 @@ export async function guardarLesionados(siniestroId, { lesionadosIds, lesionados
     const l   = lesionados[id];
     const row = filaLesionado(siniestroId, l);
     const esNuevo = !/^\d+$/.test(id);
+    const descripcionLesionado = `Estimado de lesiones${l.nombre ? ` — ${l.nombre}` : ""}`;
 
     if (esNuevo) {
-      const { error } = await supabase.from("siniestros_lesionados").insert(row);
+      const { data: nuevo, error } = await supabase.from("siniestros_lesionados").insert(row).select("id").single();
       if (error) throw error;
+      idsVigentes.add(String(nuevo.id));
+      try {
+        await sincronizarEstimadoCosto({
+          siniestroId, origenCampo: "lesionado", origenRegistroId: nuevo.id,
+          categoriaId: "medico", descripcion: descripcionLesionado,
+          montoEstimado: l.estimadoLesiones,
+        });
+      } catch (e) {
+        console.error("No se pudo sincronizar el estimado a Costos:", e);
+      }
     } else {
       idsVigentes.add(id);
       const antes  = original_[id];
@@ -697,6 +805,15 @@ export async function guardarLesionados(siniestroId, { lesionadosIds, lesionados
         const { error } = await supabase.from("siniestros_lesionados").update(row).eq("id", id);
         if (error) throw error;
       }
+      try {
+        await sincronizarEstimadoCosto({
+          siniestroId, origenCampo: "lesionado", origenRegistroId: Number(id),
+          categoriaId: "medico", descripcion: descripcionLesionado,
+          montoEstimado: l.estimadoLesiones,
+        });
+      } catch (e) {
+        console.error("No se pudo sincronizar el estimado a Costos:", e);
+      }
     }
   }
 
@@ -704,6 +821,13 @@ export async function guardarLesionados(siniestroId, { lesionadosIds, lesionados
   if (idsABorrar.length) {
     const { error } = await supabase.from("siniestros_lesionados").delete().in("id", idsABorrar);
     if (error) throw error;
+    for (const id of idsABorrar) {
+      try {
+        await eliminarEstimadoCosto({ siniestroId, origenCampo: "lesionado", origenRegistroId: Number(id) });
+      } catch (e) {
+        console.error("No se pudo limpiar el estimado en Costos:", e);
+      }
+    }
   }
 }
 
@@ -1014,6 +1138,9 @@ export async function guardarEncuesta(siniestroId, cambios, sistema = {}) {
 export async function cerrarSiniestro(siniestroId) {
   const horaTermino = horaLocal(new Date().toISOString());
 
+  const { data: actual } = await supabase
+    .from("siniestros").select("estatus").eq("id", siniestroId).maybeSingle();
+
   const { error } = await supabase
     .from("siniestros")
     .update({ estatus: "Cerrado", hora_termino_ajuste: horaTermino })
@@ -1025,15 +1152,28 @@ export async function cerrarSiniestro(siniestroId) {
     .from("siniestros_encuesta")
     .update({ hora_termino: horaTermino })
     .eq("siniestro_id", siniestroId);
+
+  await registrarHistorial(
+    siniestroId, actual?.estatus, "Cerrado",
+    "Caso cerrado — documentos enviados", getState().usuario?.id,
+  );
 }
 
 // ── Asignar ajustador a un siniestro ──────────────────────────
 export async function asignarAjustador(siniestroId, { id: ajustadorId }) {
+  const { data: actual } = await supabase
+    .from("siniestros").select("estatus").eq("id", siniestroId).maybeSingle();
+
   const { error } = await supabase
     .from("siniestros")
     .update({ ajustador_id: ajustadorId, estatus: "Asignado" })
     .eq("id", siniestroId);
   if (error) throw error;
+
+  await registrarHistorial(
+    siniestroId, actual?.estatus, "Asignado",
+    "Ajustador asignado", getState().usuario?.id,
+  );
 }
 
 // ── Ajustadores disponibles (usuarios con rol AJUSTADOR) ───────
@@ -1043,14 +1183,86 @@ export async function fetchAjustadores() {
   if (!rol) return [];
   const { data } = await supabase
     .from("usuarios")
-    .select("id, nombre, apellido")
+    .select("id, nombre, apellido, telefono")
     .eq("rol_id", rol.id)
     .eq("activo", true)
     .order("nombre");
   return (data ?? []).map((u) => ({
-    id:     u.id,
-    nombre: [u.nombre, u.apellido].filter(Boolean).join(" "),
+    id:       u.id,
+    nombre:   [u.nombre, u.apellido].filter(Boolean).join(" "),
+    telefono: u.telefono ?? null,
   }));
+}
+
+// ── Calificaciones de encuesta agrupadas por ajustador — para el
+// resumen de rendimiento del supervisor. La encuesta solo tiene un
+// valor categórico (Excelente/Bien/Deficiente), no una estrella 1-5,
+// así que se agregan conteos por categoría en vez de inventar un
+// promedio numérico que la BD no respalda.
+export async function fetchCalificacionesAjustadores() {
+  const { data, error } = await supabase
+    .from("siniestros_encuesta")
+    .select("calificacion_ajustador, siniestros!inner(ajustador_id)")
+    .not("calificacion_ajustador", "is", null);
+  if (error) throw error;
+
+  const porAjustador = {};
+  (data ?? []).forEach((row) => {
+    const ajustadorId = row.siniestros?.ajustador_id;
+    if (!ajustadorId) return;
+    const acc = porAjustador[ajustadorId] ??= { excelente: 0, bien: 0, deficiente: 0, total: 0 };
+    acc.total += 1;
+    if (row.calificacion_ajustador === "Excelente") acc.excelente += 1;
+    else if (row.calificacion_ajustador === "Bien") acc.bien += 1;
+    else if (row.calificacion_ajustador === "Deficiente") acc.deficiente += 1;
+  });
+  return porAjustador; // { [uuid]: { excelente, bien, deficiente, total } }
+}
+
+// ── Tiempo de respuesta: desde que el cabinero levantó el reporte
+// (created_at) hasta que el ajustador confirmó su arribo con foto + GPS
+// (arribo_fecha) — es el único intervalo que la BD respalda con dos
+// timestamps reales; no hay fecha de cierre guardada para medir nada más.
+export function horasHastaArribo(s) {
+  if (!s.reportadoFecha || !s.arribo_fecha) return null;
+  const ms = new Date(s.arribo_fecha) - new Date(s.reportadoFecha);
+  if (!(ms > 0)) return null;
+  return ms / 3600000;
+}
+
+export function promedioHorasArribo(siniestros) {
+  const horas = siniestros.map(horasHastaArribo).filter((h) => h != null);
+  if (!horas.length) return null;
+  return horas.reduce((a, b) => a + b, 0) / horas.length;
+}
+
+export function fmtHoras(h) {
+  return h == null ? "-" : `${h.toFixed(1)}h`;
+}
+
+// ── Documentos adjuntos de un siniestro — tabla existe pero hoy nada
+// escribe en ella, así que normalmente regresa vacío. Se deja conectada
+// de verdad para que el día que algo empiece a subir aquí, se vea solo.
+export async function fetchDocumentos(siniestroId) {
+  const { data, error } = await supabase
+    .from("siniestros_documentos")
+    .select("id, tipo, url, nombre_archivo, created_at")
+    .eq("siniestro_id", siniestroId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ── Línea de tiempo de cambios de estatus — misma situación que
+// siniestros_documentos: la tabla existe pero nada la llena todavía.
+export async function fetchHistorial(siniestroId) {
+  const { data, error } = await supabase
+    .from("siniestros_historial")
+    .select("id, estatus_ant, estatus_nuevo, notas, cambiado_at")
+    .eq("siniestro_id", siniestroId)
+    .order("cambiado_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
 }
 
 // ── Carga activa por ajustador (para indicadores de slots) ─────
@@ -1064,4 +1276,180 @@ export async function fetchCargaAjustadores() {
     if (s.ajustador_id) counts[s.ajustador_id] = (counts[s.ajustador_id] || 0) + 1;
   });
   return counts; // { [uuid]: count }
+}
+
+// ── Costos de UN siniestro (tab "Costos" del modal de supervisor) ──
+export async function fetchCostos(siniestroId) {
+  const { data, error } = await supabase
+    .from("siniestros_costos")
+    .select("id, categoria_id, categoria_nombre, servicio_id, descripcion, fecha, monto, monto_estimado, estatus, notas, origen, servicios(nombre)")
+    .eq("siniestro_id", siniestroId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((c) => ({
+    id:              c.id,
+    categoriaId:     c.categoria_id,
+    categoriaNombre: c.categoria_nombre,
+    servicioId:      c.servicio_id,
+    servicioNombre:  c.servicios?.nombre ?? null,
+    descripcion:     c.descripcion,
+    fecha:           c.fecha,
+    monto:           c.monto != null ? Number(c.monto) : null,
+    montoEstimado:   c.monto_estimado != null ? Number(c.monto_estimado) : null,
+    estatus:         c.estatus,
+    notas:           c.notas,
+    origen:          c.origen,
+  }));
+}
+
+export async function crearCosto(siniestroId, { categoriaId, categoriaNombre, servicioId, descripcion, fecha, monto, estatus, notas }) {
+  const { data, error } = await supabase
+    .from("siniestros_costos")
+    .insert({
+      siniestro_id:     siniestroId,
+      categoria_id:     categoriaId,
+      categoria_nombre: categoriaNombre || null,
+      servicio_id:      servicioId || null,
+      descripcion,
+      fecha:            fecha || null,
+      monto,
+      estatus:          estatus || "pendiente",
+      notas:            notas || null,
+      creado_por:       getState().usuario?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
+export async function actualizarEstatusCosto(costoId, estatus) {
+  const { error } = await supabase.from("siniestros_costos").update({ estatus }).eq("id", costoId);
+  if (error) throw error;
+}
+
+export async function eliminarCosto(costoId) {
+  const { error } = await supabase.from("siniestros_costos").delete().eq("id", costoId);
+  if (error) throw error;
+}
+
+// ── El supervisor captura el monto real de un costo que llegó como
+// estimado del ajustador (o de cualquier costo, en realidad) — a
+// partir de aquí el estimado queda congelado (ver sincronizarEstimadoCosto).
+export async function actualizarMontoReal(costoId, monto) {
+  const { error } = await supabase.from("siniestros_costos").update({ monto }).eq("id", costoId);
+  if (error) throw error;
+}
+
+// ── Crea o actualiza el renglón "espejo" en Costos para un monto
+// estimado que captura el ajustador (daño del vehículo, daño de un
+// tercero, estimado de lesiones...). Se llama cada vez que el
+// ajustador guarda el paso correspondiente — es idempotente: busca
+// por (siniestro_id, origen_campo, origen_registro_id).
+//
+// Mientras el supervisor NO haya capturado un monto real, el estimado
+// se sigue actualizando solo en cada guardado del ajustador. En cuanto
+// hay monto real, el renglón queda congelado (no se vuelve a tocar
+// aunque el ajustador seguirá editando su lado).
+export async function sincronizarEstimadoCosto({ siniestroId, origenCampo, origenRegistroId, categoriaId, descripcion, montoEstimado }) {
+  let query = supabase
+    .from("siniestros_costos")
+    .select("id, monto")
+    .eq("siniestro_id", siniestroId)
+    .eq("origen_campo", origenCampo);
+  query = origenRegistroId == null ? query.is("origen_registro_id", null) : query.eq("origen_registro_id", origenRegistroId);
+  const { data: existente, error: errSel } = await query.maybeSingle();
+  if (errSel) throw errSel;
+
+  const monto = montoEstimado ? Number(montoEstimado) : null;
+
+  if (!existente) {
+    if (!monto) return; // sin estimado todavía — no hay nada que reflejar
+    const { error } = await supabase.from("siniestros_costos").insert({
+      siniestro_id:        siniestroId,
+      categoria_id:        categoriaId,
+      descripcion,
+      monto:               null,
+      monto_estimado:      monto,
+      estatus:             "pendiente",
+      origen:              "ajustador",
+      origen_campo:        origenCampo,
+      origen_registro_id:  origenRegistroId ?? null,
+    });
+    if (error) throw error;
+    return;
+  }
+
+  if (existente.monto != null) return; // ya hay monto real — congelado
+
+  if (!monto) {
+    // El ajustador quitó el daño/estimado y todavía no había monto real: se borra el renglón huérfano.
+    const { error } = await supabase.from("siniestros_costos").delete().eq("id", existente.id);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabase
+    .from("siniestros_costos")
+    .update({ monto_estimado: monto, descripcion })
+    .eq("id", existente.id);
+  if (error) throw error;
+}
+
+// ── Limpia el costo espejo de un tercero/lesionado que se borró del
+// formulario del ajustador — solo si todavía no tenía monto real
+// capturado (si ya lo tenía, se deja como registro histórico).
+export async function eliminarEstimadoCosto({ siniestroId, origenCampo, origenRegistroId }) {
+  const { error } = await supabase
+    .from("siniestros_costos")
+    .delete()
+    .eq("siniestro_id", siniestroId)
+    .eq("origen_campo", origenCampo)
+    .eq("origen_registro_id", origenRegistroId)
+    .is("monto", null);
+  if (error) throw error;
+}
+
+// ── Todos los costos de todos los siniestros — vista global de
+// SupervisorCostos.jsx.
+export async function fetchCostosTodos() {
+  const { data, error } = await supabase
+    .from("siniestros_costos")
+    .select(`
+      id, categoria_id, categoria_nombre, descripcion, fecha, monto, monto_estimado, estatus, notas, origen,
+      servicios(nombre),
+      siniestros(
+        id, numero_siniestro, estatus, tipo_siniestro, fecha_siniestro,
+        polizas(placas, anio, notas, clientes(nombre, apellido), vehiculos_amis(marca, tipo, dl))
+      )
+    `)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  return (data ?? []).map((c) => {
+    const s   = c.siniestros ?? {};
+    const p   = s.polizas ?? {};
+    const veh = p.vehiculos_amis;
+    const cl  = p.clientes ?? {};
+    return {
+      id:              c.id,
+      categoriaId:     c.categoria_id,
+      categoriaNombre: c.categoria_nombre,
+      servicioNombre:  c.servicios?.nombre ?? null,
+      descripcion:     c.descripcion,
+      fecha:           c.fecha,
+      monto:           c.monto != null ? Number(c.monto) : null,
+      montoEstimado:   c.monto_estimado != null ? Number(c.monto_estimado) : null,
+      estatus:         c.estatus,
+      notas:           c.notas,
+      origen:          c.origen,
+      siniestroId:     s.id,
+      folio:           s.numero_siniestro ?? "—",
+      siniestroEstatus: s.estatus ?? "—",
+      tipo:            s.tipo_siniestro ?? "—",
+      asegurado:       [cl.nombre, cl.apellido].filter(Boolean).join(" ") || "—",
+      vehiculo:        veh?.dl || [veh?.marca, veh?.tipo].filter(Boolean).join(" ") || p.notas || p.placas || "—",
+      fechaSiniestro:  fmtFecha(s.fecha_siniestro),
+    };
+  });
 }

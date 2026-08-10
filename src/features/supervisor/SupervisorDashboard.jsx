@@ -2,7 +2,10 @@
 // SUPERVISOR SINIESTROS DASHBOARD
 // src/features/supervisor/SupervisorDashboard.jsx
 // ============================================================
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { fetchSiniestros, fetchAjustadores, fetchCargaAjustadores, fetchCalificacionesAjustadores, promedioHorasArribo, fmtHoras } from "../../services/siniestros";
+import { tiempoRelativo } from "../../services/evidencias";
 
 const HOY_SUP = new Date().toLocaleDateString("es-MX", {
   weekday: "long",
@@ -11,51 +14,7 @@ const HOY_SUP = new Date().toLocaleDateString("es-MX", {
   year: "numeric",
 });
 
-const ALERTAS_SUP = [
-  {
-    msg: "SN-10231 sin ajustador asignado",
-    detalle: "Ana Martínez · 2h sin atención",
-    path: "/siniestros",
-    urgente: true,
-  },
-  {
-    msg: "SN-10220 sin ajustador asignado",
-    detalle: "Laura González · 1h sin atención",
-    path: "/siniestros",
-    urgente: true,
-  },
-  {
-    msg: "SN-10208 requiere asistencia jurídica",
-    detalle: "Luis Torres · Caso complejo",
-    path: "/siniestros",
-    urgente: false,
-  },
-];
-
-const AJUSTADORES_SUP = [
-  {
-    nombre: "Félix Hernández",
-    activos: 2,
-    max: 4,
-    completados: 18,
-    tiempo: "2.8h",
-  },
-  {
-    nombre: "Luis Martínez",
-    activos: 3,
-    max: 4,
-    completados: 22,
-    tiempo: "3.1h",
-  },
-  { nombre: "Ana García", activos: 1, max: 4, completados: 15, tiempo: "2.4h" },
-  {
-    nombre: "Roberto Vega",
-    activos: 0,
-    max: 4,
-    completados: 9,
-    tiempo: "3.8h",
-  },
-];
+const MAX_ACTIVOS = 4;
 
 function CargaBar({ activos, max }) {
   return (
@@ -84,6 +43,89 @@ export function SupervisorDashboard({ usuario }) {
   const saludo =
     h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
 
+  const [siniestros, setSiniestros]   = useState([]);
+  const [ajustadores, setAjustadores] = useState([]);
+  const [carga, setCarga]             = useState({});
+  const [calificaciones, setCalificaciones] = useState({});
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
+
+  useEffect(() => {
+    Promise.all([fetchSiniestros(), fetchAjustadores(), fetchCargaAjustadores(), fetchCalificacionesAjustadores()])
+      .then(([sin, ajs, carg, calif]) => {
+        setSiniestros(sin);
+        setAjustadores(ajs);
+        setCarga(carg);
+        setCalificaciones(calif);
+      })
+      .catch((e) => setError(e.message ?? "Error al cargar el panel"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const activos     = siniestros.filter((s) => s.estatus !== "Cerrado");
+  const sinAsignar  = siniestros.filter((s) => !s.ajustadorId);
+  const pendArribo  = siniestros.filter((s) => s.estatus === "Pendiente de arribo");
+  const cerrados    = siniestros.filter((s) => s.estatus === "Cerrado");
+
+  // Satisfacción global — la encuesta no tiene estrella 1-5, así que se
+  // usa % de calificaciones "Excelente" sobre el total calificado.
+  const califGlobal = Object.values(calificaciones).reduce(
+    (acc, c) => ({ excelente: acc.excelente + c.excelente, total: acc.total + c.total }),
+    { excelente: 0, total: 0 }
+  );
+  const satisfaccion = califGlobal.total ? `${Math.round((califGlobal.excelente / califGlobal.total) * 100)}%` : "-";
+
+  // Tiempo prom.: desde que el cabinero levantó el reporte hasta que el
+  // ajustador confirmó su arribo (foto + GPS) — global y de la última semana.
+  const tiempoPromGlobal  = fmtHoras(promedioHorasArribo(siniestros));
+  const hace7dias         = useMemo(() => Date.now() - 7 * 24 * 3600 * 1000, []);
+  const siniestrosSemana  = siniestros.filter((s) => s.reportadoFecha && new Date(s.reportadoFecha).getTime() >= hace7dias);
+  const tiempoPromSemanal = fmtHoras(promedioHorasArribo(siniestrosSemana));
+
+  const alertas = [...sinAsignar]
+    .sort((a, b) => new Date(a.reportadoFecha ?? 0) - new Date(b.reportadoFecha ?? 0))
+    .slice(0, 5);
+
+  const cargaAjustadores = ajustadores
+    .map((aj) => ({
+      ...aj,
+      activos: carga[aj.id] ?? 0,
+      completados: siniestros.filter((s) => s.ajustadorId === aj.id && s.estatus === "Cerrado").length,
+    }))
+    .sort((a, b) => b.activos - a.activos)
+    .slice(0, 6);
+
+  const porTipo = Object.entries(
+    siniestros.reduce((acc, s) => {
+      const k = s.tipo || "Sin clasificar";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  )
+    .map(([tipo, n]) => ({ tipo, n }))
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 6);
+  const maxTipo = Math.max(1, ...porTipo.map((t) => t.n));
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[#f7f8fa]">
+        <div className="w-8 h-8 border-2 border-[#13193a]/20 border-t-[#13193a] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[#f7f8fa] p-6">
+        <div className="bg-white rounded-2xl border border-red-100 p-6 text-center max-w-sm">
+          <p className="text-sm font-semibold text-red-600">No se pudo cargar el panel</p>
+          <p className="text-xs text-gray-400 mt-1">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full overflow-y-auto bg-[#f7f8fa]">
       <div className="max-w-7xl mx-auto p-6 space-y-5">
@@ -106,42 +148,12 @@ export function SupervisorDashboard({ usuario }) {
         {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
-            {
-              label: "Activos hoy",
-              value: "8",
-              accent: "#3b82f6",
-              path: "/siniestros",
-            },
-            {
-              label: "Sin asignar",
-              value: "3",
-              accent: "#ef4444",
-              path: "/siniestros",
-            },
-            {
-              label: "Pend. de arribo",
-              value: "2",
-              accent: "#d97706",
-              path: "/siniestros",
-            },
-            {
-              label: "Asistencia jurídica",
-              value: "2",
-              accent: "#8b5cf6",
-              path: "/siniestros",
-            },
-            {
-              label: "Cerrados hoy",
-              value: "5",
-              accent: "#059669",
-              path: "/siniestros",
-            },
-            {
-              label: "Tiempo prom.",
-              value: "3.2h",
-              accent: "#13193a",
-              path: "/reportes-siniestros",
-            },
+            { label: "Activos hoy",         value: activos.length,    accent: "#3b82f6", path: "/gaman/siniestros" },
+            { label: "Sin asignar",         value: sinAsignar.length, accent: "#ef4444", path: "/gaman/siniestros" },
+            { label: "Pend. de arribo",     value: pendArribo.length, accent: "#d97706", path: "/gaman/siniestros" },
+            { label: "Asistencia jurídica", value: "-",                accent: "#8b5cf6", path: "/gaman/siniestros" },
+            { label: "Cerrados hoy",        value: "-",                accent: "#059669", path: "/gaman/siniestros" },
+            { label: "Tiempo prom.",        value: tiempoPromGlobal,   accent: "#13193a", path: "/gaman/reportes-siniestros" },
           ].map((k) => (
             <button
               key={k.label}
@@ -167,45 +179,49 @@ export function SupervisorDashboard({ usuario }) {
           {/* Alertas — 2/5 */}
           <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className={`w-2 h-2 rounded-full ${alertas.length ? "bg-red-500 animate-pulse" : "bg-gray-300"}`} />
               <p className="text-sm font-bold text-[#13193a]">
-                Requiere atención inmediata
+                Sin ajustador asignado
               </p>
             </div>
-            <div className="divide-y divide-gray-50">
-              {ALERTAS_SUP.map((al, i) => (
-                <button
-                  key={i}
-                  onClick={() => navigate(al.path)}
-                  className="w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-gray-50/70 transition-colors group"
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full shrink-0 mt-0.5 ${al.urgente ? "bg-red-500" : "bg-amber-400"}`}
-                  />
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-gray-800 leading-snug">
-                      {al.msg}
-                    </p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
-                      {al.detalle}
-                    </p>
-                  </div>
-                  <svg
-                    className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-500 shrink-0 mt-0.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
+            {alertas.length === 0 ? (
+              <div className="px-5 py-10 text-center">
+                <p className="text-xs text-gray-400">Todos los siniestros activos tienen ajustador.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {alertas.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => navigate("/gaman/siniestros")}
+                    className="w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-gray-50/70 transition-colors group"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M8.25 4.5l7.5 7.5-7.5 7.5"
-                    />
-                  </svg>
-                </button>
-              ))}
-            </div>
+                    <span className="w-2 h-2 rounded-full shrink-0 mt-0.5 bg-red-500" />
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-gray-800 leading-snug">
+                        {s.folio} sin ajustador asignado
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {s.asegurado} · {s.reportadoFecha ? tiempoRelativo(s.reportadoFecha) : "—"}
+                      </p>
+                    </div>
+                    <svg
+                      className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-500 shrink-0 mt-0.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M8.25 4.5l7.5 7.5-7.5 7.5"
+                      />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="p-4 border-t border-gray-50">
               <button
                 onClick={() => navigate("/gaman/siniestros")}
@@ -229,48 +245,49 @@ export function SupervisorDashboard({ usuario }) {
                 Ver detalle
               </button>
             </div>
-            <div className="divide-y divide-gray-50">
-              {AJUSTADORES_SUP.map((aj) => {
-                const lleno = aj.activos >= aj.max;
-                return (
-                  <div
-                    key={aj.nombre}
-                    className="flex items-center gap-4 px-5 py-3.5"
-                  >
+            {cargaAjustadores.length === 0 ? (
+              <div className="px-5 py-10 text-center">
+                <p className="text-xs text-gray-400">No hay ajustadores activos registrados.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {cargaAjustadores.map((aj) => {
+                  const lleno = aj.activos >= MAX_ACTIVOS;
+                  return (
                     <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 ${lleno ? "bg-red-500" : aj.activos === 0 ? "bg-gray-400" : "bg-[#13193a]"}`}
+                      key={aj.id}
+                      className="flex items-center gap-4 px-5 py-3.5"
                     >
-                      {aj.nombre
-                        .split(" ")
-                        .map((w) => w[0])
-                        .join("")
-                        .slice(0, 2)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-xs font-bold text-[#13193a]">
-                          {aj.nombre}
-                        </p>
-                        <div className="flex items-center gap-2 text-[11px]">
-                          <span className="text-gray-400">
-                            {aj.tiempo} prom.
-                          </span>
+                      <div
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 ${lleno ? "bg-red-500" : aj.activos === 0 ? "bg-gray-400" : "bg-[#13193a]"}`}
+                      >
+                        {aj.nombre
+                          .split(" ")
+                          .map((w) => w[0])
+                          .join("")
+                          .slice(0, 2)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs font-bold text-[#13193a]">
+                            {aj.nombre}
+                          </p>
                           <span
-                            className={`font-bold ${lleno ? "text-red-600" : aj.activos === 0 ? "text-gray-400" : "text-blue-600"}`}
+                            className={`text-[11px] font-bold ${lleno ? "text-red-600" : aj.activos === 0 ? "text-gray-400" : "text-blue-600"}`}
                           >
-                            {aj.activos}/{aj.max}
+                            {aj.activos}/{MAX_ACTIVOS}
                           </span>
                         </div>
+                        <CargaBar activos={aj.activos} max={MAX_ACTIVOS} />
                       </div>
-                      <CargaBar activos={aj.activos} max={aj.max} />
+                      <p className="text-[11px] text-gray-400 shrink-0">
+                        {aj.completados} cerrados
+                      </p>
                     </div>
-                    <p className="text-[11px] text-gray-400 shrink-0">
-                      {aj.completados} casos
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -279,47 +296,35 @@ export function SupervisorDashboard({ usuario }) {
           {/* Por tipo */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <p className="text-sm font-bold text-[#13193a] mb-4">
-              Siniestros por tipo — este mes
+              Siniestros por tipo
             </p>
-            <div className="space-y-2.5">
-              {[
-                { tipo: "Colisión", n: 28, juridicos: 1, color: "#13193a" },
-                {
-                  tipo: "Daño a terceros",
-                  n: 12,
-                  juridicos: 2,
-                  color: "#3b82f6",
-                },
-                { tipo: "Robo total", n: 6, juridicos: 3, color: "#ef4444" },
-                { tipo: "Robo parcial", n: 8, juridicos: 0, color: "#d97706" },
-                { tipo: "Cristales", n: 10, juridicos: 0, color: "#059669" },
-              ].map((t) => (
-                <div key={t.tipo} className="flex items-center gap-3">
-                  <div
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ background: t.color }}
-                  />
-                  <p className="text-xs text-gray-700 flex-1">{t.tipo}</p>
-                  <div className="w-28 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            {porTipo.length === 0 ? (
+              <p className="text-xs text-gray-400">Sin siniestros registrados aún.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {porTipo.map((t, i) => (
+                  <div key={t.tipo} className="flex items-center gap-3">
                     <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${(t.n / 28) * 100}%`,
-                        background: t.color,
-                      }}
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ background: ["#13193a", "#3b82f6", "#ef4444", "#d97706", "#059669", "#8b5cf6"][i % 6] }}
                     />
-                  </div>
-                  <span className="text-[11px] font-bold text-[#13193a] w-4 text-right">
-                    {t.n}
-                  </span>
-                  {t.juridicos > 0 && (
-                    <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">
-                      {t.juridicos}J
+                    <p className="text-xs text-gray-700 flex-1">{t.tipo}</p>
+                    <div className="w-28 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${(t.n / maxTipo) * 100}%`,
+                          background: ["#13193a", "#3b82f6", "#ef4444", "#d97706", "#059669", "#8b5cf6"][i % 6],
+                        }}
+                      />
+                    </div>
+                    <span className="text-[11px] font-bold text-[#13193a] w-4 text-right">
+                      {t.n}
                     </span>
-                  )}
-                </div>
-              ))}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Resumen de resolución */}
@@ -329,10 +334,10 @@ export function SupervisorDashboard({ usuario }) {
             </p>
             <div className="grid grid-cols-2 gap-3 mb-4">
               {[
-                { label: "Total cerrados", value: "34", color: "#059669" },
-                { label: "Casos jurídicos", value: "6", color: "#8b5cf6" },
-                { label: "Tiempo promedio", value: "2.8h", color: "#13193a" },
-                { label: "Satisfacción", value: "4.7★", color: "#d97706" },
+                { label: "Total cerrados", value: String(cerrados.length), color: "#059669" },
+                { label: "Casos jurídicos", value: "-", color: "#8b5cf6" },
+                { label: "Tiempo promedio", value: tiempoPromSemanal, color: "#13193a" },
+                { label: "Satisfacción", value: satisfaccion, color: "#d97706" },
               ].map((f) => (
                 <div
                   key={f.label}
