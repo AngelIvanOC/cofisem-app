@@ -90,8 +90,8 @@ const LogoSVG = ({ size = 18 }) => (
 // Sólo se renderiza cuando desktopOnly=true (dentro del flex row desktop)
 // ============================================================
 function DesktopSidebar({ usuario, rolNombre, navItems }) {
-  const location  = useLocation();
-  const navigate  = useNavigate();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(true);
   const asideRef = useRef(null);
 
@@ -230,6 +230,20 @@ function DesktopSidebar({ usuario, rolNombre, navItems }) {
             </span>
             {!collapsed && <span>Cerrar sesión</span>}
           </button>
+        ) : rolNombre === "SUPERVISOR_SINIESTROS" ? (
+          <button
+            onClick={() => logout()}
+            title="Cerrar sesión"
+            className={[
+              "flex items-center w-full rounded-xl text-white/50 hover:bg-white/8 hover:text-white transition-all text-sm cursor-pointer py-2.5",
+              collapsed ? "justify-center px-0" : "gap-3 px-3",
+            ].join(" ")}
+          >
+            <span className="w-[18px] h-[18px] shrink-0">
+              <LogOut className="w-full h-full" />
+            </span>
+            {!collapsed && <span>Cerrar sesión</span>}
+          </button>
         ) : (
           <button
             onClick={() => navigate("/accesos")}
@@ -240,8 +254,18 @@ function DesktopSidebar({ usuario, rolNombre, navItems }) {
             ].join(" ")}
           >
             <span className="w-[18px] h-[18px] shrink-0">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="w-full h-full">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+              <svg
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="w-full h-full"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"
+                />
               </svg>
             </span>
             {!collapsed && <span>Ir al inicio</span>}
@@ -371,9 +395,12 @@ function MobileDrawer({ usuario, rolNombre, navItems }) {
 
         {/* Botón inferior: Ir al inicio (otros roles) o Cerrar sesión (ANALISTA) */}
         <div className="border-t border-white/10 p-4 shrink-0">
-          {rolNombre === "ANALISTA" ? (
+          {["ANALISTA", "SUPERVISOR_SINIESTROS"].includes(rolNombre) ? (
             <button
-              onClick={() => { logout(); setOpen(false); }}
+              onClick={() => {
+                logout();
+                setOpen(false);
+              }}
               className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-white/50 hover:bg-white/8 hover:text-white transition-all text-sm"
             >
               <span className="w-[18px] h-[18px] shrink-0">
@@ -383,12 +410,25 @@ function MobileDrawer({ usuario, rolNombre, navItems }) {
             </button>
           ) : (
             <button
-              onClick={() => { navigate("/accesos"); setOpen(false); }}
+              onClick={() => {
+                navigate("/accesos");
+                setOpen(false);
+              }}
               className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-white/50 hover:bg-white/8 hover:text-white transition-all text-sm"
             >
               <span className="w-[18px] h-[18px] shrink-0">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="w-full h-full">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+                <svg
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="w-full h-full"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"
+                  />
                 </svg>
               </span>
               <span>Ir al inicio</span>
