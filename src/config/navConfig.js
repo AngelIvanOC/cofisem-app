@@ -31,6 +31,7 @@ export const NAV_POR_ROL = {
     { label: "Clientes",      path: "/gaman/clientes",        icon: "briefcase"  },
     { label: "Vendedores",    path: "/gaman/vendedores",      icon: "hard-hat"   },
     { label: "Formatos",      path: "/gaman/formatos",        icon: "ticket"     },
+    { label: "Servicios",     path: "/gaman/servicios",       icon: "truck"      },
     { label: "Ajustes",       path: "/gaman/configuracion",   icon: "tools"      },
   ],
 

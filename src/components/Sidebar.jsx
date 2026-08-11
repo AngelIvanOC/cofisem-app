@@ -35,6 +35,7 @@ import {
   Briefcase,
   Table,
   Ticket,
+  Truck,
 } from "lucide-react";
 
 // ── Iconos (Lucide React) ────────────────────────────────────
@@ -60,6 +61,7 @@ const ICONS = {
   briefcase: Briefcase,
   table: Table,
   ticket: Ticket,
+  truck: Truck,
 };
 
 // Renderiza el ícono Lucide correspondiente

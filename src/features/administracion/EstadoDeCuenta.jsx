@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, forwardRef } from "react";
 import ExcelJS from "exceljs";
-import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { supabase } from "../../supabaseClient";
 import { FileText, Loader2, Search, Download, Printer } from "lucide-react";
 
@@ -178,6 +178,15 @@ function construirDatosPieTipoPrima(t) {
   })).filter((d) => d.valor > 0);
 }
 
+// El <svg> principal de la gráfica NO es el primero que aparece en el DOM:
+// cada ícono de la leyenda (iconType="circle") es también un
+// <svg class="recharts-surface"> de 8x8 renderizado ANTES que el de la
+// gráfica — por eso no basta con `querySelector("svg")`. El de la gráfica
+// es hijo directo de ".recharts-wrapper".
+function svgDelChart(ref) {
+  return ref.current?.querySelector(".recharts-wrapper > svg.recharts-surface") ?? null;
+}
+
 // Serializa el <svg> de una gráfica ya renderizada, para incrustarlo tal
 // cual en el HTML que se manda a imprimir como PDF.
 function svgAString(svgEl) {
@@ -237,55 +246,34 @@ function leyendaHTML(datos, formato) {
 
 // Componente de gráfica de pastel reutilizable en pantalla. `ref` apunta al
 // contenedor del <svg> para poder capturarlo al exportar PDF/Excel.
-const GraficaPastel = forwardRef(function GraficaPastel({ titulo, subtitulo, datos, formato }, ref) {
-  if (datos.length === 0) {
-    return (
-      <div>
-        <h3 className="text-xs font-semibold text-gray-600 text-center mb-1">{titulo}</h3>
-        <p className="text-xs text-gray-400 text-center py-16">Sin datos para graficar.</p>
-      </div>
-    );
-  }
+// No se muestra en pantalla ni lleva Tooltip/Legend de recharts: se monta
+// fuera de pantalla únicamente como fuente para capturar su <svg> y usarlo
+// en las exportaciones (ver svgDelChart). El título y la leyenda de color
+// de cada gráfica los arma el propio exportador (PDF/Excel), no este
+// componente — por eso no reserva espacio para ellos aquí.
+const GraficaPastel = forwardRef(function GraficaPastel({ datos }, ref) {
+  if (datos.length === 0) return null;
   return (
-    <div>
-      <h3 className="text-xs font-semibold text-gray-600 text-center">{titulo}</h3>
-      {subtitulo && <p className="text-[11px] text-gray-400 text-center mb-1">{subtitulo}</p>}
-      <div ref={ref} style={{ width: "100%", height: 260 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={datos}
-              dataKey="valor"
-              nameKey="nombre"
-              innerRadius="52%"
-              outerRadius="80%"
-              paddingAngle={1}
-              stroke="#ffffff"
-              strokeWidth={2}
-              isAnimationActive={false}
-            >
-              {datos.map((d) => (
-                <Cell key={d.nombre} fill={d.color} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(value) => formato(value)} />
-            <Legend
-              layout="vertical"
-              verticalAlign="middle"
-              align="right"
-              iconType="circle"
-              iconSize={8}
-              wrapperStyle={{ fontSize: 11, lineHeight: "16px", maxWidth: "45%" }}
-              formatter={(value, entry) => {
-                const total = datos.reduce((s, d) => s + d.valor, 0);
-                const v = entry?.payload?.valor ?? 0;
-                const pct = total > 0 ? Math.round((v / total) * 100) : 0;
-                return `${value} — ${formato(v)} (${pct}%)`;
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
+    <div ref={ref} style={{ width: 480, height: 260 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={datos}
+            dataKey="valor"
+            nameKey="nombre"
+            innerRadius="52%"
+            outerRadius="88%"
+            paddingAngle={1}
+            stroke="#ffffff"
+            strokeWidth={2}
+            isAnimationActive={false}
+          >
+            {datos.map((d) => (
+              <Cell key={d.nombre} fill={d.color} />
+            ))}
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
     </div>
   );
 });
@@ -889,19 +877,19 @@ export default function EstadoDeCuenta() {
     const graficas = [
       {
         titulo: "CANTIDAD DE PÓLIZAS POR OFICINA",
-        svg: refChartCantOficina.current?.querySelector("svg"),
+        svg: svgDelChart(refChartCantOficina),
         datos: datosPieCantOficina,
         moneda: false,
       },
       {
         titulo: "MONTO RECAUDADO POR OFICINA",
-        svg: refChartMontoOficina.current?.querySelector("svg"),
+        svg: svgDelChart(refChartMontoOficina),
         datos: datosPieMontoOficina,
         moneda: true,
       },
       {
         titulo: "DISTRIBUCIÓN POR TIPO DE PRIMA",
-        svg: refChartTipoPrima.current?.querySelector("svg"),
+        svg: svgDelChart(refChartTipoPrima),
         datos: datosPieTipoPrima,
         moneda: false,
       },
@@ -1116,9 +1104,9 @@ export default function EstadoDeCuenta() {
     };
     const seccionGraficas = `
       <div style="display:flex;flex-wrap:wrap;gap:16px;margin:16px 0 28px;page-break-inside:avoid">
-        ${graficaHTML("Cantidad de Pólizas por Oficina", refChartCantOficina.current?.querySelector("svg"), datosPieCantOficina, (n) => `${n}`)}
-        ${graficaHTML("Monto Recaudado por Oficina", refChartMontoOficina.current?.querySelector("svg"), datosPieMontoOficina, fmt$)}
-        ${graficaHTML("Distribución por Tipo de Prima", refChartTipoPrima.current?.querySelector("svg"), datosPieTipoPrima, (n) => `${n}`)}
+        ${graficaHTML("Cantidad de Pólizas por Oficina", svgDelChart(refChartCantOficina), datosPieCantOficina, (n) => `${n}`)}
+        ${graficaHTML("Monto Recaudado por Oficina", svgDelChart(refChartMontoOficina), datosPieMontoOficina, fmt$)}
+        ${graficaHTML("Distribución por Tipo de Prima", svgDelChart(refChartTipoPrima), datosPieTipoPrima, (n) => `${n}`)}
       </div>`;
 
     const thSub = (txt) =>
@@ -1451,30 +1439,9 @@ export default function EstadoDeCuenta() {
           usarlo en las exportaciones de PDF y Excel. */}
       {datos !== null && datos.length > 0 && totalesPrimas.totGeneral > 0 && (
         <div style={{ position: "absolute", left: "-99999px", top: 0 }} aria-hidden="true">
-          <div style={{ width: 480 }}>
-            <GraficaPastel
-              ref={refChartCantOficina}
-              titulo="Pólizas por Oficina"
-              datos={datosPieCantOficina}
-              formato={(n) => `${n}`}
-            />
-          </div>
-          <div style={{ width: 480 }}>
-            <GraficaPastel
-              ref={refChartMontoOficina}
-              titulo="Monto Recaudado por Oficina"
-              datos={datosPieMontoOficina}
-              formato={fmt$}
-            />
-          </div>
-          <div style={{ width: 480 }}>
-            <GraficaPastel
-              ref={refChartTipoPrima}
-              titulo="Distribución por Tipo de Prima"
-              datos={datosPieTipoPrima}
-              formato={(n) => `${n}`}
-            />
-          </div>
+          <GraficaPastel ref={refChartCantOficina} datos={datosPieCantOficina} />
+          <GraficaPastel ref={refChartMontoOficina} datos={datosPieMontoOficina} />
+          <GraficaPastel ref={refChartTipoPrima} datos={datosPieTipoPrima} />
         </div>
       )}
 
