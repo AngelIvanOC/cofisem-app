@@ -1,12 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
-import { SPARK_POLIZAS, SPARK_COBRO } from "./data/dashboardData";
-import SparkBar from "./components/SparkBar";
-import { AlertTriangle, ChevronRight, ClipboardList, FileText, Plus } from "lucide-react";
+import ProduccionPorOficina from "../dashboard/ProduccionPorOficina";
+import Meter from "../dashboard/Meter";
+import { AlertTriangle, CheckCircle2, Clock, ClipboardList, FileText, Loader2, Plus, UserPlus } from "lucide-react";
 
 // Oficina E. Zapata: única oficina con dos operadoras; cada una ve solo lo que ella registró.
 const OFICINA_EZAPATA_ID = 1;
+
+// México Central no usa horario de verano desde 2022 → offset fijo.
+const TZ_OFFSET = "-06:00";
 
 const HOY = new Date().toLocaleDateString("es-MX", {
   weekday: "long",
@@ -17,6 +20,15 @@ const HOY = new Date().toLocaleDateString("es-MX", {
 
 const fmt$ = (n) =>
   "$" + new Intl.NumberFormat("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n ?? 0);
+
+// Fecha local en YYYY-MM-DD sin pasar por toISOString() (que convierte a UTC y
+// puede regresar el día siguiente/anterior según la hora del día).
+function fechaLocalISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 const STATUS_ROW = {
   VIGENTE:      "bg-emerald-50 text-emerald-700",
@@ -42,6 +54,8 @@ export default function OperadorDashboard({ usuario }) {
   const [kpiClientes,   setKpiClientes]   = useState(0);
   const [ultimas,       setUltimas]       = useState([]);
   const [vencen,        setVencen]        = useState([]);
+  const [cobranza,      setCobranza]      = useState({ pagado: 0, total: 0 });
+  const [sinPagoCount,  setSinPagoCount]  = useState(0);
   const [cotizaciones,  setCotizaciones]  = useState(() => {
     try { return JSON.parse(localStorage.getItem("cofisem_cotizaciones") || "[]"); }
     catch { return []; }
@@ -53,11 +67,19 @@ export default function OperadorDashboard({ usuario }) {
       if (!oid) { setLoading(false); return; }
       const propias = oid === OFICINA_EZAPATA_ID && usuario?.id;
 
-      const today    = new Date().toISOString().split("T")[0];
-      const en7      = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
-      const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0];
+      const hoy = new Date();
+      const today    = fechaLocalISO(hoy);
+      const en7      = fechaLocalISO(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 7));
+      const inicioMes = fechaLocalISO(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+      const finMes    = fechaLocalISO(new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0));
 
       const conAutor = (q) => propias ? q.eq("creado_por", usuario.id) : q;
+
+      let cuotasQ = supabase.from("pagos")
+        .select("monto, estatus, polizas!inner(oficina_id, creado_por)")
+        .eq("polizas.oficina_id", oid)
+        .gte("fecha_vencimiento", inicioMes).lte("fecha_vencimiento", finMes);
+      if (propias) cuotasQ = cuotasQ.eq("polizas.creado_por", usuario.id);
 
       try {
         const [
@@ -66,10 +88,12 @@ export default function OperadorDashboard({ usuario }) {
           { data: dUltimas },
           { data: dVencen },
           { count: cClientes },
+          { data: dCuotas },
+          { data: dSinPago },
         ] = await Promise.all([
           conAutor(supabase.from("polizas").select("id", { count: "exact", head: true })
             .eq("oficina_id", oid).neq("estatus", "COTIZACION")
-            .gte("created_at", today + "T00:00:00").lte("created_at", today + "T23:59:59")),
+            .gte("created_at", `${today}T00:00:00${TZ_OFFSET}`).lte("created_at", `${today}T23:59:59${TZ_OFFSET}`)),
 
           conAutor(supabase.from("polizas").select("id", { count: "exact", head: true })
             .eq("oficina_id", oid).in("estatus", ["VIGENTE", "POR VENCER"])
@@ -88,7 +112,14 @@ export default function OperadorDashboard({ usuario }) {
 
           supabase.from("clientes").select("id", { count: "exact", head: true })
             .eq("creado_por", usuario?.id)
-            .gte("created_at", inicioMes + "T00:00:00"),
+            .gte("created_at", `${inicioMes}T00:00:00${TZ_OFFSET}`),
+
+          cuotasQ,
+
+          conAutor(supabase.from("polizas")
+            .select("id, pagos(estatus)")
+            .eq("oficina_id", oid).neq("estatus", "COTIZACION")
+            .gte("created_at", `${inicioMes}T00:00:00${TZ_OFFSET}`).lte("created_at", `${finMes}T23:59:59${TZ_OFFSET}`)),
         ]);
 
         setKpiHoy(cHoy ?? 0);
@@ -96,6 +127,15 @@ export default function OperadorDashboard({ usuario }) {
         setKpiClientes(cClientes ?? 0);
         setUltimas(dUltimas || []);
         setVencen(dVencen || []);
+
+        const cuotas = dCuotas ?? [];
+        const total = cuotas.reduce((s, c) => s + Number(c.monto ?? 0), 0);
+        const pagado = cuotas.filter((c) => c.estatus === "PAGADO").reduce((s, c) => s + Number(c.monto ?? 0), 0);
+        setCobranza({ pagado, total });
+
+        setSinPagoCount(
+          (dSinPago ?? []).filter((p) => (p.pagos?.length ?? 0) > 0 && !p.pagos.some((c) => c.estatus === "PAGADO")).length,
+        );
       } catch (e) {
         console.error(e);
       } finally {
@@ -106,11 +146,11 @@ export default function OperadorDashboard({ usuario }) {
   }, [usuario]);
 
   return (
-    <div className="h-full overflow-y-auto bg-[#f7f8fa]">
-      <div className="max-w-7xl mx-auto p-6 space-y-5">
+    <div className="h-full flex flex-col p-6 bg-[#f7f8fa] overflow-hidden">
+      <div className="max-w-7xl mx-auto w-full flex-1 min-h-0 flex flex-col gap-4">
 
         {/* ── TOP: saludo + acciones ── */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-start justify-between gap-4 flex-wrap shrink-0">
           <div>
             <p className="text-xs text-gray-400 capitalize">{HOY}</p>
             <h1 className="text-2xl font-bold text-[#13193a] mt-0.5">
@@ -133,84 +173,43 @@ export default function OperadorDashboard({ usuario }) {
           </div>
         </div>
 
-        {/* ── FILA 1: KPIs ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Pólizas emitidas hoy — REAL */}
-          <button
-            onClick={() => navigate("/gaman/polizas")}
-            className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <p className="text-xs text-gray-400 font-medium leading-snug">Pólizas emitidas hoy</p>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400 transition-colors shrink-0 ml-2" />
-            </div>
-            <p className="text-2xl font-bold text-[#13193a] tabular-nums mb-2">{loading ? "—" : kpiHoy}</p>
-            <SparkBar data={SPARK_POLIZAS} color="#13193a" />
-            <p className="text-[11px] font-medium mt-2 flex items-center gap-1 text-emerald-600">
-              ↑ en esta oficina
-            </p>
-          </button>
-
-          {/* Cotizaciones guardadas — localStorage */}
-          <button
-            onClick={() => navigate("/gaman/polizas")}
-            className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <p className="text-xs text-gray-400 font-medium leading-snug">Cotizaciones guardadas</p>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400 transition-colors shrink-0 ml-2" />
-            </div>
-            <p className="text-2xl font-bold text-[#13193a] tabular-nums mb-2">{cotizaciones.length}</p>
-            <SparkBar data={[1, 2, 3, 2, 4, 3, 3]} color="#d97706" />
-            <p className="text-[11px] font-medium mt-2 flex items-center gap-1 text-amber-600">
-              · Ver en pólizas
-            </p>
-          </button>
-
-          {/* Pólizas por vencer — REAL */}
-          <button
-            onClick={() => navigate("/gaman/polizas")}
-            className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <p className="text-xs text-gray-400 font-medium leading-snug">Pólizas por vencer</p>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400 transition-colors shrink-0 ml-2" />
-            </div>
-            <p className="text-2xl font-bold text-[#13193a] tabular-nums mb-2">{loading ? "—" : kpiVencer}</p>
-            <SparkBar data={[2, 1, 3, 2, 4, 3, 5]} color="#ef4444" />
-            <p className="text-[11px] font-medium mt-2 flex items-center gap-1 text-red-500">
-              ↓ Próximos 7 días
-            </p>
-          </button>
-
-          {/* Clientes registrados en el mes — REAL */}
-          <button
-            onClick={() => navigate("/gaman/clientes")}
-            className="bg-white rounded-2xl border border-gray-100 p-4 text-left hover:shadow-md hover:border-gray-200 transition-all group"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <p className="text-xs text-gray-400 font-medium leading-snug">Clientes registrados en el mes</p>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400 transition-colors shrink-0 ml-2" />
-            </div>
-            <p className="text-2xl font-bold text-[#13193a] tabular-nums mb-2">{loading ? "—" : kpiClientes}</p>
-            <SparkBar data={SPARK_COBRO} color="#059669" />
-            <p className="text-[11px] font-medium mt-2 flex items-center gap-1 text-emerald-600">
-              ↑ registrados por ti este mes
-            </p>
-          </button>
+        {/* ── FILA 1: KPIs — compactas, estilo tarjeta de Pólizas ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+          {[
+            { label: "Pólizas emitidas hoy", value: loading ? "—" : kpiHoy, Icon: FileText, color: "#13193a", path: "/gaman/polizas" },
+            { label: "Cotizaciones guardadas", value: cotizaciones.length, Icon: ClipboardList, color: "#d97706", path: "/gaman/polizas" },
+            { label: "Pólizas por vencer", value: loading ? "—" : kpiVencer, Icon: Clock, color: "#ef4444", path: "/gaman/polizas" },
+            { label: "Clientes nuevos (mes)", value: loading ? "—" : kpiClientes, Icon: UserPlus, color: "#059669", path: "/gaman/clientes" },
+          ].map((k) => (
+            <button
+              key={k.label}
+              onClick={() => navigate(k.path)}
+              className="bg-white rounded-2xl border border-gray-100 p-3.5 text-left hover:shadow-md hover:border-gray-200 transition-all"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[11px] text-gray-400 font-medium leading-snug truncate pr-2">{k.label}</p>
+                <k.Icon className="w-3.5 h-3.5 shrink-0" style={{ color: k.color }} />
+              </div>
+              <p className="text-xl font-bold text-[#13193a] tabular-nums">{k.value}</p>
+            </button>
+          ))}
         </div>
 
-        {/* ── FILA 2: Pólizas + Cotizaciones + Por vencer ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* ── FILA 2: Producción por oficina · Últimas pólizas · Por vencer ── */}
+        <div className="flex-[3] min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <div className="lg:col-span-5 min-h-0">
+            <ProduccionPorOficina variant="porcentaje" fillHeight />
+          </div>
+
           {/* Últimas pólizas — REAL */}
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+          <div className="lg:col-span-4 min-h-0 bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50 shrink-0">
               <p className="text-sm font-bold text-[#13193a]">Pólizas emitidas hoy</p>
               <button onClick={() => navigate("/gaman/polizas")} className="text-xs text-blue-500 font-semibold hover:underline">
                 Ver todas
               </button>
             </div>
-            <div className="divide-y divide-gray-50">
+            <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-50">
               {loading ? (
                 <p className="text-center text-sm text-gray-400 py-8">Cargando...</p>
               ) : ultimas.length === 0 ? (
@@ -241,60 +240,13 @@ export default function OperadorDashboard({ usuario }) {
             </div>
           </div>
 
-          {/* Cotizaciones */}
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
-              <p className="text-sm font-bold text-[#13193a]">
-                Cotizaciones guardadas
-                {cotizaciones.length > 0 && (
-                  <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                    {cotizaciones.length}
-                  </span>
-                )}
-              </p>
-              <button onClick={() => navigate("/gaman/polizas")} className="text-xs text-blue-500 font-semibold hover:underline">
-                Ver todas
-              </button>
-            </div>
-            {cotizaciones.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
-                <ClipboardList className="w-8 h-8 text-gray-200 mb-2" />
-                <p className="text-xs text-gray-400">No hay cotizaciones guardadas</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-50">
-                {cotizaciones.slice(0, 4).map((c, i) => (
-                  <button
-                    key={i}
-                    onClick={() => navigate("/gaman/polizas")}
-                    className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50/60 transition-colors text-left"
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-                      <ClipboardList className="w-3.5 h-3.5 text-amber-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-[#13193a] truncate">{c.cliente || "—"}</p>
-                      <p className="text-[11px] text-gray-400 truncate">{c.cobertura || "—"}</p>
-                    </div>
-                    <p className="text-xs font-bold text-amber-600 shrink-0">{fmt$(c.total)}</p>
-                  </button>
-                ))}
-                {cotizaciones.length > 4 && (
-                  <button onClick={() => navigate("/gaman/polizas")} className="w-full text-center py-2.5 text-[11px] text-blue-500 font-semibold hover:bg-gray-50 transition-colors">
-                    +{cotizaciones.length - 4} más → Ver todas
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
           {/* Próximas a vencer */}
-          <div className="bg-white rounded-2xl border border-amber-100 overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-4 border-b border-amber-50 bg-amber-50/50">
+          <div className="lg:col-span-3 min-h-0 bg-white rounded-2xl border border-amber-100 overflow-hidden flex flex-col">
+            <div className="flex items-center gap-2 px-4 py-4 border-b border-amber-50 bg-amber-50/50 shrink-0">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
               <p className="text-sm font-bold text-amber-800">Por vencer</p>
             </div>
-            <div className="divide-y divide-amber-50/50">
+            <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-amber-50/50">
               {loading ? (
                 <p className="text-center text-sm text-gray-400 py-6">Cargando...</p>
               ) : vencen.length === 0 ? (
@@ -318,6 +270,113 @@ export default function OperadorDashboard({ usuario }) {
           </div>
         </div>
 
+        {/* ── FILA 3: Cotizaciones guardadas · Cobranza del mes · Requiere atención ── */}
+        <div className="flex-[2] min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Cotizaciones — normalmente máximo 3, así que ocupa menos ancho */}
+          <div className="lg:col-span-3 min-h-0 bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50 shrink-0">
+              <p className="text-sm font-bold text-[#13193a]">
+                Cotizaciones
+                {cotizaciones.length > 0 && (
+                  <span className="ml-2 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {cotizaciones.length}
+                  </span>
+                )}
+              </p>
+              <button onClick={() => navigate("/gaman/polizas")} className="text-xs text-blue-500 font-semibold hover:underline">
+                Ver todas
+              </button>
+            </div>
+            {cotizaciones.length === 0 ? (
+              <div className="flex-1 min-h-0 flex flex-col items-center justify-center px-4 text-center">
+                <ClipboardList className="w-7 h-7 text-gray-200 mb-2" />
+                <p className="text-xs text-gray-400">Sin cotizaciones guardadas</p>
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-50">
+                {cotizaciones.slice(0, 3).map((c, i) => (
+                  <button
+                    key={i}
+                    onClick={() => navigate("/gaman/polizas")}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 hover:bg-gray-50/60 transition-colors text-left"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+                      <ClipboardList className="w-3.5 h-3.5 text-amber-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-[#13193a] truncate">{c.cliente || "—"}</p>
+                      <p className="text-[11px] text-gray-400 truncate">{c.cobertura || "—"}</p>
+                    </div>
+                    <p className="text-xs font-bold text-amber-600 shrink-0">{fmt$(c.total)}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Cobranza del mes — real, de la oficina/registros propios */}
+          <div className="lg:col-span-3 min-h-0 bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-50 shrink-0">
+              <p className="text-sm font-bold text-[#13193a]">Cobranza del mes</p>
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2 px-4 py-3">
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
+              ) : cobranza.total === 0 ? (
+                <p className="text-center text-xs text-gray-400">Sin cuotas con vencimiento este mes.</p>
+              ) : (
+                <>
+                  <div className="relative shrink-0">
+                    <Meter pct={cobranza.total > 0 ? (cobranza.pagado / cobranza.total) * 100 : 0} size={92} stroke={10} />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-base font-black text-[#13193a] tabular-nums">
+                        {cobranza.total > 0 ? Math.round((cobranza.pagado / cobranza.total) * 100) : 0}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-bold text-emerald-700 tabular-nums">{fmt$(cobranza.pagado)}</p>
+                    <p className="text-[10px] text-gray-400">cobrado de {fmt$(cobranza.total)}</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Requiere atención — real */}
+          <div className="lg:col-span-6 min-h-0 bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50 shrink-0">
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              <p className="text-sm font-bold text-[#13193a]">Requiere atención</p>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-50">
+              {loading ? (
+                <div className="flex items-center justify-center py-8 gap-2 text-gray-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Cargando…</span>
+                </div>
+              ) : sinPagoCount === 0 ? (
+                <div className="flex items-center justify-center gap-2 py-8 text-emerald-600">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="text-sm font-semibold">Todo en orden este mes.</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => navigate("/gaman/pagos")}
+                  className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-gray-50/70 transition-colors group"
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-amber-400" />
+                  <p className="flex-1 text-xs font-semibold text-gray-800 leading-snug">
+                    {sinPagoCount} pólizas emitidas este mes sin ningún pago registrado
+                  </p>
+                  <svg className="w-3.5 h-3.5 text-gray-300 shrink-0 group-hover:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
 
       </div>
     </div>

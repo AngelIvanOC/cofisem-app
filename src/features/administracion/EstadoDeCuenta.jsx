@@ -8,32 +8,12 @@ import { FileText, Loader2, Search, Download, Printer } from "lucide-react";
 const OFICINA_EZAPATA_ID = 1;
 
 const MESES = [
-  "Enero",
-  "Febrero",
-  "Marzo",
-  "Abril",
-  "Mayo",
-  "Junio",
-  "Julio",
-  "Agosto",
-  "Septiembre",
-  "Octubre",
-  "Noviembre",
-  "Diciembre",
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 const MESES_ABREV = [
-  "ENE",
-  "FEB",
-  "MAR",
-  "ABR",
-  "MAY",
-  "JUN",
-  "JUL",
-  "AGO",
-  "SEP",
-  "OCT",
-  "NOV",
-  "DIC",
+  "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
+  "JUL", "AGO", "SEP", "OCT", "NOV", "DIC",
 ];
 
 const PRECIO_CARRO = 100;
@@ -81,9 +61,24 @@ function fmtFecha(str) {
   });
 }
 
+const th = (txt, extra = "") =>
+  `<th style="background:#13193a;color:#fff;padding:6px 10px;border:1px solid #dde3f0;text-align:center;${extra}">${txt}</th>`;
+const td = (txt, extra = "") =>
+  `<td style="padding:6px 10px;border:1px solid #dde3f0;${extra}">${txt ?? ""}</td>`;
+
+const CL_TH_DARK = "bg-[#13193a] text-white";
+const CL_TH_MID = "bg-[#1e2a50] text-white";
+const CL_TH_LIGHT = "bg-[#2d3d6b] text-white";
+const CL_TH_SUB = "bg-[#3d5080] text-white";
+const CL_BORDER = "border border-[#dde3f0]";
+
+// ════════════════════════════════════════════════════════════
+// Detalle de Primas — helpers
+// ════════════════════════════════════════════════════════════
+
 // Paleta categórica validada (skill dataviz — orden fijo, nunca ciclada;
-// pasa CVD/contraste en scripts/validate_palette.js). Se usa tanto para
-// identificar oficinas en las gráficas como para los 4 esquemas de abajo.
+// pasa CVD/contraste en scripts/validate_palette.js). Respaldo automático
+// para oficinas sin color propio asignado en la BD.
 const PALETA_CATEGORICA = [
   "#2a78d6", // azul
   "#eb6834", // naranja
@@ -95,6 +90,89 @@ const PALETA_CATEGORICA = [
   "#e34948", // rojo
 ];
 const COLOR_OTRAS = "#9a9890";
+
+function esHexValido(c) {
+  return typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c);
+}
+
+// Cada oficina usa el color que el admin le asignó en la BD (oficinas.color).
+// A las que no tienen color propio se les da automáticamente uno de la
+// paleta categórica (hasta 8, en orden alfabético); el resto se pliega en
+// "Otras" al graficar (las tablas sí las siguen listando una por una).
+function resolverColoresOficinas(oficinas) {
+  const mapa = new Map(); // oficinaId -> color
+  const usados = new Set();
+  const sinColor = [];
+  for (const of_ of oficinas) {
+    if (esHexValido(of_.color)) {
+      const c = of_.color.toLowerCase();
+      mapa.set(of_.id, c);
+      usados.add(c);
+    } else {
+      sinColor.push(of_);
+    }
+  }
+  sinColor.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  let slot = 0;
+  for (const of_ of sinColor) {
+    while (slot < PALETA_CATEGORICA.length && usados.has(PALETA_CATEGORICA[slot])) slot++;
+    if (slot >= PALETA_CATEGORICA.length) break;
+    mapa.set(of_.id, PALETA_CATEGORICA[slot]);
+    usados.add(PALETA_CATEGORICA[slot]);
+    slot++;
+  }
+  return mapa;
+}
+
+// Primeras 3 letras del nombre del operador en formato Titlecase
+// ("HANNIA" / "hannia" -> "Han"), para el sufijo "- OpXxx" de cada registro.
+function tresLetras(nombre) {
+  const s = (nombre || "").trim().slice(0, 3);
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+// Todos los operadores de UNA misma oficina usan siempre su mismo color
+// base; si hay más de uno se distinguen bajando la opacidad de 20 en 20
+// (100%, 80%, 60%...) según su índice, sin bajar de 20% para que el texto
+// siga siendo legible. El color de la oficina nunca cambia, solo su tono.
+function tonoOperador(hexBase, indice = 0) {
+  const h = (hexBase || COLOR_OTRAS).replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const alpha = Math.max(0.2, 1 - indice * 0.2);
+  return { r, g, b, alpha };
+}
+
+function tonoOperadorCss(hexBase, indice = 0) {
+  const { r, g, b, alpha } = tonoOperador(hexBase, indice);
+  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`;
+}
+
+// ExcelJS usa ARGB (los primeros 2 dígitos son el canal alfa) — mismo
+// resultado visual que el rgba() del PDF, sin necesitar mezclar con blanco.
+function tonoOperadorArgb(hexBase, indice = 0) {
+  const { r, g, b, alpha } = tonoOperador(hexBase, indice);
+  return argbDeRgba(r, g, b, alpha);
+}
+
+function argbDeRgba(r, g, b, alpha = 1) {
+  const alphaHex = Math.round(alpha * 255).toString(16).padStart(2, "0").toUpperCase();
+  const rgbHex = [r, g, b].map((n) => n.toString(16).padStart(2, "0").toUpperCase()).join("");
+  return `${alphaHex}${rgbHex}`;
+}
+
+// Convierte un color CSS ("#rrggbb" o "rgba(r,g,b,a)", los dos formatos que
+// usan las gráficas) al ARGB que necesita ExcelJS para un relleno de celda.
+function cssAArgb(color) {
+  const rgba = color.match(/rgba?\(([^)]+)\)/);
+  if (rgba) {
+    const [r, g, b, a] = rgba[1].split(",").map((n) => parseFloat(n.trim()));
+    return argbDeRgba(r, g, b, a ?? 1);
+  }
+  return `FF${color.replace("#", "").toUpperCase()}`;
+}
 
 // Los 4 esquemas de precio/forma de pago que existen hoy (ver PRECIO_MATRIZ
 // en features/operador/constants/cobertura.js): tarifa normal y de gestor,
@@ -111,11 +189,6 @@ function claveDetalle(p) {
   const fp = p.forma_pago;
   return DETALLE_GRUPOS.find((g) => g.formaPago === fp && g.precio === precio)?.key ?? null;
 }
-
-const th = (txt, extra = "") =>
-  `<th style="background:#13193a;color:#fff;padding:6px 10px;border:1px solid #dde3f0;text-align:center;${extra}">${txt}</th>`;
-const td = (txt, extra = "") =>
-  `<td style="padding:6px 10px;border:1px solid #dde3f0;${extra}">${txt ?? ""}</td>`;
 
 function totalesDetallePrimas(filas) {
   const sum = (f) => filas.reduce((s, o) => s + o[f], 0);
@@ -137,35 +210,25 @@ function totalesDetallePrimas(filas) {
   };
 }
 
-// Asigna un color fijo de la paleta categórica a cada oficina, en orden
-// alfabético (mismo orden que ya usan las tablas). Más de 8 oficinas: las
-// que exceden el cupo no reciben color individual y se pliegan en "Otras"
-// dentro de las gráficas (las tablas sí las siguen listando una por una).
-function construirColoresOficina(filas) {
-  const ordenadas = [...filas].sort((a, b) => a.nombre.localeCompare(b.nombre));
-  const mapa = new Map();
-  ordenadas.forEach((o, i) => {
-    if (i < PALETA_CATEGORICA.length) mapa.set(o.nombre, PALETA_CATEGORICA[i]);
-  });
-  return mapa;
-}
-
-// Suma uno o más campos de `filas` (p.ej. cantidad o monto de los 4 esquemas)
-// por oficina, y arma el arreglo {nombre, valor, color} para una gráfica de
-// pastel, plegando en "Otras oficinas" a las que no tienen color asignado.
-function construirDatosPieOficina(filas, campos, coloresOficina) {
-  const conValor = filas
-    .map((o) => ({ nombre: o.nombre, valor: campos.reduce((s, c) => s + o[c], 0) }))
-    .filter((d) => d.valor > 0)
-    .sort((a, b) => b.valor - a.valor);
-
+// Cada fila (oficina+operador) es su propia rebanada del pastel, con el
+// mismo color base de su oficina pero un tono de opacidad distinto según su
+// operador (ver tonoOperadorCss) — así una oficina con 2+ operadores se ve
+// como 2+ rebanadas del MISMO color en distinta intensidad, no una sola.
+// Las oficinas sin color individual asignado se pliegan en "Otras oficinas".
+function construirDatosPieOficina(filas, campos, coloresPorOficinaId) {
   const individuales = [];
   let otras = 0;
-  for (const d of conValor) {
-    const color = coloresOficina.get(d.nombre);
-    if (color) individuales.push({ ...d, color });
-    else otras += d.valor;
+  for (const o of filas) {
+    const valor = campos.reduce((s, c) => s + o[c], 0);
+    if (valor <= 0) continue;
+    const colorBase = coloresPorOficinaId.get(o.oficinaId);
+    if (colorBase) {
+      individuales.push({ nombre: o.nombre, valor, color: tonoOperadorCss(colorBase, o.indiceOperador) });
+    } else {
+      otras += valor;
+    }
   }
+  individuales.sort((a, b) => b.valor - a.valor);
   if (otras > 0) individuales.push({ nombre: "Otras oficinas", valor: otras, color: COLOR_OTRAS });
   return individuales;
 }
@@ -244,13 +307,11 @@ function leyendaHTML(datos, formato) {
   return `<div style="margin-top:6px">${filas}</div>`;
 }
 
-// Componente de gráfica de pastel reutilizable en pantalla. `ref` apunta al
-// contenedor del <svg> para poder capturarlo al exportar PDF/Excel.
-// No se muestra en pantalla ni lleva Tooltip/Legend de recharts: se monta
-// fuera de pantalla únicamente como fuente para capturar su <svg> y usarlo
-// en las exportaciones (ver svgDelChart). El título y la leyenda de color
-// de cada gráfica los arma el propio exportador (PDF/Excel), no este
-// componente — por eso no reserva espacio para ellos aquí.
+// Componente de gráfica de pastel reutilizable. `ref` apunta al contenedor
+// del <svg> para poder capturarlo al exportar PDF/Excel. No se muestra en
+// pantalla ni lleva Tooltip/Legend de recharts: se monta fuera de pantalla
+// únicamente como fuente para capturar su <svg> (ver svgDelChart). El
+// título y la leyenda de color los arma el propio exportador (PDF/Excel).
 const GraficaPastel = forwardRef(function GraficaPastel({ datos }, ref) {
   if (datos.length === 0) return null;
   return (
@@ -268,8 +329,8 @@ const GraficaPastel = forwardRef(function GraficaPastel({ datos }, ref) {
             strokeWidth={2}
             isAnimationActive={false}
           >
-            {datos.map((d) => (
-              <Cell key={d.nombre} fill={d.color} />
+            {datos.map((d, i) => (
+              <Cell key={`${d.nombre}-${i}`} fill={d.color} />
             ))}
           </Pie>
         </PieChart>
@@ -278,13 +339,14 @@ const GraficaPastel = forwardRef(function GraficaPastel({ datos }, ref) {
   );
 });
 
-const CL_TH_DARK = "bg-[#13193a] text-white";
-const CL_TH_MID = "bg-[#1e2a50] text-white";
-const CL_TH_LIGHT = "bg-[#2d3d6b] text-white";
-const CL_TH_SUB = "bg-[#3d5080] text-white";
-const CL_BORDER = "border border-[#dde3f0]";
+// ════════════════════════════════════════════════════════════
+// Panel compartido — Resumen por Oficina / Detalle de Primas.
+// Un solo estado de consulta para ambas pestañas: al cambiar de pestaña no
+// hay que volver a picar "Consultar" ni se pierde lo ya consultado; lo
+// único que cambia son los exportadores que disparan los botones Excel/PDF.
+// ════════════════════════════════════════════════════════════
 
-export default function EstadoDeCuenta() {
+function PanelEstadoCuenta({ tab }) {
   const hoy = new Date();
   const anioAct = hoy.getFullYear();
   const mesAct = hoy.getMonth() + 1;
@@ -296,13 +358,14 @@ export default function EstadoDeCuenta() {
   const [fFin, setFFin] = useState("");
   const [cargando, setCargando] = useState(false);
   const [datos, setDatos] = useState(null);
-  const [polizasRaw, setPolizasRaw] = useState([]);
+  const [polizasRaw, setPolizasRaw] = useState(null);
   const [rango, setRango] = useState({ s: "", e: "" });
   const [oficinas, setOficinas] = useState([]);
   const [usuariosZapata, setUsuariosZapata] = useState([]);
+  const [operadores, setOperadores] = useState([]); // usuarios activos con rol OPERADOR, de TODAS las oficinas — usados por el detalle de primas
 
-  // Contenedores de las gráficas de pastel en pantalla — se usan para
-  // capturar su <svg> al exportar a PDF/Excel.
+  // Contenedores de las gráficas de pastel del detalle de primas — fuera de
+  // pantalla, solo para capturar su <svg> al exportar a PDF/Excel.
   const refChartCantOficina = useRef(null);
   const refChartMontoOficina = useRef(null);
   const refChartTipoPrima = useRef(null);
@@ -314,18 +377,19 @@ export default function EstadoDeCuenta() {
       const [{ data: dOficinas }, { data: dUsuarios }] = await Promise.all([
         supabase
           .from("oficinas")
-          .select("id, nombre")
+          .select("id, nombre, color")
           .order("nombre", { ascending: true }),
         supabase
           .from("usuarios")
-          .select("id, id_muestra, roles(nombre)")
-          .eq("oficina_id", OFICINA_EZAPATA_ID)
+          .select("id, id_muestra, nombre, oficina_id, roles(nombre)")
           .eq("activo", true),
       ]);
       setOficinas(dOficinas || []);
-      setUsuariosZapata(
-        (dUsuarios || []).filter((u) => u.roles?.nombre === "OPERADOR"),
+      const ops = (dUsuarios || []).filter(
+        (u) => u.roles?.nombre === "OPERADOR" && u.oficina_id != null,
       );
+      setOperadores(ops);
+      setUsuariosZapata(ops.filter((u) => u.oficina_id === OFICINA_EZAPATA_ID));
     })();
   }, []);
 
@@ -351,12 +415,13 @@ export default function EstadoDeCuenta() {
     const r = calcRango();
     setCargando(true);
     setDatos(null);
+    setPolizasRaw(null);
     setRango(r);
     try {
       const { data, error } = await supabase
         .from("polizas")
         .select(
-          "id, constancia, created_at, forma_pago, oficina_id, creado_por, oficinas(id, nombre), coberturas(nombre, prima_total), usuarios!polizas_creado_por_fkey(id_muestra)",
+          "id, constancia, created_at, forma_pago, oficina_id, creado_por, oficinas(id, nombre), coberturas(nombre, prima_total), usuarios!polizas_creado_por_fkey(id_muestra, nombre)",
         )
         .gte("created_at", `${r.s}T00:00:00`)
         .lte("created_at", `${r.e}T23:59:59`)
@@ -367,6 +432,7 @@ export default function EstadoDeCuenta() {
     } catch (err) {
       console.error(err);
       setDatos([]);
+      setPolizasRaw([]);
     } finally {
       setCargando(false);
     }
@@ -417,59 +483,6 @@ export default function EstadoDeCuenta() {
     return [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
   };
 
-  // Agrupa las pólizas por oficina y por uno de los 4 esquemas de
-  // precio/forma de pago (DETALLE_GRUPOS), para el reporte "Detalle de Primas".
-  // Pólizas cuyo (prima_total, forma_pago) no calza con ninguno de los 4
-  // esquemas se excluyen del reporte (p.ej. coberturas fuera de la matriz vigente).
-  const agruparDetallePrimas = (polizas) => {
-    const listas = { c2200: [], c2500: [], p2200: [], p2674: [] };
-    const porOficina = new Map();
-
-    const seed = (key, nombre) =>
-      porOficina.set(key, {
-        nombre,
-        c2200: 0, c2500: 0, p2200: 0, p2674: 0,
-        mc2200: 0, mc2500: 0, mp2200: 0, mp2674: 0,
-      });
-
-    for (const of_ of oficinas) {
-      if (of_.id === OFICINA_EZAPATA_ID) {
-        for (const u of usuariosZapata) seed(`z-${u.id}`, `${of_.nombre} OP${u.id_muestra}`);
-      } else {
-        seed(of_.id, of_.nombre);
-      }
-    }
-
-    for (const p of polizas) {
-      const grupo = claveDetalle(p);
-      if (!grupo) continue;
-      const { key: ofKey, nombre } = claveYNombre(p);
-      if (!porOficina.has(ofKey)) seed(ofKey, nombre);
-      const entry = porOficina.get(ofKey);
-      const precio = Number(p.coberturas?.prima_total ?? 0);
-      entry[grupo]++;
-      entry[`m${grupo}`] += precio;
-      listas[grupo].push({ ...p, _oficinaNombre: nombre });
-    }
-
-    const filas = [...porOficina.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
-    return { filas, listas };
-  };
-
-  // Datos de Detalle de Primas calculados una sola vez por consulta y
-  // compartidos entre las gráficas en pantalla y los exportadores de
-  // Excel/PDF (evita recalcular tres veces lo mismo).
-  const { filas: filasPrimas, listas: listasPrimas } = agruparDetallePrimas(polizasRaw);
-  const totalesPrimas = totalesDetallePrimas(filasPrimas);
-  const coloresOficina = construirColoresOficina(filasPrimas);
-  const datosPieCantOficina = construirDatosPieOficina(
-    filasPrimas, ["c2200", "c2500", "p2200", "p2674"], coloresOficina,
-  );
-  const datosPieMontoOficina = construirDatosPieOficina(
-    filasPrimas, ["mc2200", "mc2500", "mp2200", "mp2674"], coloresOficina,
-  );
-  const datosPieTipoPrima = construirDatosPieTipoPrima(totalesPrimas);
-
   const totCarros = datos ? datos.reduce((s, o) => s + o.carros, 0) : 0;
   const totMotos = datos ? datos.reduce((s, o) => s + o.motos, 0) : 0;
   const stCarros = totCarros * PRECIO_CARRO;
@@ -478,6 +491,94 @@ export default function EstadoDeCuenta() {
   const iva = grandTotal * IVA_PCT;
   const totalConIva = grandTotal + iva;
   const periodo = rango.s ? formatPeriodo(rango.s, rango.e) : "";
+
+  // ── Detalle de Primas — agrupación por oficina+operador y esquema de
+  // precio/forma de pago (usada solo por los exportadores Excel/PDF de esa
+  // pestaña; en pantalla ambas pestañas muestran el mismo cuadro resumen). ──
+
+  // Cualquier oficina con más de un operador activo se desglosa por
+  // operador; si solo tiene uno, el sufijo igual se muestra.
+  const claveYNombreOperador = (p) => {
+    const oficinaId = p.oficina_id;
+    const oficinaNombre = p.oficinas?.nombre ?? "Sin Oficina";
+    const nombreOperador = p.usuarios?.nombre;
+    const key = p.creado_por ? `${oficinaId}-${p.creado_por}` : `${oficinaId}-sin-operador`;
+    const nombre = nombreOperador
+      ? `${oficinaNombre} - Op${tresLetras(nombreOperador)}`
+      : oficinaNombre;
+    return { key, nombre, oficinaId, oficinaNombre };
+  };
+
+  const operadoresPorOficina = new Map();
+  for (const u of operadores) {
+    if (!operadoresPorOficina.has(u.oficina_id)) operadoresPorOficina.set(u.oficina_id, []);
+    operadoresPorOficina.get(u.oficina_id).push(u);
+  }
+
+  // Agrupa las pólizas por oficina+operador y por uno de los 4 esquemas de
+  // precio/forma de pago (DETALLE_GRUPOS). Pólizas cuyo (prima_total,
+  // forma_pago) no calza con ninguno de los 4 esquemas se excluyen del
+  // reporte (p.ej. coberturas fuera de la matriz vigente).
+  const agruparDetallePrimas = (polizas) => {
+    const listas = { c2200: [], c2500: [], p2200: [], p2674: [] };
+    const porFila = new Map();
+
+    const seed = (key, oficinaId, oficinaNombre, nombre, indiceOperador = 0) =>
+      porFila.set(key, {
+        oficinaId, oficinaNombre, nombre, indiceOperador,
+        c2200: 0, c2500: 0, p2200: 0, p2674: 0,
+        mc2200: 0, mc2500: 0, mp2200: 0, mp2674: 0,
+      });
+
+    for (const of_ of oficinas) {
+      // Orden estable (alfabético) para que el índice de cada operador —y
+      // por lo tanto su tono— no dependa del orden en que llegó de la BD.
+      const ops = [...(operadoresPorOficina.get(of_.id) || [])].sort((a, b) =>
+        a.nombre.localeCompare(b.nombre),
+      );
+      if (ops.length === 0) {
+        seed(`${of_.id}-sin-operador`, of_.id, of_.nombre, of_.nombre, 0);
+      } else {
+        ops.forEach((u, idx) => {
+          seed(`${of_.id}-${u.id}`, of_.id, of_.nombre, `${of_.nombre} - Op${tresLetras(u.nombre)}`, idx);
+        });
+      }
+    }
+
+    for (const p of polizas) {
+      const grupo = claveDetalle(p);
+      if (!grupo) continue;
+      const { key, nombre, oficinaId, oficinaNombre } = claveYNombreOperador(p);
+      if (!porFila.has(key)) seed(key, oficinaId, oficinaNombre, nombre, 0);
+      const entry = porFila.get(key);
+      const precio = Number(p.coberturas?.prima_total ?? 0);
+      entry[grupo]++;
+      entry[`m${grupo}`] += precio;
+      listas[grupo].push({ ...p, _oficinaNombre: nombre, _indiceOperador: entry.indiceOperador });
+    }
+
+    const filas = [...porFila.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+    return { filas, listas };
+  };
+
+  // Datos calculados una sola vez por consulta y compartidos entre las
+  // gráficas y los exportadores de Excel/PDF del detalle de primas.
+  const { filas: filasPrimas, listas: listasPrimas } = agruparDetallePrimas(polizasRaw || []);
+  const totalesPrimas = totalesDetallePrimas(filasPrimas);
+  const coloresPorOficinaId = resolverColoresOficinas(oficinas);
+  const datosPieCantOficina = construirDatosPieOficina(
+    filasPrimas, ["c2200", "c2500", "p2200", "p2674"], coloresPorOficinaId,
+  );
+  const datosPieMontoOficina = construirDatosPieOficina(
+    filasPrimas, ["mc2200", "mc2500", "mp2200", "mp2674"], coloresPorOficinaId,
+  );
+  const datosPieTipoPrima = construirDatosPieTipoPrima(totalesPrimas);
+
+  const colorBaseDeOficina = (oficinaId) => coloresPorOficinaId.get(oficinaId) || COLOR_OTRAS;
+  const colorCssFila = (oficinaId, indiceOperador = 0) =>
+    tonoOperadorCss(colorBaseDeOficina(oficinaId), indiceOperador);
+  const colorArgbFila = (oficinaId, indiceOperador = 0) =>
+    tonoOperadorArgb(colorBaseDeOficina(oficinaId), indiceOperador);
 
   // Mismos colores que la tabla en pantalla y el PDF, en ARGB para ExcelJS.
   const XL_DARK  = "FF13193A";
@@ -495,6 +596,9 @@ export default function EstadoDeCuenta() {
   const xlNegro = { color: { argb: "FF000000" }, size: 9 };
   const xlNegroBold = { color: { argb: "FF000000" }, bold: true, size: 9 };
   const xlMoneda = '"$"#,##0.00';
+  const xlColorOficina = (oficinaId, indiceOperador = 0) => ({
+    bold: true, size: 9, color: { argb: colorArgbFila(oficinaId, indiceOperador) },
+  });
 
   function estilizarFila(row, { fill, font, align = "center", cols = 5, numFmtCols = [] } = {}) {
     for (let c = 1; c <= cols; c++) {
@@ -680,266 +784,6 @@ export default function EstadoDeCuenta() {
     URL.revokeObjectURL(url);
   };
 
-  // — Detalle de Primas: hoja 1 (4 listados por precio/forma de pago) +
-  // hoja 2 (cantidad y monto por oficina + resumen) —
-  const exportarExcelPrimas = async () => {
-    if (!datos || datos.length === 0) return;
-
-    const filas = filasPrimas, listas = listasPrimas, t = totalesPrimas;
-
-    const wb = new ExcelJS.Workbook();
-
-    // ── Hoja 1: listados por precio/forma de pago ──
-    const ws1 = wb.addWorksheet("Detalle de Primas");
-    ws1.columns = [
-      { width: 6 },
-      { width: 26 },
-      { width: 16 },
-      { width: 24 },
-      { width: 14 },
-      { width: 14 },
-      { width: 14 },
-    ];
-
-    let r = 1;
-    ws1.mergeCells(r, 1, r, 7);
-    ws1.getCell(r, 1).value = `DETALLE DE PRIMAS — ${periodo}`;
-    estilizarFila(ws1.getRow(r), { fill: XL_DARK, font: { ...xlBlanco, size: 11 }, cols: 7 });
-    ws1.getRow(r).height = 22;
-    r += 2;
-
-    DETALLE_GRUPOS.forEach((g) => {
-      const pols = listas[g.key];
-      const monto = pols.reduce((s, p) => s + Number(p.coberturas?.prima_total ?? 0), 0);
-
-      ws1.mergeCells(r, 1, r, 7);
-      ws1.getCell(r, 1).value = g.titulo;
-      estilizarFila(ws1.getRow(r), { fill: XL_DARK, font: { ...xlBlanco, size: 10 }, cols: 7 });
-      ws1.getRow(r).height = 20;
-      r++;
-
-      ["No.", "Oficina", "No. Póliza", "Cobertura", "Precio Total", "Forma de Pago", "Fecha Emisión"].forEach(
-        (h, i) => {
-          ws1.getCell(r, i + 1).value = h;
-        },
-      );
-      estilizarFila(ws1.getRow(r), { fill: XL_MID, font: xlBlanco, cols: 7 });
-      r++;
-
-      if (pols.length === 0) {
-        ws1.mergeCells(r, 1, r, 7);
-        ws1.getCell(r, 1).value = "Sin pólizas en este periodo.";
-        estilizarFila(ws1.getRow(r), { font: { ...xlNegro, color: { argb: "FF9CA3AF" } }, cols: 7 });
-        r++;
-      } else {
-        pols.forEach((p, i) => {
-          const row = ws1.getRow(r);
-          row.getCell(1).value = i + 1;
-          row.getCell(2).value = p._oficinaNombre;
-          row.getCell(3).value = p.constancia || "—";
-          row.getCell(4).value = p.coberturas?.nombre || "—";
-          row.getCell(5).value = Number(p.coberturas?.prima_total ?? 0);
-          row.getCell(6).value = p.forma_pago || "—";
-          row.getCell(7).value = fmtFecha(p.created_at);
-          estilizarFila(row, { fill: i % 2 === 1 ? XL_ZEBRA : null, cols: 7, numFmtCols: [5] });
-          row.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
-          row.getCell(4).alignment = { horizontal: "left", vertical: "middle" };
-          r++;
-        });
-      }
-
-      ws1.mergeCells(r, 1, r, 4);
-      ws1.getCell(r, 1).value = `TOTAL: ${pols.length} pólizas`;
-      ws1.mergeCells(r, 5, r, 7);
-      ws1.getCell(r, 5).value = monto;
-      estilizarFila(ws1.getRow(r), { fill: XL_GRIS, font: xlNegroBold, cols: 7, numFmtCols: [5] });
-      r += 2;
-    });
-
-    // ── Hoja 2: cantidad y monto por oficina + resumen ──
-    const ws2 = wb.addWorksheet("Resumen por Oficina");
-    ws2.columns = [
-      { width: 24 }, { width: 12 }, { width: 12 }, { width: 12 },
-      { width: 24 }, { width: 12 }, { width: 12 }, { width: 12 },
-    ];
-
-    let r2 = 1;
-
-    const construirTablaOficinas = (titulo, esMoneda) => {
-      ws2.mergeCells(r2, 1, r2, 8);
-      ws2.getCell(r2, 1).value = titulo;
-      estilizarFila(ws2.getRow(r2), { fill: XL_DARK, font: { ...xlBlanco, size: 11 }, cols: 8 });
-      ws2.getRow(r2).height = 22;
-      r2++;
-
-      const rHead1 = r2;
-      ws2.mergeCells(rHead1, 1, rHead1 + 1, 1);
-      ws2.getCell(rHead1, 1).value = "PÓLIZAS";
-      ws2.mergeCells(rHead1, 2, rHead1, 4);
-      ws2.getCell(rHead1, 2).value = "CONTADO";
-      ws2.mergeCells(rHead1, 5, rHead1 + 1, 5);
-      ws2.getCell(rHead1, 5).value = "PÓLIZAS";
-      ws2.mergeCells(rHead1, 6, rHead1, 8);
-      ws2.getCell(rHead1, 6).value = "PAGOS";
-      r2++;
-      ["2,200", "2,500", "TOTAL"].forEach((h, i) => { ws2.getCell(r2, 2 + i).value = h; });
-      ["2,200", "2,674", "TOTAL"].forEach((h, i) => { ws2.getCell(r2, 6 + i).value = h; });
-      r2++;
-      for (let rr = rHead1; rr < r2; rr++) {
-        estilizarFila(ws2.getRow(rr), { fill: rr === rHead1 ? XL_MID : XL_SUB, font: xlBlanco, cols: 8 });
-      }
-
-      const numFmtCols = esMoneda ? [2, 3, 4, 6, 7, 8] : [];
-
-      filas.forEach((o, i) => {
-        const c1 = esMoneda ? o.mc2200 : o.c2200;
-        const c2 = esMoneda ? o.mc2500 : o.c2500;
-        const p1 = esMoneda ? o.mp2200 : o.p2200;
-        const p2 = esMoneda ? o.mp2674 : o.p2674;
-        const row = ws2.getRow(r2);
-        row.getCell(1).value = o.nombre;
-        row.getCell(2).value = c1;
-        row.getCell(3).value = c2;
-        row.getCell(4).value = c1 + c2;
-        row.getCell(5).value = o.nombre;
-        row.getCell(6).value = p1;
-        row.getCell(7).value = p2;
-        row.getCell(8).value = p1 + p2;
-        estilizarFila(row, { fill: i % 2 === 1 ? XL_ZEBRA : null, cols: 8, numFmtCols });
-        row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-        row.getCell(5).alignment = { horizontal: "left", vertical: "middle" };
-        r2++;
-      });
-
-      {
-        const row = ws2.getRow(r2);
-        row.getCell(1).value = "TOTAL";
-        row.getCell(2).value = esMoneda ? t.monto.c2200 : t.cant.c2200;
-        row.getCell(3).value = esMoneda ? t.monto.c2500 : t.cant.c2500;
-        row.getCell(4).value = esMoneda ? t.montoContado : t.totContado;
-        row.getCell(5).value = "TOTAL";
-        row.getCell(6).value = esMoneda ? t.monto.p2200 : t.cant.p2200;
-        row.getCell(7).value = esMoneda ? t.monto.p2674 : t.cant.p2674;
-        row.getCell(8).value = esMoneda ? t.montoPagos : t.totPagos;
-        estilizarFila(row, { fill: XL_GRIS, font: xlNegroBold, cols: 8, numFmtCols });
-        r2++;
-      }
-
-      {
-        ws2.mergeCells(r2, 1, r2, 8);
-        ws2.getCell(r2, 1).value = esMoneda
-          ? `TOTAL GENERAL RECAUDADO DEL MES (CONTADO + PAGOS): ${fmt$(t.montoGeneral)}`
-          : `TOTAL GENERAL DE PÓLIZAS DEL MES (CONTADO + PAGOS): ${t.totGeneral}`;
-        estilizarFila(ws2.getRow(r2), { fill: XL_AZULC, font: xlNegroBold, cols: 8 });
-        r2++;
-      }
-
-      r2 += 2;
-    };
-
-    construirTablaOficinas("CANTIDAD DE PÓLIZAS POR OFICINA", false);
-    construirTablaOficinas("MONTO RECAUDADO POR OFICINA", true);
-
-    // — RESUMEN —
-    ws2.mergeCells(r2, 1, r2, 8);
-    ws2.getCell(r2, 1).value = "RESUMEN";
-    estilizarFila(ws2.getRow(r2), { fill: XL_DARK, font: { ...xlBlanco, size: 11 }, cols: 8 });
-    r2++;
-
-    [
-      ["CONTADO", t.totContado, t.montoContado],
-      ["PAGOS", t.totPagos, t.montoPagos],
-    ].forEach(([label, cant, monto]) => {
-      ws2.mergeCells(r2, 1, r2, 3);
-      ws2.getCell(r2, 1).value = label;
-      ws2.mergeCells(r2, 4, r2, 6);
-      ws2.getCell(r2, 4).value = cant;
-      ws2.mergeCells(r2, 7, r2, 8);
-      ws2.getCell(r2, 7).value = monto;
-      estilizarFila(ws2.getRow(r2), { cols: 8, numFmtCols: [7] });
-      r2++;
-    });
-
-    ws2.mergeCells(r2, 1, r2, 3);
-    ws2.getCell(r2, 1).value = "TOTAL";
-    ws2.mergeCells(r2, 4, r2, 6);
-    ws2.getCell(r2, 4).value = t.totGeneral;
-    ws2.mergeCells(r2, 7, r2, 8);
-    ws2.getCell(r2, 7).value = t.montoGeneral;
-    estilizarFila(ws2.getRow(r2), { fill: XL_GRIS, font: xlNegroBold, cols: 8, numFmtCols: [7] });
-
-    // ── Hoja 3: gráficas (imagen del pastel + leyenda de colores por oficina) ──
-    // ExcelJS no soporta gráficas nativas: se inserta el <svg> ya renderizado
-    // en pantalla, rasterizado a PNG.
-    const ws3 = wb.addWorksheet("Gráficas");
-    ws3.columns = [{ width: 4 }, { width: 28 }, { width: 14 }, { width: 10 }];
-
-    const graficas = [
-      {
-        titulo: "CANTIDAD DE PÓLIZAS POR OFICINA",
-        svg: svgDelChart(refChartCantOficina),
-        datos: datosPieCantOficina,
-        moneda: false,
-      },
-      {
-        titulo: "MONTO RECAUDADO POR OFICINA",
-        svg: svgDelChart(refChartMontoOficina),
-        datos: datosPieMontoOficina,
-        moneda: true,
-      },
-      {
-        titulo: "DISTRIBUCIÓN POR TIPO DE PRIMA",
-        svg: svgDelChart(refChartTipoPrima),
-        datos: datosPieTipoPrima,
-        moneda: false,
-      },
-    ];
-
-    let r3 = 1;
-    for (const g of graficas) {
-      ws3.mergeCells(r3, 1, r3, 4);
-      ws3.getCell(r3, 1).value = g.titulo;
-      estilizarFila(ws3.getRow(r3), { fill: XL_DARK, font: { ...xlBlanco, size: 11 }, cols: 4 });
-      r3 += 2;
-
-      const png = await svgAPng(g.svg, 2);
-      if (png) {
-        const altoImg = 220;
-        const imgId = wb.addImage({ base64: png.dataUrl, extension: "png" });
-        ws3.addImage(imgId, { tl: { col: 0.2, row: r3 - 1 }, ext: { width: 260, height: altoImg } });
-        r3 += Math.ceil(altoImg / 20) + 1;
-      } else {
-        ws3.getCell(r3, 1).value = "(No fue posible generar la imagen de esta gráfica.)";
-        r3 += 2;
-      }
-
-      const totalG = g.datos.reduce((s, d) => s + d.valor, 0);
-      g.datos.forEach((d) => {
-        const row = ws3.getRow(r3);
-        row.getCell(1).fill = xlFill(`FF${d.color.replace("#", "").toUpperCase()}`);
-        row.getCell(2).value = d.nombre;
-        row.getCell(3).value = d.valor;
-        row.getCell(4).value = totalG > 0 ? `${Math.round((d.valor / totalG) * 100)}%` : "0%";
-        estilizarFila(row, { cols: 4, numFmtCols: g.moneda ? [3] : [] });
-        row.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
-        r3++;
-      });
-
-      r3 += 2;
-    }
-
-    const buf = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buf], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `detalle-primas-${rango.s}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   // Imprime un documento HTML completo desde un iframe oculto anclado a esta
   // misma página, en vez de una pestaña nueva en about:blank — así el pie de
   // página que agrega el navegador al imprimir muestra la URL real de la app
@@ -1084,15 +928,261 @@ export default function EstadoDeCuenta() {
     imprimirHTML(html);
   };
 
-  // — Detalle de Primas (PDF): 4 listados por precio/forma de pago, tabla de
-  // cantidad de pólizas por oficina, tabla de monto recaudado por oficina, y
-  // resumen final —
-  const exportarPDFPrimas = () => {
-    if (!datos || datos.length === 0) return;
+  // — Detalle de Primas (Excel): hoja 1 (4 listados) + hoja 2 (cantidad y
+  // monto por oficina + resumen) + hoja 3 (gráficas) —
+  const exportarExcelPrimas = async () => {
+    if (!polizasRaw || polizasRaw.length === 0) return;
 
     const filas = filasPrimas, listas = listasPrimas, t = totalesPrimas;
 
-    // — Gráficas: se reutiliza el <svg> ya renderizado en pantalla —
+    const wb = new ExcelJS.Workbook();
+
+    // ── Hoja 1: listados por precio/forma de pago ──
+    const ws1 = wb.addWorksheet("Detalle de Primas");
+    ws1.columns = [
+      { width: 6 },
+      { width: 30 },
+      { width: 16 },
+      { width: 24 },
+      { width: 14 },
+      { width: 14 },
+      { width: 14 },
+    ];
+
+    let r = 1;
+    ws1.mergeCells(r, 1, r, 7);
+    ws1.getCell(r, 1).value = `DETALLE DE PRIMAS — ${periodo}`;
+    estilizarFila(ws1.getRow(r), { fill: XL_DARK, font: { ...xlBlanco, size: 11 }, cols: 7 });
+    ws1.getRow(r).height = 22;
+    r += 2;
+
+    DETALLE_GRUPOS.forEach((g) => {
+      const pols = listas[g.key];
+      const monto = pols.reduce((s, p) => s + Number(p.coberturas?.prima_total ?? 0), 0);
+
+      ws1.mergeCells(r, 1, r, 7);
+      ws1.getCell(r, 1).value = g.titulo;
+      estilizarFila(ws1.getRow(r), { fill: XL_DARK, font: { ...xlBlanco, size: 10 }, cols: 7 });
+      ws1.getRow(r).height = 20;
+      r++;
+
+      ["No.", "Oficina", "No. Póliza", "Cobertura", "Precio Total", "Forma de Pago", "Fecha Emisión"].forEach(
+        (h, i) => {
+          ws1.getCell(r, i + 1).value = h;
+        },
+      );
+      estilizarFila(ws1.getRow(r), { fill: XL_MID, font: xlBlanco, cols: 7 });
+      r++;
+
+      if (pols.length === 0) {
+        ws1.mergeCells(r, 1, r, 7);
+        ws1.getCell(r, 1).value = "Sin pólizas en este periodo.";
+        estilizarFila(ws1.getRow(r), { font: { ...xlNegro, color: { argb: "FF9CA3AF" } }, cols: 7 });
+        r++;
+      } else {
+        pols.forEach((p, i) => {
+          const row = ws1.getRow(r);
+          row.getCell(1).value = i + 1;
+          row.getCell(2).value = p._oficinaNombre;
+          row.getCell(3).value = p.constancia || "—";
+          row.getCell(4).value = p.coberturas?.nombre || "—";
+          row.getCell(5).value = Number(p.coberturas?.prima_total ?? 0);
+          row.getCell(6).value = p.forma_pago || "—";
+          row.getCell(7).value = fmtFecha(p.created_at);
+          estilizarFila(row, { fill: i % 2 === 1 ? XL_ZEBRA : null, cols: 7, numFmtCols: [5] });
+          row.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+          row.getCell(2).font = xlColorOficina(p.oficina_id, p._indiceOperador);
+          row.getCell(4).alignment = { horizontal: "left", vertical: "middle" };
+          r++;
+        });
+      }
+
+      ws1.mergeCells(r, 1, r, 4);
+      ws1.getCell(r, 1).value = `TOTAL: ${pols.length} pólizas`;
+      ws1.mergeCells(r, 5, r, 7);
+      ws1.getCell(r, 5).value = monto;
+      estilizarFila(ws1.getRow(r), { fill: XL_GRIS, font: xlNegroBold, cols: 7, numFmtCols: [5] });
+      r += 2;
+    });
+
+    // ── Hoja 2: cantidad y monto por oficina + resumen ──
+    const ws2 = wb.addWorksheet("Resumen por Oficina");
+    ws2.columns = [
+      { width: 28 }, { width: 12 }, { width: 12 }, { width: 12 },
+      { width: 28 }, { width: 12 }, { width: 12 }, { width: 12 },
+    ];
+
+    let r2 = 1;
+
+    const construirTablaOficinas = (titulo, esMoneda) => {
+      ws2.mergeCells(r2, 1, r2, 8);
+      ws2.getCell(r2, 1).value = titulo;
+      estilizarFila(ws2.getRow(r2), { fill: XL_DARK, font: { ...xlBlanco, size: 11 }, cols: 8 });
+      ws2.getRow(r2).height = 22;
+      r2++;
+
+      const rHead1 = r2;
+      ws2.mergeCells(rHead1, 1, rHead1 + 1, 1);
+      ws2.getCell(rHead1, 1).value = "PÓLIZAS";
+      ws2.mergeCells(rHead1, 2, rHead1, 4);
+      ws2.getCell(rHead1, 2).value = "CONTADO";
+      ws2.mergeCells(rHead1, 5, rHead1 + 1, 5);
+      ws2.getCell(rHead1, 5).value = "PÓLIZAS";
+      ws2.mergeCells(rHead1, 6, rHead1, 8);
+      ws2.getCell(rHead1, 6).value = "PAGOS";
+      r2++;
+      ["2,200", "2,500", "TOTAL"].forEach((h, i) => { ws2.getCell(r2, 2 + i).value = h; });
+      ["2,200", "2,674", "TOTAL"].forEach((h, i) => { ws2.getCell(r2, 6 + i).value = h; });
+      r2++;
+      for (let rr = rHead1; rr < r2; rr++) {
+        estilizarFila(ws2.getRow(rr), { fill: rr === rHead1 ? XL_MID : XL_SUB, font: xlBlanco, cols: 8 });
+      }
+
+      const numFmtCols = esMoneda ? [2, 3, 4, 6, 7, 8] : [];
+
+      filas.forEach((o, i) => {
+        const c1 = esMoneda ? o.mc2200 : o.c2200;
+        const c2 = esMoneda ? o.mc2500 : o.c2500;
+        const p1 = esMoneda ? o.mp2200 : o.p2200;
+        const p2 = esMoneda ? o.mp2674 : o.p2674;
+        const row = ws2.getRow(r2);
+        row.getCell(1).value = o.nombre;
+        row.getCell(2).value = c1;
+        row.getCell(3).value = c2;
+        row.getCell(4).value = c1 + c2;
+        row.getCell(5).value = o.nombre;
+        row.getCell(6).value = p1;
+        row.getCell(7).value = p2;
+        row.getCell(8).value = p1 + p2;
+        estilizarFila(row, { fill: i % 2 === 1 ? XL_ZEBRA : null, cols: 8, numFmtCols });
+        row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+        row.getCell(5).alignment = { horizontal: "left", vertical: "middle" };
+        const fuenteOficina = xlColorOficina(o.oficinaId, o.indiceOperador);
+        row.getCell(1).font = fuenteOficina;
+        row.getCell(5).font = fuenteOficina;
+        r2++;
+      });
+
+      {
+        const row = ws2.getRow(r2);
+        row.getCell(1).value = "TOTAL";
+        row.getCell(2).value = esMoneda ? t.monto.c2200 : t.cant.c2200;
+        row.getCell(3).value = esMoneda ? t.monto.c2500 : t.cant.c2500;
+        row.getCell(4).value = esMoneda ? t.montoContado : t.totContado;
+        row.getCell(5).value = "TOTAL";
+        row.getCell(6).value = esMoneda ? t.monto.p2200 : t.cant.p2200;
+        row.getCell(7).value = esMoneda ? t.monto.p2674 : t.cant.p2674;
+        row.getCell(8).value = esMoneda ? t.montoPagos : t.totPagos;
+        estilizarFila(row, { fill: XL_GRIS, font: xlNegroBold, cols: 8, numFmtCols });
+        r2++;
+      }
+
+      {
+        ws2.mergeCells(r2, 1, r2, 8);
+        ws2.getCell(r2, 1).value = esMoneda
+          ? `TOTAL GENERAL RECAUDADO DEL MES (CONTADO + PAGOS): ${fmt$(t.montoGeneral)}`
+          : `TOTAL GENERAL DE PÓLIZAS DEL MES (CONTADO + PAGOS): ${t.totGeneral}`;
+        estilizarFila(ws2.getRow(r2), { fill: XL_AZULC, font: xlNegroBold, cols: 8 });
+        r2++;
+      }
+
+      r2 += 2;
+    };
+
+    construirTablaOficinas("CANTIDAD DE PÓLIZAS POR OFICINA", false);
+    construirTablaOficinas("MONTO RECAUDADO POR OFICINA", true);
+
+    // — RESUMEN —
+    ws2.mergeCells(r2, 1, r2, 8);
+    ws2.getCell(r2, 1).value = "RESUMEN";
+    estilizarFila(ws2.getRow(r2), { fill: XL_DARK, font: { ...xlBlanco, size: 11 }, cols: 8 });
+    r2++;
+
+    [
+      ["CONTADO", t.totContado, t.montoContado],
+      ["PAGOS", t.totPagos, t.montoPagos],
+    ].forEach(([label, cant, monto]) => {
+      ws2.mergeCells(r2, 1, r2, 3);
+      ws2.getCell(r2, 1).value = label;
+      ws2.mergeCells(r2, 4, r2, 6);
+      ws2.getCell(r2, 4).value = cant;
+      ws2.mergeCells(r2, 7, r2, 8);
+      ws2.getCell(r2, 7).value = monto;
+      estilizarFila(ws2.getRow(r2), { cols: 8, numFmtCols: [7] });
+      r2++;
+    });
+
+    ws2.mergeCells(r2, 1, r2, 3);
+    ws2.getCell(r2, 1).value = "TOTAL";
+    ws2.mergeCells(r2, 4, r2, 6);
+    ws2.getCell(r2, 4).value = t.totGeneral;
+    ws2.mergeCells(r2, 7, r2, 8);
+    ws2.getCell(r2, 7).value = t.montoGeneral;
+    estilizarFila(ws2.getRow(r2), { fill: XL_GRIS, font: xlNegroBold, cols: 8, numFmtCols: [7] });
+
+    // ── Hoja 3: gráficas (imagen del pastel + leyenda de colores por oficina) ──
+    const ws3 = wb.addWorksheet("Gráficas");
+    ws3.columns = [{ width: 4 }, { width: 28 }, { width: 14 }, { width: 10 }];
+
+    const graficas = [
+      { titulo: "CANTIDAD DE PÓLIZAS POR OFICINA", svg: svgDelChart(refChartCantOficina), datos: datosPieCantOficina, moneda: false },
+      { titulo: "MONTO RECAUDADO POR OFICINA", svg: svgDelChart(refChartMontoOficina), datos: datosPieMontoOficina, moneda: true },
+      { titulo: "DISTRIBUCIÓN POR TIPO DE PRIMA", svg: svgDelChart(refChartTipoPrima), datos: datosPieTipoPrima, moneda: false },
+    ];
+
+    let r3 = 1;
+    for (const g of graficas) {
+      ws3.mergeCells(r3, 1, r3, 4);
+      ws3.getCell(r3, 1).value = g.titulo;
+      estilizarFila(ws3.getRow(r3), { fill: XL_DARK, font: { ...xlBlanco, size: 11 }, cols: 4 });
+      r3 += 2;
+
+      const png = await svgAPng(g.svg, 2);
+      if (png) {
+        const altoImg = 220;
+        const imgId = wb.addImage({ base64: png.dataUrl, extension: "png" });
+        ws3.addImage(imgId, { tl: { col: 0.2, row: r3 - 1 }, ext: { width: 260, height: altoImg } });
+        r3 += Math.ceil(altoImg / 20) + 1;
+      } else {
+        ws3.getCell(r3, 1).value = "(No fue posible generar la imagen de esta gráfica.)";
+        r3 += 2;
+      }
+
+      const totalG = g.datos.reduce((s, d) => s + d.valor, 0);
+      g.datos.forEach((d) => {
+        const row = ws3.getRow(r3);
+        row.getCell(1).fill = xlFill(cssAArgb(d.color));
+        row.getCell(2).value = d.nombre;
+        row.getCell(3).value = d.valor;
+        row.getCell(4).value = totalG > 0 ? `${Math.round((d.valor / totalG) * 100)}%` : "0%";
+        estilizarFila(row, { cols: 4, numFmtCols: g.moneda ? [3] : [] });
+        row.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+        r3++;
+      });
+
+      r3 += 2;
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `detalle-primas-${rango.s}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // — Detalle de Primas (PDF): gráficas, 4 listados, tabla de cantidad de
+  // pólizas por oficina, tabla de monto recaudado por oficina, y resumen —
+  const exportarPDFPrimas = () => {
+    if (!polizasRaw || polizasRaw.length === 0) return;
+
+    const filas = filasPrimas, listas = listasPrimas, t = totalesPrimas;
+
+    // — Gráficas: se reutiliza el <svg> ya renderizado fuera de pantalla —
     const graficaHTML = (titulo, svgEl, datos2, formato) => {
       if (!svgEl || datos2.length === 0) return "";
       return `
@@ -1119,17 +1209,18 @@ export default function EstadoDeCuenta() {
         pols.length === 0
           ? `<tr><td colspan="7" style="padding:10px;text-align:center;color:#9ca3af;border:1px solid #dde3f0">Sin pólizas en este periodo.</td></tr>`
           : pols
-              .map(
-                (p, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
+              .map((p, i) => {
+                const colorOf = colorCssFila(p.oficina_id, p._indiceOperador);
+                return `<tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
                   ${td(i + 1, "text-align:center")}
-                  ${td(p._oficinaNombre)}
+                  ${td(p._oficinaNombre, `color:${colorOf};font-weight:600`)}
                   ${td(p.constancia || "—")}
                   ${td(p.coberturas?.nombre || "—")}
                   ${td(fmt$(p.coberturas?.prima_total ?? 0), "text-align:right")}
                   ${td(p.forma_pago || "—", "text-align:center")}
                   ${td(fmtFecha(p.created_at), "text-align:center")}
-                </tr>`,
-              )
+                </tr>`;
+              })
               .join("");
       return `
         <h3 style="margin:24px 0 6px;font-size:13px;color:#13193a;border-bottom:2px solid #13193a;padding-bottom:4px">
@@ -1174,26 +1265,34 @@ export default function EstadoDeCuenta() {
         ${textoGeneral}
       </div>`;
 
-    const filaOficinaCant = (o) => `<tr>
-        ${td(o.nombre)}
+    const filaOficinaCant = (o) => {
+      const colorOf = colorCssFila(o.oficinaId, o.indiceOperador);
+      const estiloNombre = `color:${colorOf};font-weight:600`;
+      return `<tr>
+        ${td(o.nombre, estiloNombre)}
         ${td(o.c2200, "text-align:center")}
         ${td(o.c2500, "text-align:center")}
         ${td(o.c2200 + o.c2500, "text-align:center;font-weight:bold")}
-        ${td(o.nombre)}
+        ${td(o.nombre, estiloNombre)}
         ${td(o.p2200, "text-align:center")}
         ${td(o.p2674, "text-align:center")}
         ${td(o.p2200 + o.p2674, "text-align:center;font-weight:bold")}
       </tr>`;
-    const filaOficinaMonto = (o) => `<tr>
-        ${td(o.nombre)}
+    };
+    const filaOficinaMonto = (o) => {
+      const colorOf = colorCssFila(o.oficinaId, o.indiceOperador);
+      const estiloNombre = `color:${colorOf};font-weight:600`;
+      return `<tr>
+        ${td(o.nombre, estiloNombre)}
         ${td(fmt$(o.mc2200), "text-align:right")}
         ${td(fmt$(o.mc2500), "text-align:right")}
         ${td(fmt$(o.mc2200 + o.mc2500), "text-align:right;font-weight:bold")}
-        ${td(o.nombre)}
+        ${td(o.nombre, estiloNombre)}
         ${td(fmt$(o.mp2200), "text-align:right")}
         ${td(fmt$(o.mp2674), "text-align:right")}
         ${td(fmt$(o.mp2200 + o.mp2674), "text-align:right;font-weight:bold")}
       </tr>`;
+    };
 
     const totalesCant = `<tr style="background:#f3f4f6;font-weight:bold">
         ${td("TOTAL")}
@@ -1268,31 +1367,18 @@ export default function EstadoDeCuenta() {
   };
 
   const inp =
-    "px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
+    "px-2.5 py-1.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
 
   return (
-    <div className="p-4 md:p-6 space-y-2 max-w-5xl mx-auto">
-      {/* Encabezado */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[#13193a] flex items-center justify-center shrink-0">
-          <FileText className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-lg font-bold text-[#13193a]">Estado de Cuenta</h1>
-          <p className="text-xs text-gray-500">
-            Resumen de pólizas emitidas por periodo
-          </p>
-        </div>
-      </div>
-
+    <div className="space-y-2">
       {/* Panel de filtro */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
-        {/* Toggle modo */}
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-gray-500">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Toggle modo */}
+          <span className="text-xs font-medium text-gray-500 shrink-0">
             Consultar por:
           </span>
-          <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex rounded-xl border border-gray-200 overflow-hidden shrink-0">
             {[
               { id: "mes", label: "Mes" },
               { id: "intervalo", label: "Intervalo de fechas" },
@@ -1310,14 +1396,13 @@ export default function EstadoDeCuenta() {
               </button>
             ))}
           </div>
-        </div>
 
-        {/* Inputs */}
-        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-px h-8 bg-gray-200 shrink-0" />
+
           {modo === "mes" ? (
             <>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500 font-medium">Mes</label>
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-gray-500 font-medium shrink-0">Mes</label>
                 <select
                   value={selMes}
                   onChange={(e) => setSelMes(Number(e.target.value))}
@@ -1330,8 +1415,8 @@ export default function EstadoDeCuenta() {
                   ))}
                 </select>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500 font-medium">Año</label>
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-gray-500 font-medium shrink-0">Año</label>
                 <select
                   value={selAnio}
                   onChange={(e) => setSelAnio(Number(e.target.value))}
@@ -1347,8 +1432,8 @@ export default function EstadoDeCuenta() {
             </>
           ) : (
             <>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500 font-medium">
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-gray-500 font-medium shrink-0">
                   Desde
                 </label>
                 <input
@@ -1358,8 +1443,8 @@ export default function EstadoDeCuenta() {
                   className={inp}
                 />
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500 font-medium">
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-gray-500 font-medium shrink-0">
                   Hasta
                 </label>
                 <input
@@ -1388,64 +1473,28 @@ export default function EstadoDeCuenta() {
 
           {datos !== null && datos.length > 0 && (
             <>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400 font-medium hidden lg:inline">
-                  Resumen por Oficina:
-                </span>
-                <button
-                  onClick={exportarExcel}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-green-600 text-green-700 text-sm font-medium hover:bg-green-50 transition-all"
-                >
-                  <Download className="w-4 h-4" />
-                  Excel
-                </button>
-                <button
-                  onClick={exportarPDF}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-500 text-red-600 text-sm font-medium hover:bg-red-50 transition-all"
-                >
-                  <Printer className="w-4 h-4" />
-                  PDF
-                </button>
-              </div>
-
-              <div className="w-px h-8 bg-gray-200 hidden sm:block" />
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400 font-medium hidden lg:inline">
-                  Detalle de Primas:
-                </span>
-                <button
-                  onClick={exportarExcelPrimas}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-emerald-700 text-emerald-800 text-sm font-medium hover:bg-emerald-50 transition-all"
-                >
-                  <Download className="w-4 h-4" />
-                  Excel
-                </button>
-                <button
-                  onClick={exportarPDFPrimas}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-rose-600 text-rose-700 text-sm font-medium hover:bg-rose-50 transition-all"
-                >
-                  <Printer className="w-4 h-4" />
-                  PDF
-                </button>
-              </div>
+              <div className="w-px h-8 bg-gray-200 shrink-0" />
+              <button
+                onClick={tab === "primas" ? exportarExcelPrimas : exportarExcel}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-green-600 text-green-700 text-sm font-medium hover:bg-green-50 transition-all"
+              >
+                <Download className="w-4 h-4" />
+                Exportar Excel
+              </button>
+              <button
+                onClick={tab === "primas" ? exportarPDFPrimas : exportarPDF}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-500 text-red-600 text-sm font-medium hover:bg-red-50 transition-all"
+              >
+                <Printer className="w-4 h-4" />
+                Exportar PDF
+              </button>
             </>
           )}
         </div>
       </div>
 
-      {/* Gráficas de Detalle de Primas — NO se muestran en la app; se montan
-          fuera de pantalla únicamente para poder capturar su <svg> y
-          usarlo en las exportaciones de PDF y Excel. */}
-      {datos !== null && datos.length > 0 && totalesPrimas.totGeneral > 0 && (
-        <div style={{ position: "absolute", left: "-99999px", top: 0 }} aria-hidden="true">
-          <GraficaPastel ref={refChartCantOficina} datos={datosPieCantOficina} />
-          <GraficaPastel ref={refChartMontoOficina} datos={datosPieMontoOficina} />
-          <GraficaPastel ref={refChartTipoPrima} datos={datosPieTipoPrima} />
-        </div>
-      )}
-
-      {/* Tabla de resultados */}
+      {/* Tabla de resultados — el mismo cuadro para ambas pestañas; lo único
+          que cambia entre pestañas es a qué exportador apuntan los botones. */}
       {datos !== null && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
@@ -1630,6 +1679,64 @@ export default function EstadoDeCuenta() {
           </div>
         </div>
       )}
+
+      {/* Gráficas del detalle de primas — NO se muestran en la app; se
+          montan fuera de pantalla, siempre que haya datos, para poder
+          capturar su <svg> al exportar Excel/PDF de esa pestaña sin
+          depender de que la pestaña "primas" esté activa. */}
+      {polizasRaw !== null && polizasRaw.length > 0 && totalesPrimas.totGeneral > 0 && (
+        <div style={{ position: "absolute", left: "-99999px", top: 0 }} aria-hidden="true">
+          <GraficaPastel ref={refChartCantOficina} datos={datosPieCantOficina} />
+          <GraficaPastel ref={refChartMontoOficina} datos={datosPieMontoOficina} />
+          <GraficaPastel ref={refChartTipoPrima} datos={datosPieTipoPrima} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// Página
+// ════════════════════════════════════════════════════════════
+
+export default function EstadoDeCuenta() {
+  const [tab, setTab] = useState("resumen");
+
+  return (
+    <div className="p-6 min-h-full bg-gray-50 space-y-5">
+      {/* Encabezado */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-[#13193a] flex items-center justify-center shrink-0">
+          <FileText className="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <h1 className="text-lg font-bold text-[#13193a]">Estado de Cuenta</h1>
+          <p className="text-xs text-gray-500">
+            Resumen de pólizas emitidas por periodo
+          </p>
+        </div>
+      </div>
+
+      <div className="flex rounded-xl border border-gray-200 overflow-hidden w-fit">
+        {[
+          { id: "resumen", label: "Resumen por Oficina" },
+          { id: "primas", label: "Detalle de Primas" },
+        ].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`px-4 py-1.5 text-xs font-medium transition-all ${
+              tab === t.id ? "bg-[#13193a] text-white" : "text-gray-500 hover:bg-gray-50"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="pt-2">
+        <PanelEstadoCuenta tab={tab} />
+      </div>
     </div>
   );
 }

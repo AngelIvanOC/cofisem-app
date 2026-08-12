@@ -412,6 +412,7 @@ export async function emitirPoliza({
   `;
 
   let newId;
+  let esInsercionNueva = false;
 
   if (polizaId) {
     // Detectar si es SUBSECUENTE o RENOVACION (constancia pre-asignada — no regenerar)
@@ -474,44 +475,62 @@ export async function emitirPoliza({
       .single();
     if (e1) throw e1;
     newId = nueva.id;
+    esInsercionNueva = true;
   }
 
-  // Si se proporcionó número manual: usarlo directamente, sin generar constancia
-  if (numeroManual) {
-    const constanciaManual = numeroManual.trim().toUpperCase();
+  // A partir de aquí, si algo falla y la póliza se acaba de insertar en esta
+  // misma llamada (esInsercionNueva), el registro con folio provisional
+  // "COF-<timestamp>" quedaría huérfano en la BD (sin constancia ni cuotas)
+  // y un reintento del usuario generaría un duplicado. Por eso se envuelve
+  // en try/catch: ante cualquier error se borra ese registro a medio hacer
+  // antes de propagar el error, dejando la BD limpia para el reintento.
+  try {
+    // Si se proporcionó número manual: usarlo directamente, sin generar constancia
+    if (numeroManual) {
+      const constanciaManual = numeroManual.trim().toUpperCase();
+      const { data: final, error: e2 } = await supabase
+        .from('polizas')
+        .update({ constancia: constanciaManual, numero_poliza: constanciaManual })
+        .eq('id', newId)
+        .select(SELECT_FULL)
+        .single();
+      if (e2) throw e2;
+      await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
+      return final;
+    }
+
+    // Contar pólizas emitidas globales (seq de 8 dígitos)
+    const { count: globalSeq } = await supabase
+      .from('polizas')
+      .select('id', { count: 'exact', head: true })
+      .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA'])
+      .lte('id', newId);
+
+    // Toda emisión nueva es siempre la primera versión (-01) de ese número de póliza.
+    // El incremento del sufijo solo ocurre al renovar (ver renovarPoliza).
+    const constancia = generarConstancia(ahora, globalSeq ?? 1, 1, oficinaId);
+
     const { data: final, error: e2 } = await supabase
       .from('polizas')
-      .update({ constancia: constanciaManual, numero_poliza: constanciaManual })
+      .update({ constancia, numero_poliza: constancia })
       .eq('id', newId)
       .select(SELECT_FULL)
       .single();
     if (e2) throw e2;
+
     await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
+
     return final;
+  } catch (err) {
+    if (esInsercionNueva) {
+      // Si el propio rollback falla (p.ej. sin conexión), no debe tapar el
+      // error original — igual se propaga para que la operadora lo vea.
+      try {
+        await supabase.from('polizas').delete().eq('id', newId);
+      } catch {}
+    }
+    throw err;
   }
-
-  // Contar pólizas emitidas globales (seq de 8 dígitos)
-  const { count: globalSeq } = await supabase
-    .from('polizas')
-    .select('id', { count: 'exact', head: true })
-    .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA'])
-    .lte('id', newId);
-
-  // Toda emisión nueva es siempre la primera versión (-01) de ese número de póliza.
-  // El incremento del sufijo solo ocurre al renovar (ver renovarPoliza).
-  const constancia = generarConstancia(ahora, globalSeq ?? 1, 1, oficinaId);
-
-  const { data: final, error: e2 } = await supabase
-    .from('polizas')
-    .update({ constancia, numero_poliza: constancia })
-    .eq('id', newId)
-    .select(SELECT_FULL)
-    .single();
-  if (e2) throw e2;
-
-  await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
-
-  return final;
 }
 
 // ── Renovar póliza (incrementa el sufijo de la constancia) ───────────────

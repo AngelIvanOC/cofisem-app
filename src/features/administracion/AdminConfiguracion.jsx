@@ -3,9 +3,13 @@ import { supabase } from "../../supabaseClient";
 import Swal from "sweetalert2";
 import {
   Sliders, X, Plus, DollarSign, Percent, ChevronDown,
-  ChevronRight, Loader2, Settings,
+  ChevronRight, Loader2, Settings, Building2, Pencil,
 } from "lucide-react";
 import { fetchPermitirFechasPasadas, setPermitirFechasPasadas, fetchPermitirNumeroManual, setPermitirNumeroManual } from "../../services/configuracion";
+
+function esHexValido(c) {
+  return typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c);
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 function fmtFecha(str) {
@@ -242,6 +246,97 @@ function ModalNuevaVersionCobertura({ cobertura, onClose, onGuardado }) {
   );
 }
 
+// ── Modal: Nueva/editar oficina (nombre + color) ─────────────
+function ModalOficina({ oficina, onClose, onGuardado }) {
+  const esEdicion = !!oficina;
+  const [nombre, setNombre] = useState(oficina?.nombre ?? "");
+  const [color, setColor] = useState(esHexValido(oficina?.color) ? oficina.color : "#2a78d6");
+  const [guardando, setGuardando] = useState(false);
+
+  const valido = nombre.trim() && esHexValido(color);
+
+  const handleGuardar = async () => {
+    setGuardando(true);
+    try {
+      const payload = { nombre: nombre.trim(), color };
+      const { error } = esEdicion
+        ? await supabase.from("oficinas").update(payload).eq("id", oficina.id)
+        : await supabase.from("oficinas").insert(payload);
+      if (error) throw error;
+      onGuardado();
+      Swal.fire({
+        icon: "success",
+        title: esEdicion ? "Oficina actualizada" : "Oficina creada",
+        text: `"${nombre.trim()}" quedó con el color ${color}.`,
+        confirmButtonColor: "#13193a", timer: 3500, timerProgressBar: true,
+      });
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Error", text: e.message, confirmButtonColor: "#13193a" });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const inp = "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.55)" }}
+      onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+          <div className="w-9 h-9 rounded-xl bg-[#13193a]/8 flex items-center justify-center shrink-0">
+            <Building2 className="w-5 h-5 text-[#13193a]" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-sm font-bold text-[#13193a]">{esEdicion ? "Editar oficina" : "Nueva oficina"}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">El color identifica a la oficina en gráficas y tablas de Detalle de Primas</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+              Nombre <span className="text-red-400">*</span>
+            </label>
+            <input value={nombre} onChange={(e) => setNombre(e.target.value)} className={inp} placeholder="COFISEM ..." />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+              Color <span className="text-red-400">*</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={esHexValido(color) ? color : "#2a78d6"}
+                onChange={(e) => setColor(e.target.value)}
+                className="w-12 h-10 rounded-lg border border-gray-200 cursor-pointer shrink-0"
+              />
+              <input
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className={`flex-1 font-mono ${inp}`}
+                placeholder="#2A78D6"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={handleGuardar} disabled={!valido || guardando}
+            className="flex-1 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-lg shadow-[#13193a]/15 flex items-center justify-center gap-2">
+            {guardando ? <><Loader2 className="w-4 h-4 animate-spin" />Guardando…</> : "Guardar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ──────────────────────────────────────────
 export default function AdminConfiguracion({ usuario }) {
   const [tab,            setTab]            = useState("costos");
@@ -256,6 +351,17 @@ export default function AdminConfiguracion({ usuario }) {
   const [permitirFechas,   setPermitirFechas]   = useState(false);
   const [permitirNumMan,   setPermitirNumMan]   = useState(false);
   const [guardandoSist,    setGuardandoSist]    = useState(false);
+  const [oficinas,        setOficinas]        = useState([]);
+  const [cargandoOfs,     setCargandoOfs]     = useState(true);
+  const [modalOficina,    setModalOficina]    = useState(false);
+  const [oficinaEdit,     setOficinaEdit]     = useState(null);
+
+  const cargarOficinas = useCallback(async () => {
+    setCargandoOfs(true);
+    const { data } = await supabase.from("oficinas").select("id, nombre, color").order("nombre");
+    setOficinas(data ?? []);
+    setCargandoOfs(false);
+  }, []);
 
   const cargarCostos = useCallback(async () => {
     setCargandoCostos(true);
@@ -278,9 +384,10 @@ export default function AdminConfiguracion({ usuario }) {
   useEffect(() => {
     cargarCostos();
     cargarCoberturas();
+    cargarOficinas();
     fetchPermitirFechasPasadas().then(setPermitirFechas).catch(console.error);
     fetchPermitirNumeroManual().then(setPermitirNumMan).catch(console.error);
-  }, [cargarCostos, cargarCoberturas]);
+  }, [cargarCostos, cargarCoberturas, cargarOficinas]);
 
   const h = hoy();
   const currentCostos = {};
@@ -308,7 +415,7 @@ export default function AdminConfiguracion({ usuario }) {
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-center border-b border-gray-100 px-2">
-          {[{ k: "costos", l: "Costos de emisión" }, { k: "coberturas", l: "Coberturas" }, { k: "sistema", l: "Sistema" }].map((t) => (
+          {[{ k: "costos", l: "Costos de emisión" }, { k: "coberturas", l: "Coberturas" }, { k: "oficinas", l: "Oficinas" }, { k: "sistema", l: "Sistema" }].map((t) => (
             <button key={t.k} onClick={() => setTab(t.k)}
               className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all ${tab === t.k ? "border-[#13193a] text-[#13193a]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
               {t.l}
@@ -515,6 +622,66 @@ export default function AdminConfiguracion({ usuario }) {
             )}
           </div>
         )}
+
+        {/* ── Tab: Oficinas ────────────────────────────────────── */}
+        {tab === "oficinas" && (
+          <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+                Oficinas registradas
+              </p>
+              <button onClick={() => { setOficinaEdit(null); setModalOficina(true); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#13193a] text-white text-xs font-bold hover:bg-[#1e2a50] transition-all shadow-sm shadow-[#13193a]/20">
+                <Plus className="w-3.5 h-3.5" />
+                Nueva oficina
+              </button>
+            </div>
+
+            {cargandoOfs ? (
+              <div className="h-24 flex items-center justify-center gap-2 text-gray-400 text-sm">
+                <Loader2 className="w-5 h-5 animate-spin" /> Cargando…
+              </div>
+            ) : oficinas.length === 0 ? (
+              <div className="text-center py-8 text-sm text-gray-400">No hay oficinas registradas.</div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50/80 border-b border-gray-100">
+                      <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-2.5 w-16">Color</th>
+                      <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-2.5">Oficina</th>
+                      <th className="text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 py-2.5 w-28">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {oficinas.map((of_) => (
+                      <tr key={of_.id} className="hover:bg-gray-50/60">
+                        <td className="px-4 py-2.5">
+                          <span
+                            className="inline-block w-6 h-6 rounded-md border border-gray-200"
+                            style={{ background: esHexValido(of_.color) ? of_.color : "#e5e7eb" }}
+                            title={of_.color || "Sin color asignado"}
+                          />
+                        </td>
+                        <td className="px-4 py-2.5 text-xs font-semibold text-gray-700">{of_.nombre}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button
+                            onClick={() => { setOficinaEdit(of_); setModalOficina(true); }}
+                            className="inline-flex items-center gap-1 text-xs text-[#13193a] font-medium hover:underline"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Editar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Tab: Sistema ───────────────────────────────────────── */}
         {tab === "sistema" && (
           <div className="p-6 space-y-6">
@@ -631,6 +798,7 @@ export default function AdminConfiguracion({ usuario }) {
 
       {modalCostos && <ModalNuevoCosto usuario={usuario} onClose={() => setModalCostos(false)} onGuardado={() => { setModalCostos(false); cargarCostos(); }} />}
       {cobModal && <ModalNuevaVersionCobertura cobertura={cobModal} onClose={() => setCobModal(null)} onGuardado={() => { setCobModal(null); cargarCoberturas(); }} />}
+      {modalOficina && <ModalOficina oficina={oficinaEdit} onClose={() => setModalOficina(false)} onGuardado={cargarOficinas} />}
     </div>
   );
 }
