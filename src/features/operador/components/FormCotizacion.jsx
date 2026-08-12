@@ -665,7 +665,13 @@ export default function FormCotizacion({
       });
       onTramitar(poliza);
     } catch (e) {
-      alert("Error al emitir póliza: " + e.message);
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo emitir la póliza",
+        text: e.message,
+        confirmButtonColor: "#13193a",
+        confirmButtonText: "Aceptar",
+      });
     } finally {
       setIsEmitting(false);
     }

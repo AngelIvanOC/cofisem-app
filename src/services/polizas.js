@@ -298,21 +298,27 @@ export async function crearPolizaSubsecuente({ polizaOriginalId, clienteId, cobe
     .single();
   if (e1) throw e1;
 
-  const { count: globalSeq } = await supabase
-    .from('polizas')
-    .select('id', { count: 'exact', head: true })
-    .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA','SUBSECUENTE'])
-    .lte('id', nueva.id);
+  try {
+    // Folio real desde la secuencia (ver nota en emitirPoliza) — nunca se
+    // repite aunque después se borren filas.
+    const { data: globalSeq, error: eSeq } = await supabase.rpc('siguiente_folio_poliza');
+    if (eSeq) throw eSeq;
 
-  const constancia = generarConstancia(hoy, globalSeq ?? 1, 1, oficina_id);
+    const constancia = generarConstancia(hoy, globalSeq ?? 1, 1, oficina_id);
 
-  const { error: e2 } = await supabase
-    .from('polizas')
-    .update({ constancia, numero_poliza: constancia })
-    .eq('id', nueva.id);
-  if (e2) throw e2;
+    const { error: e2 } = await supabase
+      .from('polizas')
+      .update({ constancia, numero_poliza: constancia })
+      .eq('id', nueva.id);
+    if (e2) throw e2;
 
-  return { id: nueva.id, constancia };
+    return { id: nueva.id, constancia };
+  } catch (err) {
+    try {
+      await supabase.from('polizas').delete().eq('id', nueva.id);
+    } catch {}
+    throw err;
+  }
 }
 
 // ── Leer pólizas subsecuentes asignadas a un operador ────────────────────
@@ -499,12 +505,12 @@ export async function emitirPoliza({
       return final;
     }
 
-    // Contar pólizas emitidas globales (seq de 8 dígitos)
-    const { count: globalSeq } = await supabase
-      .from('polizas')
-      .select('id', { count: 'exact', head: true })
-      .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA'])
-      .lte('id', newId);
+    // Folio global (seq de 8 dígitos): viene de una secuencia real de Postgres
+    // (polizas_folio_seq / RPC siguiente_folio_poliza), no de contar filas
+    // vivas — así nunca se repite un número aunque después se borren pólizas
+    // (contar filas se desincroniza con cada borrado; una secuencia no).
+    const { data: globalSeq, error: eSeq } = await supabase.rpc('siguiente_folio_poliza');
+    if (eSeq) throw eSeq;
 
     // Toda emisión nueva es siempre la primera versión (-01) de ese número de póliza.
     // El incremento del sufijo solo ocurre al renovar (ver renovarPoliza).
