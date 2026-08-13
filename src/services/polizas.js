@@ -417,6 +417,57 @@ export async function emitirPoliza({
     coberturas(nombre, prima_neta, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
   `;
 
+  // ── Registrar automáticamente en el corte diario (polizas_cofisem) ────────
+  // Solo se llenan los datos que ya se conocen al emitir. Lo que solo se
+  // sabe al cobrar en caja (folio físico, vale, efectivo/cheque/tdc,
+  // autorización, documentos recibidos, observaciones) queda pendiente
+  // — completado=false — para que se termine de capturar después desde
+  // /corte con el botón "Completar". No debe tumbar la emisión si falla.
+  async function registrarEnCorte(finalPoliza) {
+    try {
+      const cliente  = finalPoliza.clientes   ?? {};
+      const vendedor = finalPoliza.vendedores ?? {};
+      const asegurado_nombre =
+        [cliente.nombre, cliente.apellido].filter(Boolean).join(' ').trim() || null;
+      const vendedor_nombre =
+        vendedor.id && vendedor.id !== 1
+          ? [vendedor.nombre, vendedor.apellido].filter(Boolean).join(' ').trim()
+          : null;
+      const hoyIso = new Date().toISOString().split('T')[0];
+      const { error } = await supabase.from('polizas_cofisem').upsert({
+        poliza_id:         finalPoliza.id,
+        fecha_corte:       hoyIso,
+        aseguradora:       'GAMAN',
+        numero_poliza:     finalPoliza.constancia || finalPoliza.numero_poliza,
+        fecha_emision:     hoyIso,
+        vigencia_inicio:   finalPoliza.fecha_inicio,
+        vigencia_fin:      finalPoliza.fecha_fin,
+        asegurado_nombre,
+        asegurado_nombre_pila:      cliente.nombre   || null,
+        asegurado_apellido_paterno: cliente.apellido || null,
+        telefono:          cliente.telefono || null,
+        vendedor_id:       vendedor.id ?? null,
+        vendedor_nombre,
+        placas:            finalPoliza.placas || null,
+        tipo:              'COCHE',
+        cobertura:         resolvedCoberturaNombre ?? finalPoliza.tipo_poliza ?? null,
+        forma_pago:        finalPoliza.forma_pago || 'CONTADO',
+        prima_anual:       primaTotal ?? 0,
+        prima_neta:        primaNeta ?? 0,
+        prima_primer_pago: pagos?.primerPago ?? 0,
+        // No se asume forma de pago — la operadora debe indicar cómo se
+        // cobró (efectivo/cheque/tdc/vale) desde "Completar", igual que
+        // con las pólizas capturadas manualmente en /polizas.
+        oficina_id:        oficinaId || null,
+        creado_por:        creadoPor || null,
+        completado:        false,
+      }, { onConflict: 'poliza_id' });
+      if (error) throw error;
+    } catch (err) {
+      console.error('No se pudo registrar la póliza en el corte del día:', err);
+    }
+  }
+
   let newId;
   let esInsercionNueva = false;
 
@@ -463,6 +514,7 @@ export async function emitirPoliza({
           await supabase.from('polizas').update({ estatus: 'VENCIDA' }).eq('id', renovacionDeId);
         }
       }
+      await registrarEnCorte(final);
       return final;
     }
   } else {
@@ -502,6 +554,7 @@ export async function emitirPoliza({
         .single();
       if (e2) throw e2;
       await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
+      await registrarEnCorte(final);
       return final;
     }
 
@@ -525,6 +578,7 @@ export async function emitirPoliza({
     if (e2) throw e2;
 
     await generarCuotasPoliza(newId, formaPago, primaTotal, fechaInicio, esGestor ?? false, pagos);
+    await registrarEnCorte(final);
 
     return final;
   } catch (err) {

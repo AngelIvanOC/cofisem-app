@@ -1,276 +1,586 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Paperclip, Inbox, CheckCircle2, Loader2 } from "lucide-react";
+import { supabase } from "../../supabaseClient";
+import { verComprobante as abrirComprobante } from "../../services/comprobantesPago";
 
-const OFICINAS = ["COFISEM AV. E.ZAPATA", "OFICINA CIVAC", "COFISEM TEMIXCO", "COFISEM CUAUTLA"];
+const n = (v) => parseFloat(v) || 0;
+const $ = (v) => `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmt = (d) =>
+  d ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+const fmtDateTime = (ts) =>
+  ts ? new Date(ts).toLocaleString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+const hoyIso = () => new Date().toISOString().split("T")[0];
 
-const CORTES_MOCK = {
-  "COFISEM AV. E.ZAPATA": {
-    fecha: "17/03/2026",
-    generadoPor: "Laura Rosher",
-    cerrado: true,
-    polizas: [
-      { no:1, aseguradora:"QUALITAS", poliza:"3413198", fechaEmision:"17/03/2026", vigenciaInicio:"17/03/2026", vigenciaFin:"17/03/2027", folio:"T0312", vendedor:"MARCO A. CRUZ",  asegurado:"María García López",  vale:0,   primaAnual:5500.00, primaNeta:4200.00, primerPago:2200.00, cobertura:"TAXI BÁSICA 2500",         placas:"VRM-123A", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"CONTADO",    observaciones:"" },
-      { no:2, aseguradora:"GNP",      poliza:"3413167", fechaEmision:"17/03/2026", vigenciaInicio:"17/03/2026", vigenciaFin:"17/03/2027", folio:"T0455", vendedor:"LAURA ROSHER",   asegurado:"Roberto Díaz Ramos",  vale:220, primaAnual:6200.00, primaNeta:4900.00, primerPago:637.00,  cobertura:"SERV. PÚB. 50/50 GAMAN 2",  placas:"CHM-456B", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"4 PARCIALES",observaciones:"" },
-    ],
-  },
-  "OFICINA CIVAC": {
-    fecha: "17/03/2026",
-    generadoPor: "Marco Antonio",
-    cerrado: true,
-    polizas: [
-      { no:1, aseguradora:"QUALITAS", poliza:"3413241", fechaEmision:"13/03/2026", vigenciaInicio:"13/03/2026", vigenciaFin:"13/03/2027", folio:"T0455", vendedor:"LAURA ROSHER",   asegurado:"Angel Ivan Ortega",  vale:400, primaAnual:8385.69, primaNeta:6318.92, primerPago:2679.33, cobertura:"COBERTURA APP (UBER, DIDI)", placas:"TRAMITE",  uso:"DIDI", tipo:"COCHE", noPago:1, formaPago:"TRIMESTRAL", observaciones:"COMISION PAGADA POLIZA 960972454" },
-      { no:2, aseguradora:"QUALITAS", poliza:"3414002", fechaEmision:"17/03/2026", vigenciaInicio:"17/03/2026", vigenciaFin:"17/03/2027", folio:"T0312", vendedor:"MARCO A. CRUZ",  asegurado:"Rosa Mendoza Lima",   vale:0,   primaAnual:5500.00, primaNeta:4200.00, primerPago:2200.00, cobertura:"TAXI BÁSICA 2500",         placas:"EFG-222H", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"CONTADO",    observaciones:"" },
-    ],
-  },
-  "COFISEM TEMIXCO": {
-    fecha: "17/03/2026",
-    generadoPor: "Carlos Soto",
-    cerrado: false,
-    polizas: [
-      { no:1, aseguradora:"QUALITAS", poliza:"3414001", fechaEmision:"17/03/2026", vigenciaInicio:"17/03/2026", vigenciaFin:"17/03/2027", folio:"T0455", vendedor:"LAURA ROSHER",   asegurado:"Pedro Ramos Salinas", vale:0,   primaAnual:6200.00, primaNeta:4900.00, primerPago:2548.00, cobertura:"SERV. PÚB. 50/50 GAMAN 2",  placas:"BCD-111G", uso:"TAXI", tipo:"COCHE", noPago:1, formaPago:"CONTADO",    observaciones:"Enviada por operadora CIVAC" },
-    ],
-  },
-  "COFISEM CUAUTLA": {
-    fecha: "17/03/2026",
-    generadoPor: "Patricia Morales",
-    cerrado: true,
-    polizas: [],
-  },
+const REVISION_META = {
+  PENDIENTE: { label: "Pendiente de revisión", cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  APROBADO:  { label: "Aprobado",               cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  REGRESADO: { label: "Regresado",              cls: "bg-red-50 text-red-700 border-red-200" },
+  RECIBIDO:  { label: "Recibido",               cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
 };
 
-export default function CorteAnalista() {
-  const [oficinaSel, setOficinaSel] = useState(OFICINAS[0]);
+const PAGO_ADMIN_META = {
+  DESCONOCIDO: { label: "Desconocido", cls: "bg-gray-100 text-gray-500 border-gray-200" },
+  PAGADA:      { label: "Pagada",      cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  NO_PAGADA:   { label: "No pagada",   cls: "bg-red-50 text-red-700 border-red-200" },
+};
+const PAGO_ADMIN_CICLO = { DESCONOCIDO: "PAGADA", PAGADA: "NO_PAGADA", NO_PAGADA: "DESCONOCIDO" };
 
-  const corte = CORTES_MOCK[oficinaSel];
+function totalesDe(regs) {
+  return {
+    count: regs.length,
+    vale: regs.reduce((s, r) => s + n(r.vale), 0),
+    primaAnual: regs.reduce((s, r) => s + n(r.prima_anual), 0),
+    primaNeta: regs.reduce((s, r) => s + n(r.prima_neta), 0),
+    primerPago: regs.reduce((s, r) => s + n(r.prima_primer_pago), 0),
+    efectivo: regs.reduce((s, r) => s + n(r.efectivo), 0),
+    cheque: regs.reduce((s, r) => s + n(r.cheque), 0),
+    tdc: regs.reduce((s, r) => s + n(r.tdc), 0),
+  };
+}
 
-  const totalVales    = corte.polizas.reduce((s, p) => s + p.vale, 0);
-  const totalAnual    = corte.polizas.reduce((s, p) => s + p.primaAnual, 0);
-  const totalNeta     = corte.polizas.reduce((s, p) => s + p.primaNeta, 0);
-  const totalPrimerPago = corte.polizas.reduce((s, p) => s + p.primerPago, 0);
+export default function CorteAnalista({ usuario }) {
+  const [searchParams] = useSearchParams();
+  const oficinaParam = searchParams.get("oficina");
+  const fechaParam = searchParams.get("fecha");
+  const detalleRef = useRef(null);
+
+  const [oficinas, setOficinas] = useState([]);
+  const [oficinaSel, setOficinaSel] = useState(oficinaParam ? Number(oficinaParam) : null);
+  const [fecha, setFecha] = useState(fechaParam || hoyIso());
+
+  const [registrosDia, setRegistrosDia] = useState([]);       // todas las oficinas, esa fecha
+  const [entregasDia, setEntregasDia] = useState([]);          // corte_efectivo_entrega, todas las oficinas, esa fecha
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+
+  const [liberaciones, setLiberaciones] = useState([]);
+  const [liberacionesLoading, setLiberacionesLoading] = useState(true);
+  const [liberandoId, setLiberandoId] = useState(null);
+  const [errorLiberaciones, setErrorLiberaciones] = useState(null);
+
+  const [modalRegresar, setModalRegresar] = useState(false);
+  const [textoObservacion, setTextoObservacion] = useState("");
+  const [modalNota, setModalNota] = useState(false);
+  const [textoNota, setTextoNota] = useState("");
+
+  useEffect(() => {
+    supabase.from("oficinas").select("id, nombre").order("nombre").then(({ data, error }) => {
+      if (error) { setErrorMsg(error.message); return; }
+      setOficinas(data ?? []);
+      if (data?.length && oficinaSel == null) setOficinaSel(data[0].id);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const cargarLiberaciones = useCallback(async () => {
+    setLiberacionesLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("corte_efectivo_entrega")
+        .select("*")
+        .eq("cierre_incompleto", true)
+        .not("estatus_revision", "in", "(APROBADO,RECIBIDO)")
+        .order("fecha_corte", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      const conConteo = await Promise.all(
+        (data ?? []).map(async (row) => {
+          const { count } = await supabase
+            .from("polizas_cofisem")
+            .select("id", { count: "exact", head: true })
+            .eq("fecha_corte", row.fecha_corte)
+            .eq("oficina_id", row.oficina_id)
+            .eq("completado", false);
+          return { ...row, incompletas: count ?? 0 };
+        }),
+      );
+      setLiberaciones(conConteo);
+      setErrorLiberaciones(null);
+    } catch (e) {
+      setErrorLiberaciones(e.message);
+    } finally {
+      setLiberacionesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { cargarLiberaciones(); }, [cargarLiberaciones]);
+
+  function irACorte(row) {
+    setOficinaSel(row.oficina_id);
+    setFecha(row.fecha_corte);
+    detalleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function handleLiberar(row) {
+    setLiberandoId(row.id);
+    try {
+      const { error } = await supabase
+        .from("corte_efectivo_entrega")
+        .update({ estatus_revision: "APROBADO", revisado_por: usuario?.id ?? null })
+        .eq("id", row.id);
+      if (error) throw error;
+      setLiberaciones((prev) => prev.filter((x) => x.id !== row.id));
+      if (row.fecha_corte === fecha && row.oficina_id === oficinaSel) cargar();
+    } catch (e) {
+      setErrorLiberaciones("No se pudo liberar el corte: " + e.message);
+    } finally {
+      setLiberandoId(null);
+    }
+  }
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [{ data: polizas, error: e1 }, { data: entregas, error: e2 }] = await Promise.all([
+        supabase.from("polizas_cofisem").select("*").eq("fecha_corte", fecha).order("created_at", { ascending: true }),
+        supabase.from("corte_efectivo_entrega").select("*").eq("fecha_corte", fecha),
+      ]);
+      if (e1) throw e1;
+      if (e2) throw e2;
+      setRegistrosDia(polizas ?? []);
+      setEntregasDia(entregas ?? []);
+      setErrorMsg(null);
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [fecha]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const oficina = oficinas.find((o) => o.id === oficinaSel);
+  const registros = registrosDia.filter((r) => r.oficina_id === oficinaSel);
+  const entrega = entregasDia.find((e) => e.oficina_id === oficinaSel) ?? null;
+  const t = totalesDe(registros);
+
+  const cerrado = !!entrega?.cerrado;
+  const estatusRevision = entrega?.estatus_revision ?? "PENDIENTE";
+  const revMeta = REVISION_META[estatusRevision] ?? REVISION_META.PENDIENTE;
+
+  async function actualizarEntrega(cambios) {
+    if (!entrega) return;
+    setGuardando(true);
+    try {
+      const { data, error } = await supabase
+        .from("corte_efectivo_entrega")
+        .update({ ...cambios, revisado_por: usuario?.id ?? null })
+        .eq("id", entrega.id)
+        .select()
+        .single();
+      if (error) throw error;
+      setEntregasDia((prev) => prev.map((e) => (e.id === data.id ? data : e)));
+      setErrorMsg(null);
+    } catch (e) {
+      setErrorMsg("No se pudo actualizar el corte: " + e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  function handleAprobar() {
+    actualizarEntrega({ estatus_revision: "APROBADO" });
+  }
+
+  function handleAbrirRegresar() {
+    setTextoObservacion(entrega?.notas_admin ?? "");
+    setModalRegresar(true);
+  }
+
+  async function handleConfirmarRegresar() {
+    if (!textoObservacion.trim()) return;
+    await actualizarEntrega({ estatus_revision: "REGRESADO", notas_admin: textoObservacion.trim() });
+    setModalRegresar(false);
+  }
+
+  function handleRecibido() {
+    actualizarEntrega({ estatus_revision: "RECIBIDO", recibido_por: usuario?.id ?? null });
+  }
+
+  function handleAbrirNota() {
+    setTextoNota(entrega?.notas_admin ?? "");
+    setModalNota(true);
+  }
+
+  async function handleGuardarNota() {
+    await actualizarEntrega({ notas_admin: textoNota.trim() || null });
+    setModalNota(false);
+  }
+
+  async function handleCiclarPago(r) {
+    const siguiente = PAGO_ADMIN_CICLO[r.estatus_pago_admin ?? "DESCONOCIDO"];
+    try {
+      const { data, error } = await supabase
+        .from("polizas_cofisem")
+        .update({ estatus_pago_admin: siguiente, estatus_pago_admin_por: usuario?.id ?? null, estatus_pago_admin_at: new Date().toISOString() })
+        .eq("id", r.id)
+        .select()
+        .single();
+      if (error) throw error;
+      setRegistrosDia((prev) => prev.map((row) => (row.id === data.id ? data : row)));
+    } catch (e) {
+      setErrorMsg("No se pudo actualizar el estatus de pago: " + e.message);
+    }
+  }
+
+  async function verComprobante(path) {
+    try {
+      await abrirComprobante(path);
+    } catch (e) {
+      setErrorMsg("No se pudo abrir el comprobante: " + e.message);
+    }
+  }
 
   return (
     <div className="p-6 min-h-full bg-gray-50 space-y-5">
-
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-[#13193a]">Corte Diario por Oficina</h1>
-        <p className="text-gray-400 text-sm mt-0.5">
-          Consulta de pólizas emitidas — vista de solo lectura
-          <span className="ml-2 inline-flex items-center text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-semibold">
-            Solo pólizas · Sin datos de cobro
-          </span>
-        </p>
+        <h1 className="text-2xl font-bold text-[#13193a]">Revisión de Corte Diario</h1>
+        <p className="text-gray-400 text-sm mt-0.5">Aprueba, regresa o marca como recibidos los cortes que envían las oficinas</p>
+      </div>
+
+      {errorMsg && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex items-center justify-between">
+          {errorMsg}
+          <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-600 ml-3">✕</button>
+        </div>
+      )}
+
+      {/* Liberaciones de corte — solicitudes de cierre incompleto pendientes */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50">
+          <Inbox className="w-4 h-4 text-violet-500" />
+          <p className="text-sm font-bold text-[#13193a]">Liberaciones de corte</p>
+          {liberaciones.length > 0 && (
+            <span className="bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+              {liberaciones.length}
+            </span>
+          )}
+        </div>
+        {errorLiberaciones && (
+          <div className="mx-5 mt-3 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700 flex items-center justify-between">
+            {errorLiberaciones}
+            <button onClick={() => setErrorLiberaciones(null)} className="text-red-400 hover:text-red-600 ml-3">✕</button>
+          </div>
+        )}
+        <div className="divide-y divide-gray-50">
+          {liberacionesLoading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-gray-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Cargando…</span>
+            </div>
+          ) : liberaciones.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-emerald-600">
+              <CheckCircle2 className="w-5 h-5" />
+              <span className="text-sm font-semibold">Sin solicitudes pendientes.</span>
+            </div>
+          ) : (
+            liberaciones.map((row) => (
+              <div key={row.id} className="flex items-center gap-3 px-5 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-[#13193a] truncate">
+                    {oficinas.find((o) => o.id === row.oficina_id)?.nombre ?? "—"} · {fmt(row.fecha_corte)}
+                  </p>
+                  <p className="text-[11px] text-amber-600 font-semibold mt-0.5">
+                    {row.incompletas} {row.incompletas === 1 ? "póliza incompleta" : "pólizas incompletas"}
+                  </p>
+                  {row.nota_operador_cierre && (
+                    <p className="text-[11px] text-gray-400 truncate mt-0.5">"{row.nota_operador_cierre}"</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => irACorte(row)}
+                  className="shrink-0 px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Ver
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleLiberar(row)}
+                  disabled={liberandoId === row.id}
+                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-50 text-violet-700 text-[11px] font-semibold hover:bg-violet-100 disabled:opacity-50 transition-colors"
+                >
+                  {liberandoId === row.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Liberar"}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* Selector de oficina y fecha */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+      <div ref={detalleRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Oficina</label>
-            <select value={oficinaSel} onChange={e => setOficinaSel(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]">
-              {OFICINAS.map(o => <option key={o}>{o}</option>)}
+            <select
+              value={oficinaSel ?? ""}
+              onChange={(e) => setOficinaSel(Number(e.target.value))}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]"
+            >
+              {oficinas.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Fecha de corte</label>
-            <input type="date"
-              value="2026-03-17"
-              onChange={() => {}}
+            <input
+              type="date"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]"
             />
           </div>
-          <div className="flex items-end">
-            <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>
-              </svg>
-              Exportar este corte
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* Info del corte */}
-      <div className={[
-        "rounded-2xl border p-4 flex items-center gap-4 flex-wrap",
-        corte.cerrado ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200",
-      ].join(" ")}>
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${corte.cerrado ? "bg-emerald-500" : "bg-amber-500"}`}>
-          {corte.cerrado ? (
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
-          ) : (
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          )}
+      {loading ? (
+        <div className="flex items-center justify-center h-40 text-gray-400 text-sm gap-2">
+          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
+          Cargando…
         </div>
-        <div className="flex-1 min-w-0">
-          <p className={`text-sm font-bold ${corte.cerrado ? "text-emerald-800" : "text-amber-800"}`}>
-            {corte.cerrado ? "Corte cerrado" : "Corte en proceso"}
-          </p>
-          <p className={`text-xs mt-0.5 ${corte.cerrado ? "text-emerald-600" : "text-amber-600"}`}>
-            {oficinaSel} · {corte.fecha} · Generado por: <strong>{corte.generadoPor}</strong>
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {[
-            { label:"Pólizas",    value: corte.polizas.length },
-            { label:"1er pago",   value:`$${totalPrimerPago.toFixed(2)}` },
-            { label:"Prima anual",value:`$${totalAnual.toFixed(2)}` },
-          ].map(k => (
-            <div key={k.label} className="text-center px-4 py-2 bg-white/60 rounded-xl border border-white/80">
-              <p className="text-sm font-bold text-[#13193a]">{k.value}</p>
-              <p className="text-[10px] text-gray-500">{k.label}</p>
+      ) : (
+        <>
+          {/* Info del corte + acciones */}
+          <div className="rounded-2xl border border-gray-100 bg-white p-4 flex items-center gap-4 flex-wrap">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${cerrado ? "bg-emerald-500" : "bg-amber-500"}`}>
+              {cerrado ? (
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              ) : (
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              )}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Tabla de pólizas */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#13193a]">
-          <p className="text-sm font-bold text-white">Pólizas emitidas</p>
-          <span className="text-white/50 text-xs">·</span>
-          <span className="text-white/50 text-xs">{corte.polizas.length} registros</span>
-          <div className="ml-auto flex items-center gap-1.5 text-[11px] bg-white/10 text-white/70 px-3 py-1 rounded-full border border-white/20">
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.573-3.007-9.963-7.178z"/>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            </svg>
-            Solo lectura
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-bold text-[#13193a]">{cerrado ? "Corte cerrado" : "Corte en proceso"}</p>
+                {cerrado && (
+                  <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${revMeta.cls}`}>
+                    {revMeta.label}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {oficina?.nombre ?? "—"} · {fmt(fecha)}
+                {entrega?.cerrado_at && <> · Cerrado el {fmtDateTime(entrega.cerrado_at)}</>}
+              </p>
+              {entrega?.notas_admin && (
+                <p className="text-xs text-gray-500 mt-1 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1.5 inline-block">
+                  <strong className="text-gray-600">Nota admin:</strong> {entrega.notas_admin}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {!cerrado && (
+                <span className="text-xs text-gray-400 italic">Esperando a que el operador cierre el corte</span>
+              )}
+              {cerrado && (
+                <>
+                  <button type="button" onClick={handleAbrirNota} disabled={guardando}
+                    className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+                    Agregar nota
+                  </button>
+                  <button type="button" onClick={handleAbrirRegresar} disabled={guardando}
+                    className="px-3.5 py-2 rounded-xl border border-red-200 bg-white text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40">
+                    Regresar con observaciones
+                  </button>
+                  {estatusRevision === "PENDIENTE" && (
+                    <button type="button" onClick={handleAprobar} disabled={guardando}
+                      className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-40">
+                      Dar el visto bueno
+                    </button>
+                  )}
+                  {estatusRevision === "APROBADO" && (
+                    <button type="button" onClick={handleRecibido} disabled={guardando}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold disabled:opacity-40">
+                      Dar de recibido
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
-        </div>
 
-        {corte.polizas.length === 0 ? (
-          <div className="text-center py-16 text-sm text-gray-400">
-            <svg className="w-10 h-10 text-gray-200 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
-            </svg>
-            <p>Sin pólizas registradas en este corte.</p>
+          {/* Tabla de pólizas */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#13193a]">
+              <p className="text-sm font-bold text-white">Pólizas del corte</p>
+              <span className="text-white/50 text-xs">{registros.length} registros</span>
+            </div>
+
+            {registros.length === 0 ? (
+              <div className="text-center py-16 text-sm text-gray-400">Sin pólizas registradas en este corte.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="text-xs" style={{ minWidth: "1500px", width: "100%" }}>
+                  <thead>
+                    <tr className="bg-gray-50/80 border-b border-gray-100">
+                      {["No.", "Aseguradora", "Póliza", "Folio", "Asegurado", "Vendedor", "Cobertura", "F. Pago", "Efectivo", "Cheque", "TDC", "Vale", "P. Anual", "P. Neta", "1er Pago", "Observaciones", "Pago (admin)"].map((h) => (
+                        <th key={h} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-3 py-2.5 border-r border-gray-100 last:border-r-0 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {registros.map((r, i) => {
+                      const pagoMeta = PAGO_ADMIN_META[r.estatus_pago_admin ?? "DESCONOCIDO"];
+                      return (
+                        <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="px-3 py-2.5 font-bold text-[#13193a]">{i + 1}</td>
+                          <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{r.aseguradora || "—"}</td>
+                          <td className="px-3 py-2.5 font-mono font-bold text-[#13193a] whitespace-nowrap">{r.numero_poliza || "—"}</td>
+                          <td className="px-3 py-2.5 font-mono text-gray-600">{r.folio || "—"}</td>
+                          <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{r.asegurado_nombre || "—"}</td>
+                          <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{r.vendedor_nombre || "—"}</td>
+                          <td className="px-3 py-2.5 text-gray-600 max-w-40 truncate">{r.cobertura || "—"}</td>
+                          <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{r.forma_pago || "—"}</td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{n(r.efectivo) > 0 ? $(r.efectivo) : "—"}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-600">
+                            {n(r.cheque) > 0 ? $(r.cheque) : "—"}
+                            {r.comprobante_cheque_url && (
+                              <button type="button" onClick={() => verComprobante(r.comprobante_cheque_url)} className="ml-1 align-middle text-[#13193a] hover:text-[#1e2a50] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-gray-600">
+                            {n(r.tdc) > 0 ? $(r.tdc) : "—"}
+                            {r.comprobante_tdc_url && (
+                              <button type="button" onClick={() => verComprobante(r.comprobante_tdc_url)} className="ml-1 align-middle text-[#13193a] hover:text-[#1e2a50] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-gray-600">
+                            {n(r.vale) > 0 ? $(r.vale) : "—"}
+                            {r.comprobante_vale_url && (
+                              <button type="button" onClick={() => verComprobante(r.comprobante_vale_url)} className="ml-1 align-middle text-[#13193a] hover:text-[#1e2a50] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-[#13193a]">{$(r.prima_anual)}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-700">{$(r.prima_neta)}</td>
+                          <td className="px-3 py-2.5 text-right font-bold text-emerald-700">{$(r.prima_primer_pago)}</td>
+                          <td className="px-3 py-2.5 text-gray-400 max-w-40 truncate">{r.observaciones || "—"}</td>
+                          <td className="px-3 py-2.5">
+                            <button
+                              type="button"
+                              onClick={() => handleCiclarPago(r)}
+                              title="Clic para cambiar"
+                              className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${pagoMeta.cls}`}
+                            >
+                              {pagoMeta.label}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    <tr className="bg-[#13193a]/5 font-bold border-t-2 border-[#13193a]/20">
+                      <td colSpan={8} className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">TOTALES</td>
+                      <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(t.efectivo)}</td>
+                      <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">{$(t.cheque)}</td>
+                      <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">{$(t.tdc)}</td>
+                      <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">{$(t.vale)}</td>
+                      <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">{$(t.primaAnual)}</td>
+                      <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">{$(t.primaNeta)}</td>
+                      <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(t.primerPago)}</td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="text-xs" style={{ minWidth:"1300px", width:"100%" }}>
-              <thead>
-                <tr className="bg-gray-50/80 border-b border-gray-100">
-                  {["No.","Aseguradora","Póliza","F. Emisión"].map(h => (
-                    <th key={h} rowSpan={2} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-3 py-2 border-r border-gray-100 whitespace-nowrap align-bottom">{h}</th>
-                  ))}
-                  <th colSpan={2} className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-wide px-3 py-1.5 border-r border-gray-100 border-b border-gray-200 whitespace-nowrap bg-blue-50/40">Vigencia</th>
-                  {["Folio","Vendedor","Asegurado","Vale $","Prima T. Anual","Prima Neta Anual","Prima 1er Pago","Cobertura","Placas","Uso","Tipo","No. Pago","Forma Pago","Observaciones"].map(h => (
-                    <th key={h} rowSpan={2} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-3 py-2 border-r border-gray-100 last:border-r-0 whitespace-nowrap align-bottom">{h}</th>
-                  ))}
-                </tr>
-                <tr className="bg-gray-50/80 border-b border-gray-100">
-                  <th className="text-left text-[10px] font-bold text-blue-500 uppercase tracking-wide px-3 py-1.5 border-r border-gray-100 whitespace-nowrap bg-blue-50/40">Inicio</th>
-                  <th className="text-left text-[10px] font-bold text-blue-500 uppercase tracking-wide px-3 py-1.5 border-r border-gray-100 whitespace-nowrap bg-blue-50/40">Fin</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {corte.polizas.map((p, i) => (
-                  <tr key={i} className="hover:bg-gray-50/60 transition-colors">
-                    <td className="px-3 py-2.5 font-bold text-[#13193a]">{p.no}</td>
-                    <td className="px-3 py-2.5 font-semibold text-gray-700">{p.aseguradora}</td>
-                    <td className="px-3 py-2.5 font-mono font-bold text-[#13193a]">{p.poliza}</td>
-                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{p.fechaEmision}</td>
-                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap bg-blue-50/30">{p.vigenciaInicio}</td>
-                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap bg-blue-50/30">{p.vigenciaFin}</td>
-                    <td className="px-3 py-2.5 font-mono text-gray-600">{p.folio}</td>
-                    <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{p.vendedor}</td>
-                    <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{p.asegurado}</td>
-                    <td className="px-3 py-2.5 text-right font-semibold text-gray-700">{p.vale > 0 ? `$${p.vale.toFixed(2)}` : "—"}</td>
-                    <td className="px-3 py-2.5 text-right font-semibold text-[#13193a]">${p.primaAnual.toFixed(2)}</td>
-                    <td className="px-3 py-2.5 text-right text-gray-700">${p.primaNeta.toFixed(2)}</td>
-                    <td className="px-3 py-2.5 text-right font-bold text-emerald-700">${p.primerPago.toFixed(2)}</td>
-                    <td className="px-3 py-2.5 text-gray-600 max-w-40 truncate">{p.cobertura}</td>
-                    <td className="px-3 py-2.5 font-mono text-gray-600">{p.placas}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{p.uso}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{p.tipo}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-600">{p.noPago}</td>
-                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{p.formaPago}</td>
-                    <td className="px-3 py-2.5 text-gray-400 max-w-40 truncate">{p.observaciones || "—"}</td>
+
+          {/* Resumen multi-oficina */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-[#13193a] px-5 py-3.5">
+              <p className="text-sm font-bold text-white">Resumen de {fmt(fecha)} — todas las oficinas</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50/80 border-b border-gray-100">
+                    {["Oficina", "Pólizas", "1er pago total", "Estatus corte", "Revisión"].map((h) => (
+                      <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 whitespace-nowrap">{h}</th>
+                    ))}
                   </tr>
-                ))}
-
-                {/* Totales */}
-                <tr className="bg-[#13193a]/5 font-bold border-t-2 border-[#13193a]/20">
-                  <td colSpan={9} className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">TOTALES</td>
-                  <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">${totalVales.toFixed(2)}</td>
-                  <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">${totalAnual.toFixed(2)}</td>
-                  <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">${totalNeta.toFixed(2)}</td>
-                  <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">${totalPrimerPago.toFixed(2)}</td>
-                  <td colSpan={7}/>
-                </tr>
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {oficinas.map((o) => {
+                    const regs = registrosDia.filter((r) => r.oficina_id === o.id);
+                    const ent = entregasDia.find((e) => e.oficina_id === o.id) ?? null;
+                    const to = totalesDe(regs);
+                    const rm = REVISION_META[ent?.estatus_revision ?? "PENDIENTE"];
+                    return (
+                      <tr key={o.id} className={`hover:bg-gray-50/60 transition-colors cursor-pointer ${o.id === oficinaSel ? "bg-blue-50/40" : ""}`} onClick={() => setOficinaSel(o.id)}>
+                        <td className="px-5 py-3.5 text-sm font-semibold text-[#13193a]">{o.nombre}</td>
+                        <td className="px-5 py-3.5 text-xs font-bold text-[#13193a]">{regs.length}</td>
+                        <td className="px-5 py-3.5 text-xs font-bold text-emerald-700 tabular-nums">{$(to.primerPago)}</td>
+                        <td className="px-5 py-3.5">
+                          <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${ent?.cerrado ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                            {ent?.cerrado ? "Cerrado" : "En proceso"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {ent?.cerrado ? (
+                            <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${rm.cls}`}>{rm.label}</span>
+                          ) : <span className="text-gray-300 text-xs">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
 
-      {/* Resumen multi-oficina */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="bg-[#13193a] px-5 py-3.5">
-          <p className="text-sm font-bold text-white">Resumen de hoy — todas las oficinas</p>
-          <p className="text-white/50 text-xs mt-0.5">Solo datos de pólizas · Sin información de pagos</p>
+      {/* Modal: regresar con observaciones */}
+      {modalRegresar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <p className="text-sm font-bold text-[#13193a] mb-2">Regresar corte con observaciones</p>
+            <p className="text-xs text-gray-500 mb-3">Esto reabre el corte para que el operador pueda corregirlo. Describe qué falta o está mal.</p>
+            <textarea
+              value={textoObservacion}
+              onChange={(e) => setTextoObservacion(e.target.value)}
+              placeholder="Ej. Falta comprobante de la póliza 3413167, revisar folio T0455…"
+              className="w-full h-28 px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 resize-none"
+            />
+            <div className="flex items-center justify-end gap-3 mt-5">
+              <button type="button" onClick={() => setModalRegresar(false)} className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button type="button" onClick={handleConfirmarRegresar} disabled={!textoObservacion.trim() || guardando}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-40">
+                Regresar corte
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50/80 border-b border-gray-100">
-                {["Oficina","Pólizas","Prima anual total","Prima neta total","1er pago total","Vales","Estatus"].map(h => (
-                  <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {OFICINAS.map(o => {
-                const c = CORTES_MOCK[o];
-                const tvales  = c.polizas.reduce((s, p) => s + p.vale, 0);
-                const tanual  = c.polizas.reduce((s, p) => s + p.primaAnual, 0);
-                const tneta   = c.polizas.reduce((s, p) => s + p.primaNeta, 0);
-                const tpago   = c.polizas.reduce((s, p) => s + p.primerPago, 0);
-                return (
-                  <tr key={o} className={`hover:bg-gray-50/60 transition-colors ${o === oficinaSel ? "bg-blue-50/40" : ""}`}
-                    onClick={() => setOficinaSel(o)} style={{ cursor:"pointer" }}>
-                    <td className="px-5 py-3.5 text-sm font-semibold text-[#13193a]">{o}</td>
-                    <td className="px-5 py-3.5 text-xs font-bold text-[#13193a]">{c.polizas.length}</td>
-                    <td className="px-5 py-3.5 text-xs font-semibold text-gray-700 tabular-nums">${tanual.toFixed(2)}</td>
-                    <td className="px-5 py-3.5 text-xs text-gray-600 tabular-nums">${tneta.toFixed(2)}</td>
-                    <td className="px-5 py-3.5 text-xs font-bold text-emerald-700 tabular-nums">${tpago.toFixed(2)}</td>
-                    <td className="px-5 py-3.5 text-xs text-gray-500 tabular-nums">{tvales > 0 ? `$${tvales.toFixed(2)}` : "—"}</td>
-                    <td className="px-5 py-3.5">
-                      <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
-                        c.cerrado ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
-                      }`}>
-                        {c.cerrado ? "Cerrado" : "En proceso"}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-              {/* Total general */}
-              <tr className="bg-[#13193a]/5 font-bold border-t-2 border-[#13193a]/20">
-                <td className="px-5 py-3 text-xs font-bold text-[#13193a]">TOTAL GENERAL</td>
-                <td className="px-5 py-3 text-xs font-bold text-[#13193a]">
-                  {Object.values(CORTES_MOCK).reduce((s, c) => s + c.polizas.length, 0)}
-                </td>
-                <td className="px-5 py-3 text-xs font-bold text-[#13193a] tabular-nums">
-                  ${Object.values(CORTES_MOCK).reduce((s, c) => s + c.polizas.reduce((a, p) => a + p.primaAnual, 0), 0).toFixed(2)}
-                </td>
-                <td className="px-5 py-3 text-xs font-bold text-[#13193a] tabular-nums">
-                  ${Object.values(CORTES_MOCK).reduce((s, c) => s + c.polizas.reduce((a, p) => a + p.primaNeta, 0), 0).toFixed(2)}
-                </td>
-                <td className="px-5 py-3 text-xs font-bold text-emerald-700 tabular-nums">
-                  ${Object.values(CORTES_MOCK).reduce((s, c) => s + c.polizas.reduce((a, p) => a + p.primerPago, 0), 0).toFixed(2)}
-                </td>
-                <td className="px-5 py-3 text-xs font-bold text-[#13193a] tabular-nums">
-                  ${Object.values(CORTES_MOCK).reduce((s, c) => s + c.polizas.reduce((a, p) => a + p.vale, 0), 0).toFixed(2)}
-                </td>
-                <td/>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
 
+      {/* Modal: nota administrativa */}
+      {modalNota && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <p className="text-sm font-bold text-[#13193a] mb-2">Nota administrativa</p>
+            <p className="text-xs text-gray-500 mb-3">Visible solo para administración/analista — no cambia el estatus del corte.</p>
+            <textarea
+              value={textoNota}
+              onChange={(e) => setTextoNota(e.target.value)}
+              placeholder="Comentario interno sobre este corte…"
+              className="w-full h-28 px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] resize-none"
+            />
+            <div className="flex items-center justify-end gap-3 mt-5">
+              <button type="button" onClick={() => setModalNota(false)} className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button type="button" onClick={handleGuardarNota} disabled={guardando}
+                className="px-5 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40">
+                Guardar nota
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -28,7 +28,7 @@ const EMPTY = {
   email: "",
 };
 
-export default function ModalNuevoVendedor({ onClose, onGuardar, usuarioId }) {
+export default function ModalNuevoVendedor({ onClose, onGuardar, usuarioId, oficina = OFICINA.codigo }) {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -40,7 +40,7 @@ export default function ModalNuevoVendedor({ onClose, onGuardar, usuarioId }) {
     setSaving(true);
     try {
       const vendedor = await crearVendedor(
-        { ...form, oficina: OFICINA.codigo },
+        { ...form, oficina },
         usuarioId,
       );
       onGuardar(vendedor);

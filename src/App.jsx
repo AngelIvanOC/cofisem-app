@@ -27,6 +27,7 @@ const ReciboPreview = lazy(() => import("./pages/ReciboPreview"));
 const PaseTallerPreview = lazy(() => import("./pages/PaseTallerPreview"));
 const PaseMedicoPreview = lazy(() => import("./pages/PaseMedicoPreview"));
 const DeclaracionPreview = lazy(() => import("./pages/DeclaracionPreview"));
+const CortePreview = lazy(() => import("./pages/CortePreview"));
 
 // ── Verificación pública de pólizas ──────────────────────────
 const VerificarPoliza = lazy(() => import("./pages/VerificarPoliza"));
@@ -44,6 +45,7 @@ const OperadorVendedores = lazy(() =>
 );
 const CorteOperador = lazy(() => import("./features/corte/CorteOperador"));
 const CorteAnalista = lazy(() => import("./features/corte/CorteAnalista"));
+const CorteHistorial = lazy(() => import("./features/corte/CorteHistorial"));
 const PoliciasDia = lazy(() => import("./features/cofisem/PoliciasDia"));
 
 // ── VENCIMIENTOS (compartido: administración, analista, operador) ─────
@@ -377,6 +379,7 @@ export default function App() {
             path="/gaman/declaracion-preview"
             element={<DeclaracionPreview />}
           />
+          <Route path="/gaman/corte-preview" element={<CortePreview />} />
 
           {/* ── Verificación pública de pólizas ── */}
           <Route
@@ -401,10 +404,11 @@ export default function App() {
               element={<PoliciasDia usuario={usuario} />}
             />
             <Route
-              path="/corte/operador"
+              path="/corte"
               element={<CorteOperador usuario={usuario} />}
             />
-            <Route path="/corte/analista" element={<CorteAnalista />} />
+            <Route path="/corte/analista" element={<CorteAnalista usuario={usuario} />} />
+            <Route path="/corte/historial" element={<CorteHistorial usuario={usuario} />} />
           </Route>
 
           {/* ── Login unificado ── */}

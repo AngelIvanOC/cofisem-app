@@ -46,7 +46,7 @@ const NAV = {
     },
     {
       label: "Corte",
-      path: "/corte/operador",
+      path: "/corte",
       icon: (
         <svg
           className="w-[18px] h-[18px]"
@@ -59,6 +59,25 @@ const NAV = {
             strokeLinecap="round"
             strokeLinejoin="round"
             d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185z"
+          />
+        </svg>
+      ),
+    },
+    {
+      label: "Historial de cortes",
+      path: "/corte/historial",
+      icon: (
+        <svg
+          className="w-[18px] h-[18px]"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
       ),
@@ -85,9 +104,8 @@ const NAV = {
       ),
     },
     {
-      label: "Corte (lectura)",
-      path: null,
-      pronto: true,
+      label: "Revisión de corte",
+      path: "/corte/analista",
       icon: (
         <svg
           className="w-[18px] h-[18px]"
