@@ -47,9 +47,28 @@ const FORMA_PAGO_OPT = [
   "TRIMESTRAL",
   "CUATRIMESTRAL",
   "SEMESTRAL",
-  "ANUAL",
+  "MENSUAL",
 ];
 const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
+
+// Entre cuántos pagos se reparte la Prima T. Anual según la forma de pago —
+// solo se usa para SUGERIR la Prima 1er Pago; el campo se queda libre para
+// que el operador lo corrija a mano si el primer pago es distinto (p.ej.
+// cuesta más que las demás parcialidades).
+const DIVISOR_PAGO = {
+  CONTADO: 1,
+  MENSUAL: 12,
+  SEMESTRAL: 2,
+  TRIMESTRAL: 3,
+  CUATRIMESTRAL: 4,
+  "4 PARCIALES": 4,
+};
+function calcularPrimerPago(primaAnual, formaPago) {
+  const anual = parseFloat(primaAnual) || 0;
+  if (!anual) return "";
+  const divisor = DIVISOR_PAGO[formaPago] ?? 1;
+  return (anual / divisor).toFixed(2);
+}
 const TIPO_OPT = [
   "AUTO",
   "SP TAXI",
@@ -82,6 +101,7 @@ const FORM_VACIO = {
   prima_anual: "",
   prima_neta: "",
   prima_primer_pago: "",
+  prima_primer_pago_neta: "",
   vale: "",
   pol_pend_pago: "",
   efectivo: "",
@@ -164,7 +184,9 @@ export default function PoliciasDia({ usuario }) {
     query = usuario?.oficina_id
       ? query.eq("oficina_id", usuario.oficina_id)
       : query.is("oficina_id", null);
-    query = usuario?.id ? query.eq("operador_id", usuario.id) : query.is("operador_id", null);
+    query = usuario?.id
+      ? query.eq("operador_id", usuario.id)
+      : query.is("operador_id", null);
     const { data } = await query.maybeSingle();
     setCorteInfo(data ?? null);
   }
@@ -200,8 +222,7 @@ export default function PoliciasDia({ usuario }) {
         .select("*")
         .eq("fecha_corte", HOY_ISO)
         .order("created_at", { ascending: false });
-      if (usuario?.id)
-        query = query.eq("creado_por", usuario.id);
+      if (usuario?.id) query = query.eq("creado_por", usuario.id);
       const { data, error } = await query;
       if (error) throw error;
       setPolizas(data ?? []);
@@ -333,6 +354,7 @@ export default function PoliciasDia({ usuario }) {
           prima_anual: n(form.prima_anual),
           prima_neta: n(form.prima_neta),
           prima_primer_pago: n(form.prima_primer_pago),
+          prima_primer_pago_neta: n(form.prima_primer_pago_neta),
           vale: n(form.vale),
           pol_pend_pago: n(form.pol_pend_pago),
           efectivo: n(form.efectivo),
@@ -471,14 +493,30 @@ export default function PoliciasDia({ usuario }) {
                   className={inpCls}
                 >
                   <option value="">Selecciona...</option>
-                  {COBERTURA_OPT.map((o) => <option key={o}>{o}</option>)}
+                  {COBERTURA_OPT.map((o) => (
+                    <option key={o}>{o}</option>
+                  ))}
                 </select>
               </div>
               <div>
                 <label className={lblCls}>Forma de pago</label>
                 <select
                   value={form.forma_pago}
-                  onChange={(e) => setF("forma_pago", e.target.value)}
+                  onChange={(e) => {
+                    const forma_pago = e.target.value;
+                    setForm((prev) => ({
+                      ...prev,
+                      forma_pago,
+                      prima_primer_pago: calcularPrimerPago(
+                        prev.prima_anual,
+                        forma_pago,
+                      ),
+                      prima_primer_pago_neta: calcularPrimerPago(
+                        prev.prima_neta,
+                        forma_pago,
+                      ),
+                    }));
+                  }}
                   className={inpCls}
                 >
                   {FORMA_PAGO_OPT.map((o) => (
@@ -694,11 +732,27 @@ export default function PoliciasDia({ usuario }) {
               {[
                 { k: "prima_anual", label: "Prima T. Anual" },
                 { k: "prima_neta", label: "Prima Neta Anual" },
-                { k: "prima_primer_pago", label: "Prima 1er Pago" },
+                {
+                  k: "prima_primer_pago",
+                  label: "Prima T. 1er Pago",
+                  req: true,
+                },
+                {
+                  k: "prima_primer_pago_neta",
+                  label: "Prima N. 1er Pago",
+                  req: true,
+                },
                 { k: "vale", label: "Vale ($)" },
               ].map((f) => (
                 <div key={f.k}>
-                  <label className={lblCls}>{f.label}</label>
+                  <label className={lblCls}>
+                    {f.label}
+                    {f.req && (
+                      <span className="ml-1 text-[8px] italic font-bold text-[#D97757]">
+                        (Verifica antes de continuar)
+                      </span>
+                    )}
+                  </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                       $
@@ -708,7 +762,30 @@ export default function PoliciasDia({ usuario }) {
                       min="0"
                       step="0.01"
                       value={form[f.k]}
-                      onChange={(e) => setF(f.k, e.target.value)}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (f.k === "prima_anual") {
+                          setForm((prev) => ({
+                            ...prev,
+                            prima_anual: v,
+                            prima_primer_pago: calcularPrimerPago(
+                              v,
+                              prev.forma_pago,
+                            ),
+                          }));
+                        } else if (f.k === "prima_neta") {
+                          setForm((prev) => ({
+                            ...prev,
+                            prima_neta: v,
+                            prima_primer_pago_neta: calcularPrimerPago(
+                              v,
+                              prev.forma_pago,
+                            ),
+                          }));
+                        } else {
+                          setF(f.k, v);
+                        }
+                      }}
                       placeholder="0.00"
                       className={inpCls + " pl-7"}
                     />

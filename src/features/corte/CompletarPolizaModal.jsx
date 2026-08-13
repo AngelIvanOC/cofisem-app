@@ -23,7 +23,7 @@ const esAmpliaOLimitada = (cobertura) => /AMPLIA|LIMITADA/i.test(cobertura || ""
 const VACIO = {
   folio: "", cobertura: "", vigencia_fin: "", placas: "",
   vendedor_nombre: "", telefono: "",
-  prima_anual: "", prima_neta: "", prima_primer_pago: "",
+  prima_anual: "", prima_neta: "", prima_primer_pago: "", prima_primer_pago_neta: "",
   vale: "", pol_pend_pago: "",
   efectivo: "", cheque: "", tdc: "", autorizacion: "",
   fotos_path: null, factura_path: null, t_circ_path: null,
@@ -42,7 +42,8 @@ const lblModal = "block text-[11px] font-bold text-gray-400 uppercase tracking-w
 // cuando tiene TODOS los datos que se muestran en la tabla "Pólizas del
 // día", salvo los que legítimamente pueden quedar vacíos:
 //   - Folio, Cobertura, Vigencia fin, Placas: siempre requeridos.
-//   - Prima T. Anual, Prima Neta Anual, Prima T. 1er Pago: siempre > 0.
+//   - Prima T. Anual, Prima Neta Anual, Prima T. 1er Pago, Prima N. 1er
+//     Pago: siempre > 0.
 //   - Al menos una forma de pago (efectivo/cheque/tdc) con monto > 0.
 //   - Identificación: siempre obligatoria. Además, mínimo uno de
 //     {Fotos, Factura, T. Circulación, Póliza anterior} — "Otro" no
@@ -62,7 +63,7 @@ export function evaluarCompletado(f) {
   const tieneCobertura  = !!(f.cobertura && f.cobertura.trim());
   const tieneVigenciaFin = !!f.vigencia_fin;
   const tienePlacas     = !!(f.placas && f.placas.trim());
-  const tienePrimas     = n(f.prima_anual) > 0 && n(f.prima_neta) > 0 && n(f.prima_primer_pago) > 0;
+  const tienePrimas     = n(f.prima_anual) > 0 && n(f.prima_neta) > 0 && n(f.prima_primer_pago) > 0 && n(f.prima_primer_pago_neta) > 0;
   const tienePago       = n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0;
   const autorizacionOk  = n(f.tdc) <= 0 || !!(f.autorizacion && f.autorizacion.trim());
   const comprobantesOk =
@@ -175,7 +176,8 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
       telefono:          row.telefono ?? "",
       prima_anual:       row.prima_anual || "",
       prima_neta:        row.prima_neta || "",
-      prima_primer_pago: row.prima_primer_pago || "",
+      prima_primer_pago:      row.prima_primer_pago || "",
+      prima_primer_pago_neta: row.prima_primer_pago_neta || "",
       vale:          row.vale || "",
       pol_pend_pago: row.pol_pend_pago || "",
       efectivo:      row.efectivo || "",
@@ -268,7 +270,8 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
         telefono:          form.telefono || null,
         prima_anual:       n(form.prima_anual),
         prima_neta:        n(form.prima_neta),
-        prima_primer_pago: n(form.prima_primer_pago),
+        prima_primer_pago:      n(form.prima_primer_pago),
+        prima_primer_pago_neta: n(form.prima_primer_pago_neta),
         vale:          n(form.vale),
         pol_pend_pago: n(form.pol_pend_pago),
         efectivo:      n(form.efectivo),
@@ -376,6 +379,10 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
               <div>
                 <label className={lblModal}>Prima T. 1er Pago <span className="text-red-400">*</span></label>
                 <input type="number" min="0" step="0.01" value={form.prima_primer_pago} onChange={(e) => setF("prima_primer_pago", e.target.value)} placeholder="0.00" className={inpModal} />
+              </div>
+              <div>
+                <label className={lblModal}>Prima N. 1er Pago <span className="text-red-400">*</span></label>
+                <input type="number" min="0" step="0.01" value={form.prima_primer_pago_neta} onChange={(e) => setF("prima_primer_pago_neta", e.target.value)} placeholder="0.00" className={inpModal} />
               </div>
               <div>
                 <label className={lblModal}>Vale ($)</label>
