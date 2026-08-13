@@ -432,7 +432,7 @@ export async function emitirPoliza({
       const vendedor_nombre =
         vendedor.id && vendedor.id !== 1
           ? [vendedor.nombre, vendedor.apellido].filter(Boolean).join(' ').trim()
-          : null;
+          : 'COFISEM';
       const hoyIso = new Date().toISOString().split('T')[0];
       const { error } = await supabase.from('polizas_cofisem').upsert({
         poliza_id:         finalPoliza.id,
@@ -446,7 +446,7 @@ export async function emitirPoliza({
         asegurado_nombre_pila:      cliente.nombre   || null,
         asegurado_apellido_paterno: cliente.apellido || null,
         telefono:          cliente.telefono || null,
-        vendedor_id:       vendedor.id ?? null,
+        vendedor_id:       vendedor.id ?? 1,
         vendedor_nombre,
         placas:            finalPoliza.placas || null,
         tipo:              'COCHE',
