@@ -260,7 +260,7 @@ export default function PaginaLanding() {
           <div>
             <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-blue-400/80 mb-6 border border-blue-400/20 px-3 py-1.5 rounded-full bg-blue-400/5">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-              Agencia de seguros automotrices
+              Agencia de seguros y finanzas
             </span>
             <h1 className="text-4xl lg:text-5xl font-bold text-white leading-tight mb-5">
               Tu protección,
