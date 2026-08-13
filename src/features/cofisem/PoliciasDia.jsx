@@ -51,7 +51,7 @@ const FORMA_PAGO_OPT = [
 ];
 const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
 const TIPO_OPT = [
-  "COCHE",
+  "AUTO",
   "SP TAXI",
   "SP COLECTIVO",
   "SP APP",
@@ -78,7 +78,7 @@ const FORM_VACIO = {
   telefono: "",
   vendedor_id: null,
   placas: "",
-  tipo: "COCHE",
+  tipo: "AUTO",
   prima_anual: "",
   prima_neta: "",
   prima_primer_pago: "",
