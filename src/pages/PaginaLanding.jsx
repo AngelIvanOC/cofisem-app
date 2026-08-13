@@ -168,7 +168,7 @@ export default function PaginaLanding() {
           <div className="flex items-center gap-2.5">
             <img src={cofisemLogo} alt="" className="h-9 w-auto object-contain shrink-0" />
             <div>
-              <p className="text-sm font-bold text-[#13193a] leading-none tracking-tight">COFISEM</p>
+              <p className="text-sm font-bold text-[#1447e6] leading-none tracking-tight">COFISEM</p>
               <p className="text-[10px] text-gray-400 leading-none mt-0.5">Seguros Automotrices</p>
             </div>
           </div>
@@ -179,7 +179,7 @@ export default function PaginaLanding() {
               { label: "Beneficios", href: "#beneficios" },
               { label: "Contacto", href: "#contacto" },
             ].map((l) => (
-              <a key={l.label} href={l.href} className="text-sm text-gray-500 hover:text-[#13193a] transition-colors font-medium">
+              <a key={l.label} href={l.href} className="text-sm text-gray-500 hover:text-[#1447e6] transition-colors font-medium">
                 {l.label}
               </a>
             ))}
@@ -187,7 +187,7 @@ export default function PaginaLanding() {
 
           <button
             onClick={() => navigate("/login")}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#13193a] text-white text-sm font-semibold hover:bg-[#1e2a50] transition-all shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1447e6] text-white text-sm font-semibold hover:bg-[#0f36b3] transition-all shadow-sm"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path
@@ -202,7 +202,7 @@ export default function PaginaLanding() {
       </nav>
 
       {/* HERO + CARRUSEL */}
-      <section className="relative bg-[#0d1128] pt-28 pb-16 lg:pt-16 lg:pb-0 lg:h-screen lg:max-h-screen overflow-hidden">
+      <section className="relative bg-[#0a2472] pt-28 pb-16 lg:pt-16 lg:pb-0 lg:h-screen lg:max-h-screen overflow-hidden">
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute -top-40 -right-40 w-[700px] h-[700px] rounded-full bg-blue-600/6 blur-3xl" />
           <div className="absolute bottom-0 -left-40 w-[500px] h-[500px] rounded-full bg-indigo-600/6 blur-3xl" />
@@ -228,7 +228,7 @@ export default function PaginaLanding() {
             <div className="flex items-center gap-3 flex-wrap mb-10">
               <a
                 href="#contacto"
-                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-[#13193a] text-sm font-bold hover:bg-gray-100 transition-all shadow-lg"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-[#1447e6] text-sm font-bold hover:bg-gray-100 transition-all shadow-lg"
               >
                 Tramita tu póliza
                 <ArrowIcon />
@@ -286,7 +286,7 @@ export default function PaginaLanding() {
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 items-start">
             <div className="lg:col-span-2">
               <p className="text-xs font-semibold uppercase tracking-widest text-blue-600 mb-3">Quiénes somos</p>
-              <h2 className="text-3xl font-bold text-[#13193a] mb-4">Experiencia que respalda tu tranquilidad</h2>
+              <h2 className="text-3xl font-bold text-[#1447e6] mb-4">Experiencia que respalda tu tranquilidad</h2>
               <p className="text-sm text-gray-500 leading-relaxed">
                 Somos una empresa mexicana especializada en seguros automotrices para vehículos particulares y de
                 servicio público. Nuestra experiencia, solidez y compromiso nos impulsan a ofrecer siempre la mejor
@@ -296,14 +296,14 @@ export default function PaginaLanding() {
 
             <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <h3 className="text-sm font-bold text-[#13193a] mb-2">Misión</h3>
+                <h3 className="text-sm font-bold text-[#1447e6] mb-2">Misión</h3>
                 <p className="text-xs text-gray-400 leading-relaxed">
                   Ser un equipo comprometido con México, integrado por el mejor capital humano, dedicado a cuidar y
                   administrar de la manera más eficaz el patrimonio de nuestros clientes.
                 </p>
               </div>
               <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <h3 className="text-sm font-bold text-[#13193a] mb-2">Visión</h3>
+                <h3 className="text-sm font-bold text-[#1447e6] mb-2">Visión</h3>
                 <p className="text-xs text-gray-400 leading-relaxed">
                   Ser líderes del sector asegurador en el ramo de autos particulares y de servicio público, con
                   rentabilidad y en beneficio de nuestros clientes y colaboradores.
@@ -311,13 +311,13 @@ export default function PaginaLanding() {
               </div>
 
               <div className="sm:col-span-2 bg-white rounded-2xl border border-gray-100 p-6">
-                <h3 className="text-sm font-bold text-[#13193a] mb-4">Valores</h3>
+                <h3 className="text-sm font-bold text-[#1447e6] mb-4">Valores</h3>
                 <div className="flex flex-wrap gap-2">
                   {VALORES.map((v) => (
                     <span
                       key={v.titulo}
                       title={v.desc}
-                      className="text-xs font-medium text-gray-500 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-full cursor-default hover:border-[#13193a]/20 hover:text-[#13193a] transition-colors"
+                      className="text-xs font-medium text-gray-500 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-full cursor-default hover:border-[#1447e6]/20 hover:text-[#1447e6] transition-colors"
                     >
                       {v.titulo}
                     </span>
@@ -334,15 +334,15 @@ export default function PaginaLanding() {
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-12">
             <p className="text-xs font-semibold uppercase tracking-widest text-blue-600 mb-3">¿Por qué elegirnos?</p>
-            <h2 className="text-3xl font-bold text-[#13193a]">Beneficios de estar con COFISEM</h2>
+            <h2 className="text-3xl font-bold text-[#1447e6]">Beneficios de estar con COFISEM</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {BENEFICIOS.map((b) => (
               <div key={b.titulo} className="bg-gray-50 rounded-2xl border border-gray-100 p-6 hover:shadow-md transition-all">
-                <div className="w-11 h-11 rounded-xl bg-[#13193a] flex items-center justify-center mb-4">
+                <div className="w-11 h-11 rounded-xl bg-[#1447e6] flex items-center justify-center mb-4">
                   <b.icon className="w-5 h-5 text-white" strokeWidth={2} />
                 </div>
-                <h3 className="text-sm font-bold text-[#13193a] mb-1.5">{b.titulo}</h3>
+                <h3 className="text-sm font-bold text-[#1447e6] mb-1.5">{b.titulo}</h3>
                 <p className="text-xs text-gray-400 leading-relaxed">{b.desc}</p>
               </div>
             ))}
@@ -351,7 +351,7 @@ export default function PaginaLanding() {
       </section>
 
       {/* CTA CLIENTE + AGENTE */}
-      <section className="bg-[#13193a] py-16">
+      <section className="bg-[#1447e6] py-16">
         <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="text-center lg:text-left lg:border-r lg:border-white/10 lg:pr-10">
             <p className="text-xs font-semibold uppercase tracking-widest text-blue-400/70 mb-3">Empieza hoy</p>
@@ -362,7 +362,7 @@ export default function PaginaLanding() {
             <div className="flex items-center justify-center lg:justify-start gap-3 flex-wrap">
               <a
                 href="#contacto"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-[#13193a] text-sm font-bold hover:bg-gray-100 transition-all shadow-lg"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-[#1447e6] text-sm font-bold hover:bg-gray-100 transition-all shadow-lg"
               >
                 Solicitar cotización
                 <ArrowIcon />
@@ -395,7 +395,7 @@ export default function PaginaLanding() {
             </div>
             <a
               href="#contacto"
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl border-2 border-white text-white text-sm font-bold hover:bg-white hover:text-[#13193a] transition-all"
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl border-2 border-white text-white text-sm font-bold hover:bg-white hover:text-[#1447e6] transition-all"
             >
               Quiero ser agente
               <ArrowIcon />
@@ -405,7 +405,7 @@ export default function PaginaLanding() {
       </section>
 
       {/* FOOTER */}
-      <footer id="contacto" className="bg-[#0d1128] pt-14 pb-8">
+      <footer id="contacto" className="bg-[#0a2472] pt-14 pb-8">
         <div className="max-w-6xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10 pb-10 border-b border-white/10">
             <div>

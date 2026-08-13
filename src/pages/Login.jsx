@@ -81,7 +81,7 @@ export default function Login() {
         icon: "error",
         title: "Acceso denegado",
         text: "Tu cuenta ha sido desactivada. Contacta al administrador del sistema.",
-        confirmButtonColor: "#13193a",
+        confirmButtonColor: "#1447e6",
         confirmButtonText: "Entendido",
       });
       return;
@@ -209,7 +209,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 rounded-xl bg-white hover:bg-white/90 active:scale-[0.98] text-[#13193a] font-bold text-sm tracking-wide transition-all duration-200 disabled:opacity-60 flex items-center justify-center gap-2 mt-2 shadow-lg"
+                className="w-full py-3.5 rounded-xl bg-white hover:bg-white/90 active:scale-[0.98] text-[#1447e6] font-bold text-sm tracking-wide transition-all duration-200 disabled:opacity-60 flex items-center justify-center gap-2 mt-2 shadow-lg"
               >
                 {loading ? (
                   <>

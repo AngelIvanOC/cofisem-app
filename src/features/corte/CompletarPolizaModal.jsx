@@ -33,7 +33,7 @@ const VACIO = {
 };
 
 const inpModal =
-  "w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
+  "w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] transition-all";
 const lblModal = "block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5";
 
 // Reglas de "completado" — compartidas entre este modal y el formulario
@@ -122,7 +122,7 @@ export function ComprobanteField({ label, path, subiendo, onFile, onVer, obligat
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {path && !subiendo && (
-          <button type="button" onClick={onVer} className="text-xs font-bold text-[#13193a] underline underline-offset-2">
+          <button type="button" onClick={onVer} className="text-xs font-bold text-[#1447e6] underline underline-offset-2">
             Ver
           </button>
         )}
@@ -132,7 +132,7 @@ export function ComprobanteField({ label, path, subiendo, onFile, onVer, obligat
               ? "bg-gray-200 text-gray-400 cursor-wait"
               : path
                 ? "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
-                : "bg-[#13193a] text-white hover:bg-[#1e2a50]"
+                : "bg-[#1447e6] text-white hover:bg-[#0f36b3]"
           }`}
         >
           {subiendo ? "..." : path ? "Cambiar" : "Subir"}
@@ -307,7 +307,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
           <div>
-            <p className="text-sm font-bold text-[#13193a]">Completar registro</p>
+            <p className="text-sm font-bold text-[#1447e6]">Completar registro</p>
             <p className="text-xs text-gray-400 mt-0.5">
               Póliza <strong className="font-mono">{row.numero_poliza || "—"}</strong> · {row.asegurado_nombre || "—"}
             </p>
@@ -520,7 +520,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
               Cancelar
             </button>
             <button type="submit" disabled={guardando}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-50 transition-all">
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50 transition-all">
               {guardando ? (
                 <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Guardando...</>
               ) : (

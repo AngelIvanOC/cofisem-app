@@ -167,7 +167,7 @@ export default function CofisemLayout() {
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* ── Sidebar ── */}
-      <aside className="w-52 bg-[#13193a] flex flex-col shrink-0">
+      <aside className="w-52 bg-[#1447e6] flex flex-col shrink-0">
         {/* Logo */}
         <div className="flex items-center gap-2.5 px-4 py-5 border-b border-white/10">
           <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">

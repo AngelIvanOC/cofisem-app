@@ -61,8 +61,8 @@ export default function CorteHistorial({ usuario }) {
     <div className="p-6 min-h-full bg-gray-50 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#13193a] flex items-center gap-2">
-            <History className="w-6 h-6 text-[#13193a]" />
+          <h1 className="text-2xl font-bold text-[#1447e6] flex items-center gap-2">
+            <History className="w-6 h-6 text-[#1447e6]" />
             Historial de cortes
           </h1>
           <p className="text-gray-400 text-sm mt-0.5">Consulta tus cortes anteriores, notas de administración y pendientes por resolver</p>
@@ -107,7 +107,7 @@ export default function CorteHistorial({ usuario }) {
                 <div key={e.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-[#13193a] capitalize">{fmt(e.fecha_corte)}</p>
+                      <p className="text-sm font-bold text-[#1447e6] capitalize">{fmt(e.fecha_corte)}</p>
                       <div className="flex items-center gap-2 flex-wrap mt-1.5">
                         <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${e.cerrado ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                           {e.cerrado ? "Cerrado" : "En proceso"}
@@ -131,7 +131,7 @@ export default function CorteHistorial({ usuario }) {
                     </div>
                     <div className="flex items-center gap-4 shrink-0">
                       <div className="text-right">
-                        <p className="text-sm font-bold text-[#13193a]">{count}</p>
+                        <p className="text-sm font-bold text-[#1447e6]">{count}</p>
                         <p className="text-[10px] text-gray-400">pólizas</p>
                       </div>
                       <div className="text-right">
@@ -140,7 +140,7 @@ export default function CorteHistorial({ usuario }) {
                       </div>
                       <Link
                         to={`/corte?fecha=${e.fecha_corte}`}
-                        className="px-4 py-2 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-xs font-bold transition-all"
+                        className="px-4 py-2 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-xs font-bold transition-all"
                       >
                         Ver
                       </Link>

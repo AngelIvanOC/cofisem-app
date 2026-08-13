@@ -260,7 +260,7 @@ export default function CorteAnalista({ usuario }) {
     <div className="p-6 min-h-full bg-gray-50 space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-[#13193a]">Revisión de Corte Diario</h1>
+        <h1 className="text-2xl font-bold text-[#1447e6]">Revisión de Corte Diario</h1>
         <p className="text-gray-400 text-sm mt-0.5">Aprueba, regresa o marca como recibidos los cortes que envían las oficinas</p>
       </div>
 
@@ -275,7 +275,7 @@ export default function CorteAnalista({ usuario }) {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50">
           <Inbox className="w-4 h-4 text-violet-500" />
-          <p className="text-sm font-bold text-[#13193a]">Liberaciones de corte</p>
+          <p className="text-sm font-bold text-[#1447e6]">Liberaciones de corte</p>
           {liberaciones.length > 0 && (
             <span className="bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
               {liberaciones.length}
@@ -303,7 +303,7 @@ export default function CorteAnalista({ usuario }) {
             liberaciones.map((row) => (
               <div key={row.id} className="flex items-center gap-3 px-5 py-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-[#13193a] truncate">
+                  <p className="text-xs font-bold text-[#1447e6] truncate">
                     {oficinas.find((o) => o.id === row.oficina_id)?.nombre ?? "—"} · {fmt(row.fecha_corte)}
                   </p>
                   <p className="text-[11px] text-gray-500 truncate">{nombreOperador(row.operador_id)}</p>
@@ -343,7 +343,7 @@ export default function CorteAnalista({ usuario }) {
             <select
               value={oficinaSel ?? ""}
               onChange={(e) => setOficinaSel(Number(e.target.value))}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]"
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
             >
               {oficinas.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
             </select>
@@ -354,7 +354,7 @@ export default function CorteAnalista({ usuario }) {
               type="date"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a]"
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
             />
           </div>
         </div>
@@ -393,7 +393,7 @@ export default function CorteAnalista({ usuario }) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-bold text-[#13193a]">{nombreOperador(operadorId)}</p>
+                        <p className="text-sm font-bold text-[#1447e6]">{nombreOperador(operadorId)}</p>
                         <span className="text-[11px] font-semibold text-gray-400">{cerrado ? "Corte cerrado" : "Corte en proceso"}</span>
                         {cerrado && (
                           <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${revMeta.cls}`}>
@@ -444,7 +444,7 @@ export default function CorteAnalista({ usuario }) {
 
                   {/* Tabla de pólizas del operador */}
                   <div className="bg-white rounded-b-2xl border border-gray-100 shadow-sm overflow-hidden mb-3">
-                    <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#13193a]">
+                    <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#1447e6]">
                       <p className="text-sm font-bold text-white">Pólizas</p>
                       <span className="text-white/50 text-xs">{registros.length} registros</span>
                     </div>
@@ -466,9 +466,9 @@ export default function CorteAnalista({ usuario }) {
                               const pagoMeta = PAGO_ADMIN_META[r.estatus_pago_admin ?? "DESCONOCIDO"];
                               return (
                                 <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
-                                  <td className="px-3 py-2.5 font-bold text-[#13193a]">{i + 1}</td>
+                                  <td className="px-3 py-2.5 font-bold text-[#1447e6]">{i + 1}</td>
                                   <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{r.aseguradora || "—"}</td>
-                                  <td className="px-3 py-2.5 font-mono font-bold text-[#13193a] whitespace-nowrap">{r.numero_poliza || "—"}</td>
+                                  <td className="px-3 py-2.5 font-mono font-bold text-[#1447e6] whitespace-nowrap">{r.numero_poliza || "—"}</td>
                                   <td className="px-3 py-2.5 font-mono text-gray-600">{r.folio || "—"}</td>
                                   <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{r.asegurado_nombre || "—"}</td>
                                   <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{r.vendedor_nombre || "—"}</td>
@@ -478,22 +478,22 @@ export default function CorteAnalista({ usuario }) {
                                   <td className="px-3 py-2.5 text-right text-gray-600">
                                     {n(r.cheque) > 0 ? $(r.cheque) : "—"}
                                     {r.comprobante_cheque_url && (
-                                      <button type="button" onClick={() => verComprobante(r.comprobante_cheque_url)} className="ml-1 align-middle text-[#13193a] hover:text-[#1e2a50] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                                      <button type="button" onClick={() => verComprobante(r.comprobante_cheque_url)} className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
                                     )}
                                   </td>
                                   <td className="px-3 py-2.5 text-right text-gray-600">
                                     {n(r.tdc) > 0 ? $(r.tdc) : "—"}
                                     {r.comprobante_tdc_url && (
-                                      <button type="button" onClick={() => verComprobante(r.comprobante_tdc_url)} className="ml-1 align-middle text-[#13193a] hover:text-[#1e2a50] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                                      <button type="button" onClick={() => verComprobante(r.comprobante_tdc_url)} className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
                                     )}
                                   </td>
                                   <td className="px-3 py-2.5 text-right text-gray-600">
                                     {n(r.vale) > 0 ? $(r.vale) : "—"}
                                     {r.comprobante_vale_url && (
-                                      <button type="button" onClick={() => verComprobante(r.comprobante_vale_url)} className="ml-1 align-middle text-[#13193a] hover:text-[#1e2a50] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                                      <button type="button" onClick={() => verComprobante(r.comprobante_vale_url)} className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
                                     )}
                                   </td>
-                                  <td className="px-3 py-2.5 text-right font-semibold text-[#13193a]">{$(r.prima_anual)}</td>
+                                  <td className="px-3 py-2.5 text-right font-semibold text-[#1447e6]">{$(r.prima_anual)}</td>
                                   <td className="px-3 py-2.5 text-right text-gray-700">{$(r.prima_neta)}</td>
                                   <td className="px-3 py-2.5 text-right font-bold text-emerald-700">{$(r.prima_primer_pago)}</td>
                                   <td className="px-3 py-2.5 text-gray-400 max-w-40 truncate">{r.observaciones || "—"}</td>
@@ -511,14 +511,14 @@ export default function CorteAnalista({ usuario }) {
                               );
                             })}
 
-                            <tr className="bg-[#13193a]/5 font-bold border-t-2 border-[#13193a]/20">
-                              <td colSpan={8} className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">TOTALES</td>
+                            <tr className="bg-[#1447e6]/5 font-bold border-t-2 border-[#1447e6]/20">
+                              <td colSpan={8} className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">TOTALES</td>
                               <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(t.efectivo)}</td>
-                              <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">{$(t.cheque)}</td>
-                              <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">{$(t.tdc)}</td>
-                              <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">{$(t.vale)}</td>
-                              <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">{$(t.primaAnual)}</td>
-                              <td className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">{$(t.primaNeta)}</td>
+                              <td className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">{$(t.cheque)}</td>
+                              <td className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">{$(t.tdc)}</td>
+                              <td className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">{$(t.vale)}</td>
+                              <td className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">{$(t.primaAnual)}</td>
+                              <td className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">{$(t.primaNeta)}</td>
                               <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(t.primerPago)}</td>
                               <td colSpan={2} />
                             </tr>
@@ -534,7 +534,7 @@ export default function CorteAnalista({ usuario }) {
 
           {/* Resumen multi-oficina */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="bg-[#13193a] px-5 py-3.5">
+            <div className="bg-[#1447e6] px-5 py-3.5">
               <p className="text-sm font-bold text-white">Resumen de {fmt(fecha)} — todas las oficinas</p>
             </div>
             <div className="overflow-x-auto">
@@ -558,9 +558,9 @@ export default function CorteAnalista({ usuario }) {
                     const to = totalesDe(regs);
                     return (
                       <tr key={o.id} className={`hover:bg-gray-50/60 transition-colors cursor-pointer ${o.id === oficinaSel ? "bg-blue-50/40" : ""}`} onClick={() => setOficinaSel(o.id)}>
-                        <td className="px-5 py-3.5 text-sm font-semibold text-[#13193a]">{o.nombre}</td>
-                        <td className="px-5 py-3.5 text-xs font-bold text-[#13193a]">{opsOf.size}</td>
-                        <td className="px-5 py-3.5 text-xs font-bold text-[#13193a]">{regs.length}</td>
+                        <td className="px-5 py-3.5 text-sm font-semibold text-[#1447e6]">{o.nombre}</td>
+                        <td className="px-5 py-3.5 text-xs font-bold text-[#1447e6]">{opsOf.size}</td>
+                        <td className="px-5 py-3.5 text-xs font-bold text-[#1447e6]">{regs.length}</td>
                         <td className="px-5 py-3.5 text-xs font-bold text-emerald-700 tabular-nums">{$(to.primerPago)}</td>
                         <td className="px-5 py-3.5">
                           {pendientes > 0 ? (
@@ -583,7 +583,7 @@ export default function CorteAnalista({ usuario }) {
       {modalRegresar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <p className="text-sm font-bold text-[#13193a] mb-2">Regresar corte con observaciones</p>
+            <p className="text-sm font-bold text-[#1447e6] mb-2">Regresar corte con observaciones</p>
             <p className="text-xs text-gray-500 mb-3">Esto reabre el corte para que el operador pueda corregirlo. Describe qué falta o está mal.</p>
             <textarea
               value={textoObservacion}
@@ -606,18 +606,18 @@ export default function CorteAnalista({ usuario }) {
       {modalNota && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <p className="text-sm font-bold text-[#13193a] mb-2">Nota administrativa</p>
+            <p className="text-sm font-bold text-[#1447e6] mb-2">Nota administrativa</p>
             <p className="text-xs text-gray-500 mb-3">Visible solo para administración/analista — no cambia el estatus del corte.</p>
             <textarea
               value={textoNota}
               onChange={(e) => setTextoNota(e.target.value)}
               placeholder="Comentario interno sobre este corte…"
-              className="w-full h-28 px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] resize-none"
+              className="w-full h-28 px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] resize-none"
             />
             <div className="flex items-center justify-end gap-3 mt-5">
               <button type="button" onClick={() => setModalNota(false)} className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
               <button type="button" onClick={handleGuardarNota} disabled={guardandoId != null}
-                className="px-5 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40">
+                className="px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-40">
                 Guardar nota
               </button>
             </div>

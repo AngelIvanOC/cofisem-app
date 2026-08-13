@@ -321,7 +321,7 @@ export default function CorteOperador({ usuario }) {
   }
 
   const iResumen =
-    "w-full px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] tabular-nums";
+    "w-full px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] tabular-nums";
 
   const FilaBillete = ({ d }) => {
     const cant   = parseFloat(billetes[d]) || 0;
@@ -341,7 +341,7 @@ export default function CorteOperador({ usuario }) {
           onChange={(e) => setBilletes((b) => ({ ...b, [d]: e.target.value }))}
           className={iResumen + " text-center py-1 disabled:opacity-50 disabled:cursor-not-allowed"}
         />
-        <p className="text-xs font-bold text-[#13193a] text-right tabular-nums">
+        <p className="text-xs font-bold text-[#1447e6] text-right tabular-nums">
           {subtot > 0 ? `$${subtot.toFixed(2)}` : "—"}
         </p>
       </div>
@@ -380,7 +380,7 @@ export default function CorteOperador({ usuario }) {
       {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#13193a]">
+          <h1 className="text-2xl font-bold text-[#1447e6]">
             Corte Diario{!esHoy && <span className="text-base font-semibold text-gray-400"> · consulta</span>}
           </h1>
           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
@@ -462,7 +462,7 @@ export default function CorteOperador({ usuario }) {
 
       {/* ── Tabla (solo lectura) ── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#13193a] flex-wrap">
+        <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#1447e6] flex-wrap">
           <div className="flex items-center gap-3">
             <p className="text-sm font-bold text-white">Pólizas del día</p>
             <span className="text-white/50 text-xs">{registros.length} registros</span>
@@ -477,7 +477,7 @@ export default function CorteOperador({ usuario }) {
               type="button"
               onClick={() => setVista("poliza")}
               className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                vista === "poliza" ? "bg-white text-[#13193a]" : "text-white/70 hover:text-white"
+                vista === "poliza" ? "bg-white text-[#1447e6]" : "text-white/70 hover:text-white"
               }`}
             >
               Datos de póliza
@@ -486,7 +486,7 @@ export default function CorteOperador({ usuario }) {
               type="button"
               onClick={() => setVista("pago")}
               className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                vista === "pago" ? "bg-white text-[#13193a]" : "text-white/70 hover:text-white"
+                vista === "pago" ? "bg-white text-[#1447e6]" : "text-white/70 hover:text-white"
               }`}
             >
               Pago y respaldo
@@ -533,9 +533,9 @@ export default function CorteOperador({ usuario }) {
 
                 {registros.map((r, i) => (
                   <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
-                    <td className="px-3 py-2.5 text-center font-bold text-[#13193a]">{i + 1}</td>
+                    <td className="px-3 py-2.5 text-center font-bold text-[#1447e6]">{i + 1}</td>
                     <td className="px-3 py-2.5 text-center font-semibold text-gray-700">{r.aseguradora || "—"}</td>
-                    <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-bold text-[#13193a]">{r.numero_poliza || "—"}</td>
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-bold text-[#1447e6]">{r.numero_poliza || "—"}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap">{fmt(r.fecha_emision)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap bg-blue-50/20">{fmt(r.vigencia_inicio)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap bg-blue-50/20">{fmt(r.vigencia_fin)}</td>
@@ -545,10 +545,10 @@ export default function CorteOperador({ usuario }) {
                     <td className="px-3 py-2.5 text-center font-semibold text-gray-700">
                       {n(r.vale) > 0 ? $(r.vale) : "—"}
                       {r.comprobante_vale_url && (
-                        <button type="button" onClick={() => verComprobante(r.comprobante_vale_url)} title="Ver comprobante" className="ml-1 align-middle text-[#13193a] hover:text-[#1e2a50] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                        <button type="button" onClick={() => verComprobante(r.comprobante_vale_url)} title="Ver comprobante" className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-[#13193a]">{$(r.prima_anual)}</td>
+                    <td className="px-3 py-2.5 text-center font-semibold text-[#1447e6]">{$(r.prima_anual)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-700">{$(r.prima_neta)}</td>
                     <td className="px-3 py-2.5 text-center font-bold text-emerald-700">{$(r.prima_primer_pago)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 max-w-[110px] truncate">{r.cobertura || "—"}</td>
@@ -558,11 +558,11 @@ export default function CorteOperador({ usuario }) {
                 ))}
 
                 {registros.length > 0 && (
-                  <tr className="bg-[#13193a]/5 font-bold border-t-2 border-[#13193a]/20">
-                    <td colSpan={9} className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">TOTAL</td>
-                    <td className="px-3 py-3 text-right text-xs text-[#13193a]">{$(totalVales)}</td>
-                    <td className="px-3 py-3 text-right text-xs text-[#13193a]">{$(sumaPrimaAnual)}</td>
-                    <td className="px-3 py-3 text-right text-xs text-[#13193a]">{$(sumaPrimaNeta)}</td>
+                  <tr className="bg-[#1447e6]/5 font-bold border-t-2 border-[#1447e6]/20">
+                    <td colSpan={9} className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">TOTAL</td>
+                    <td className="px-3 py-3 text-right text-xs text-[#1447e6]">{$(totalVales)}</td>
+                    <td className="px-3 py-3 text-right text-xs text-[#1447e6]">{$(sumaPrimaAnual)}</td>
+                    <td className="px-3 py-3 text-right text-xs text-[#1447e6]">{$(sumaPrimaNeta)}</td>
                     <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(sumaPrimerPago)}</td>
                     <td colSpan={3} />
                   </tr>
@@ -609,19 +609,19 @@ export default function CorteOperador({ usuario }) {
 
                 {registros.map((r, i) => (
                   <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
-                    <td className="px-3 py-2.5 text-center font-bold text-[#13193a]">{i + 1}</td>
+                    <td className="px-3 py-2.5 text-center font-bold text-[#1447e6]">{i + 1}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap">{r.forma_pago || "—"}</td>
                     <td className="px-3 py-2.5 text-center font-bold text-emerald-700 bg-emerald-50/20">{$(r.efectivo)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-500 bg-emerald-50/20">
                       {n(r.cheque) > 0 ? $(r.cheque) : "—"}
                       {r.comprobante_cheque_url && (
-                        <button type="button" onClick={() => verComprobante(r.comprobante_cheque_url)} title="Ver comprobante" className="ml-1 align-middle text-[#13193a] hover:text-[#1e2a50] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                        <button type="button" onClick={() => verComprobante(r.comprobante_cheque_url)} title="Ver comprobante" className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-center text-gray-500 bg-emerald-50/20">
                       {n(r.tdc) > 0 ? $(r.tdc) : "—"}
                       {r.comprobante_tdc_url && (
-                        <button type="button" onClick={() => verComprobante(r.comprobante_tdc_url)} title="Ver comprobante" className="ml-1 align-middle text-[#13193a] hover:text-[#1e2a50] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                        <button type="button" onClick={() => verComprobante(r.comprobante_tdc_url)} title="Ver comprobante" className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-center text-gray-500 bg-emerald-50/20">{r.autorizacion || "—"}</td>
@@ -644,8 +644,8 @@ export default function CorteOperador({ usuario }) {
                 ))}
 
                 {registros.length > 0 && (
-                  <tr className="bg-[#13193a]/5 font-bold border-t-2 border-[#13193a]/20">
-                    <td colSpan={2} className="px-3 py-3 text-right text-xs font-bold text-[#13193a]">TOTAL</td>
+                  <tr className="bg-[#1447e6]/5 font-bold border-t-2 border-[#1447e6]/20">
+                    <td colSpan={2} className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">TOTAL</td>
                     <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(totalEfectivo)}</td>
                     <td colSpan={13} />
                   </tr>
@@ -661,7 +661,7 @@ export default function CorteOperador({ usuario }) {
         {/* Columna izquierda */}
         <div className="flex flex-col gap-5">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="bg-[#13193a] px-5 py-3.5">
+            <div className="bg-[#1447e6] px-5 py-3.5">
               <p className="text-sm font-bold text-white">Resumen de cobro</p>
               <p className="text-white/40 text-xs mt-0.5">Calculado automáticamente del registro del día</p>
             </div>
@@ -703,7 +703,7 @@ export default function CorteOperador({ usuario }) {
                     <p className={`text-xs ${row.warn ? "text-amber-600" : "text-gray-600"} ${row.bold ? "font-bold" : "font-medium"}`}>
                       {row.label}
                     </p>
-                    <p className={`text-sm tabular-nums ${row.warn ? "text-amber-700" : row.bold ? "font-bold text-[#13193a]" : "text-gray-700"}`}>
+                    <p className={`text-sm tabular-nums ${row.warn ? "text-amber-700" : row.bold ? "font-bold text-[#1447e6]" : "text-gray-700"}`}>
                       ${row.value.toFixed(2)}
                     </p>
                   </div>
@@ -713,13 +713,13 @@ export default function CorteOperador({ usuario }) {
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col flex-1">
-            <label className="block text-[11px] font-bold text-[#13193a] uppercase tracking-wide mb-2">
+            <label className="block text-[11px] font-bold text-[#1447e6] uppercase tracking-wide mb-2">
               Observaciones del corte
             </label>
             <textarea
               placeholder="Observaciones generales del día, irregularidades, comentarios…"
               disabled={corteCerrado}
-              className="flex-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] resize-none disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
         </div>
@@ -728,7 +728,7 @@ export default function CorteOperador({ usuario }) {
         <div className="flex flex-col gap-5">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
             <div className="min-w-0">
-              <p className="text-xs font-bold text-[#13193a]">Entrega de efectivo</p>
+              <p className="text-xs font-bold text-[#1447e6]">Entrega de efectivo</p>
               <p className="text-[11px] text-gray-400 mt-0.5">
                 {efectivoBloqueado
                   ? "Sin efectivo que declarar todavía"
@@ -743,7 +743,7 @@ export default function CorteOperador({ usuario }) {
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                   efectivoBloqueado || corteCerrado ? "cursor-not-allowed" : ""
                 } ${
-                  tabEntregaMostrada === "PERSONAL" ? "bg-[#13193a] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  tabEntregaMostrada === "PERSONAL" ? "bg-[#1447e6] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Efectivo
@@ -753,7 +753,7 @@ export default function CorteOperador({ usuario }) {
                 disabled={efectivoBloqueado || corteCerrado}
                 onClick={() => handleTabEntrega("DEPOSITO")}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  efectivoBloqueado || corteCerrado ? "text-gray-300 cursor-not-allowed" : tabEntregaMostrada === "DEPOSITO" ? "bg-[#13193a] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  efectivoBloqueado || corteCerrado ? "text-gray-300 cursor-not-allowed" : tabEntregaMostrada === "DEPOSITO" ? "bg-[#1447e6] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Depósito
@@ -762,7 +762,7 @@ export default function CorteOperador({ usuario }) {
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="bg-[#13193a] px-5 py-3.5">
+            <div className="bg-[#1447e6] px-5 py-3.5">
               <p className="text-sm font-bold text-white">Corte de efectivo</p>
               <p className="text-white/50 text-xs mt-0.5">
                 {tabEntregaMostrada === "DEPOSITO" ? "Comprobante del depósito" : "Ingresa la cantidad de cada denominación"}
@@ -842,12 +842,12 @@ export default function CorteOperador({ usuario }) {
                 {tabEntregaMostrada === "PERSONAL" && (
                   <div className="flex justify-between">
                     <p className="text-xs font-semibold text-gray-500">Total billetes</p>
-                    <p className="text-sm font-bold text-[#13193a] tabular-nums">${totalBilletes.toFixed(2)}</p>
+                    <p className="text-sm font-bold text-[#1447e6] tabular-nums">${totalBilletes.toFixed(2)}</p>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <p className="text-xs font-semibold text-gray-500">Total cobrado</p>
-                  <p className="text-sm font-bold text-[#13193a] tabular-nums">${totalCobro.toFixed(2)}</p>
+                  <p className="text-sm font-bold text-[#1447e6] tabular-nums">${totalCobro.toFixed(2)}</p>
                 </div>
                 {tabEntregaMostrada === "PERSONAL" && (
                   <div className={`flex justify-between items-center p-3 rounded-xl border-2 ${
@@ -884,7 +884,7 @@ export default function CorteOperador({ usuario }) {
       {confirmandoCierre && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <p className="text-sm font-bold text-[#13193a] mb-2">¿Cerrar el corte del día?</p>
+            <p className="text-sm font-bold text-[#1447e6] mb-2">¿Cerrar el corte del día?</p>
             <p className="text-sm text-gray-500">
               Ya no podrás agregar, editar ni eliminar pólizas de hoy — solo consultarlas. Esta acción no se puede deshacer.
             </p>
@@ -913,7 +913,7 @@ export default function CorteOperador({ usuario }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="p-6 pb-4">
-              <p className="text-sm font-bold text-[#13193a] mb-1">No puedes cerrar el corte todavía</p>
+              <p className="text-sm font-bold text-[#1447e6] mb-1">No puedes cerrar el corte todavía</p>
               <p className="text-sm text-gray-500">
                 {alertaIncompletas.length === 1
                   ? "Esta póliza sigue sin completarse:"
@@ -932,7 +932,7 @@ export default function CorteOperador({ usuario }) {
                   className="w-full flex items-center justify-between gap-3 px-6 py-3 text-left hover:bg-gray-50 transition-colors"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-mono font-bold text-[#13193a] truncate">{r.numero_poliza || "—"}</p>
+                    <p className="text-sm font-mono font-bold text-[#1447e6] truncate">{r.numero_poliza || "—"}</p>
                     <p className="text-xs text-gray-500 truncate">{r.asegurado_nombre || "—"}</p>
                   </div>
                   <span className="text-[11px] font-bold text-amber-600 shrink-0">Completar →</span>

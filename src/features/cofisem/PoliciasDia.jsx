@@ -104,7 +104,7 @@ const esAmpliaOLimitada = (cobertura) =>
   /AMPLIA|LIMITADA/i.test(cobertura || "");
 
 const inpCls =
-  "w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
+  "w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] transition-all";
 const lblCls =
   "block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5";
 const n = (v) => parseFloat(v) || 0;
@@ -400,7 +400,7 @@ export default function PoliciasDia({ usuario }) {
             Cancelar
           </button>
           <div>
-            <h1 className="text-xl font-bold text-[#13193a]">Nueva póliza</h1>
+            <h1 className="text-xl font-bold text-[#1447e6]">Nueva póliza</h1>
             <p className="text-xs text-gray-400 mt-0.5">
               {oficina} · {HOY_LABEL}
             </p>
@@ -607,7 +607,7 @@ export default function PoliciasDia({ usuario }) {
                         setConVendedor(next);
                         if (!next) setF("vendedor_id", null);
                       }}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none ${conVendedor ? "bg-[#13193a]" : "bg-gray-300"}`}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none ${conVendedor ? "bg-[#1447e6]" : "bg-gray-300"}`}
                     >
                       <span
                         className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${conVendedor ? "translate-x-[18px]" : "translate-x-[3px]"}`}
@@ -649,7 +649,7 @@ export default function PoliciasDia({ usuario }) {
                     <button
                       type="button"
                       onClick={() => setModalVendedorAbierto(true)}
-                      className="shrink-0 w-10 h-10 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white flex items-center justify-center transition-all"
+                      className="shrink-0 w-10 h-10 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white flex items-center justify-center transition-all"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -878,7 +878,7 @@ export default function PoliciasDia({ usuario }) {
             <button
               type="submit"
               disabled={guardando}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-50 transition-all shadow-sm shadow-[#13193a]/15"
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50 transition-all shadow-sm shadow-[#1447e6]/15"
             >
               {guardando ? (
                 <>
@@ -942,7 +942,7 @@ export default function PoliciasDia({ usuario }) {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#13193a]">Pólizas del día</h1>
+          <h1 className="text-2xl font-bold text-[#1447e6]">Pólizas del día</h1>
           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
             <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
               {oficina}
@@ -961,7 +961,7 @@ export default function PoliciasDia({ usuario }) {
         {!corteCerrado && (
           <button
             onClick={handleNueva}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#13193a] text-white text-sm font-semibold hover:bg-[#1e2a50] transition-all shadow-sm shadow-[#13193a]/15"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] text-white text-sm font-semibold hover:bg-[#0f36b3] transition-all shadow-sm shadow-[#1447e6]/15"
           >
             <svg
               className="w-4 h-4"
@@ -1046,7 +1046,7 @@ export default function PoliciasDia({ usuario }) {
             {!corteCerrado && (
               <button
                 onClick={handleNueva}
-                className="mt-4 flex items-center gap-1.5 mx-auto px-4 py-2 rounded-xl bg-[#13193a] text-white text-xs font-semibold hover:bg-[#1e2a50] transition-all"
+                className="mt-4 flex items-center gap-1.5 mx-auto px-4 py-2 rounded-xl bg-[#1447e6] text-white text-xs font-semibold hover:bg-[#0f36b3] transition-all"
               >
                 <svg
                   className="w-3.5 h-3.5"
@@ -1100,13 +1100,13 @@ export default function PoliciasDia({ usuario }) {
                     key={p.id}
                     className="hover:bg-gray-50/60 transition-colors"
                   >
-                    <td className="px-4 py-3 font-bold text-[#13193a]">
+                    <td className="px-4 py-3 font-bold text-[#1447e6]">
                       {i + 1}
                     </td>
                     <td className="px-4 py-3 font-semibold text-gray-700">
                       {p.aseguradora || "—"}
                     </td>
-                    <td className="px-4 py-3 font-mono font-bold text-[#13193a]">
+                    <td className="px-4 py-3 font-mono font-bold text-[#1447e6]">
                       {p.numero_poliza || "—"}
                     </td>
                     <td className="px-4 py-3 font-mono text-gray-500">
@@ -1127,7 +1127,7 @@ export default function PoliciasDia({ usuario }) {
                     <td className="px-4 py-3 text-right font-bold text-emerald-700">
                       {$(p.prima_primer_pago)}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-[#13193a]">
+                    <td className="px-4 py-3 text-right font-bold text-[#1447e6]">
                       {$(p.efectivo)}
                     </td>
                     <td className="px-4 py-3 text-gray-400 whitespace-nowrap">
@@ -1166,17 +1166,17 @@ export default function PoliciasDia({ usuario }) {
               </tbody>
               {/* Totales */}
               <tfoot>
-                <tr className="bg-[#13193a]/5 border-t-2 border-[#13193a]/20">
+                <tr className="bg-[#1447e6]/5 border-t-2 border-[#1447e6]/20">
                   <td
                     colSpan={8}
-                    className="px-4 py-3 text-right text-xs font-bold text-[#13193a]"
+                    className="px-4 py-3 text-right text-xs font-bold text-[#1447e6]"
                   >
                     TOTALES
                   </td>
                   <td className="px-4 py-3 text-right text-xs font-bold text-emerald-700">
                     {$(polizas.reduce((s, p) => s + n(p.prima_primer_pago), 0))}
                   </td>
-                  <td className="px-4 py-3 text-right text-xs font-bold text-[#13193a]">
+                  <td className="px-4 py-3 text-right text-xs font-bold text-[#1447e6]">
                     {$(polizas.reduce((s, p) => s + n(p.efectivo), 0))}
                   </td>
                   <td colSpan={3} />

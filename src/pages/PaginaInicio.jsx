@@ -110,7 +110,7 @@ export default function PaginaInicio() {
   const filaAbajo  = aseguradoras.slice(5);
 
   return (
-    <div className="min-h-full bg-[#0d1128] flex flex-col items-center justify-center px-6 py-12">
+    <div className="min-h-full bg-[#0a2472] flex flex-col items-center justify-center px-6 py-12">
 
       {/* Encabezado */}
       <div className="text-center mb-8">
