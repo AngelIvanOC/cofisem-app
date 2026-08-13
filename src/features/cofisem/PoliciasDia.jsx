@@ -28,15 +28,18 @@ const HOY_LABEL = new Date().toLocaleDateString("es-MX", {
   year: "numeric",
 });
 
-function isoMasDias(dias) {
-  const d = new Date();
-  d.setDate(d.getDate() + dias);
-  return d.toISOString().split("T")[0];
-}
-const FECHA_EMISION_MIN = isoMasDias(-2);
-const FECHA_EMISION_MAX = HOY_ISO;
-const VIGENCIA_MIN = HOY_ISO;
-const VIGENCIA_MAX = isoMasDias(30);
+// Límites de calendario para fecha de emisión / inicio de vigencia —
+// desactivados por ahora a pedido del usuario, se dejan listos para
+// reactivar cuando se vuelvan a necesitar.
+// function isoMasDias(dias) {
+//   const d = new Date();
+//   d.setDate(d.getDate() + dias);
+//   return d.toISOString().split("T")[0];
+// }
+// const FECHA_EMISION_MIN = isoMasDias(-2);
+// const FECHA_EMISION_MAX = HOY_ISO;
+// const VIGENCIA_MIN = HOY_ISO;
+// const VIGENCIA_MAX = isoMasDias(30);
 
 const FORMA_PAGO_OPT = [
   "CONTADO",
@@ -494,8 +497,8 @@ export default function PoliciasDia({ usuario }) {
                 <input
                   type="date"
                   value={form.fecha_emision}
-                  min={FECHA_EMISION_MIN}
-                  max={FECHA_EMISION_MAX}
+                  // min={FECHA_EMISION_MIN}
+                  // max={FECHA_EMISION_MAX}
                   onChange={(e) => setF("fecha_emision", e.target.value)}
                   className={inpCls}
                 />
@@ -505,8 +508,8 @@ export default function PoliciasDia({ usuario }) {
                 <input
                   type="date"
                   value={form.vigencia_inicio}
-                  min={VIGENCIA_MIN}
-                  max={VIGENCIA_MAX}
+                  // min={VIGENCIA_MIN}
+                  // max={VIGENCIA_MAX}
                   onChange={(e) => setF("vigencia_inicio", e.target.value)}
                   className={inpCls}
                 />
