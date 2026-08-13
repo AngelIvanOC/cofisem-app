@@ -29,6 +29,7 @@ export default function CorteHistorial({ usuario }) {
     try {
       let q = supabase.from("corte_efectivo_entrega").select("*").order("fecha_corte", { ascending: false }).limit(90);
       q = usuario?.oficina_id ? q.eq("oficina_id", usuario.oficina_id) : q.is("oficina_id", null);
+      q = usuario?.id ? q.eq("operador_id", usuario.id) : q.is("operador_id", null);
       const { data: dEntregas, error: e1 } = await q;
       if (e1) throw e1;
 
@@ -36,7 +37,7 @@ export default function CorteHistorial({ usuario }) {
       let dPolizas = [];
       if (fechas.length) {
         let q2 = supabase.from("polizas_cofisem").select("fecha_corte, prima_primer_pago").in("fecha_corte", fechas);
-        q2 = usuario?.oficina_id ? q2.eq("oficina_id", usuario.oficina_id) : q2;
+        q2 = usuario?.id ? q2.eq("creado_por", usuario.id) : q2;
         const { data, error: e2 } = await q2;
         if (e2) throw e2;
         dPolizas = data ?? [];
@@ -49,7 +50,7 @@ export default function CorteHistorial({ usuario }) {
     } finally {
       setLoading(false);
     }
-  }, [usuario?.oficina_id]);
+  }, [usuario?.oficina_id, usuario?.id]);
 
   useEffect(() => { cargar(); }, [cargar]);
 

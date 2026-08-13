@@ -160,6 +160,7 @@ export default function PoliciasDia({ usuario }) {
     query = usuario?.oficina_id
       ? query.eq("oficina_id", usuario.oficina_id)
       : query.is("oficina_id", null);
+    query = usuario?.id ? query.eq("operador_id", usuario.id) : query.is("operador_id", null);
     const { data } = await query.maybeSingle();
     setCorteInfo(data ?? null);
   }
@@ -195,8 +196,8 @@ export default function PoliciasDia({ usuario }) {
         .select("*")
         .eq("fecha_corte", HOY_ISO)
         .order("created_at", { ascending: false });
-      if (usuario?.oficina_id)
-        query = query.eq("oficina_id", usuario.oficina_id);
+      if (usuario?.id)
+        query = query.eq("creado_por", usuario.id);
       const { data, error } = await query;
       if (error) throw error;
       setPolizas(data ?? []);

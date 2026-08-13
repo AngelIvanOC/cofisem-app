@@ -112,7 +112,7 @@ export default function CorteOperador({ usuario }) {
         .select("*")
         .eq("fecha_corte", fechaCorte)
         .order("created_at", { ascending: true });
-      if (usuario?.oficina_id) query = query.eq("oficina_id", usuario.oficina_id);
+      if (usuario?.id) query = query.eq("creado_por", usuario.id);
       const { data, error } = await query;
       if (error) throw error;
       setRegistros(data ?? []);
@@ -127,6 +127,7 @@ export default function CorteOperador({ usuario }) {
     try {
       let query = supabase.from("corte_efectivo_entrega").select("*").eq("fecha_corte", fechaCorte);
       query = usuario?.oficina_id ? query.eq("oficina_id", usuario.oficina_id) : query.is("oficina_id", null);
+      query = usuario?.id ? query.eq("operador_id", usuario.id) : query.is("operador_id", null);
       const { data } = await query.maybeSingle();
       setEntregaEfectivo(data ?? null);
     } catch {
@@ -161,6 +162,7 @@ export default function CorteOperador({ usuario }) {
       const payload = {
         fecha_corte:     fechaCorte,
         oficina_id:      usuario?.oficina_id ?? null,
+        operador_id:     usuario?.id ?? null,
         entrega,
         comprobante_url,
         decidido_por:    usuario?.id ?? null,
@@ -168,7 +170,7 @@ export default function CorteOperador({ usuario }) {
       };
       const { data, error } = await supabase
         .from("corte_efectivo_entrega")
-        .upsert(payload, { onConflict: "fecha_corte,oficina_id" })
+        .upsert(payload, { onConflict: "fecha_corte,oficina_id,operador_id" })
         .select()
         .single();
       if (error) throw error;
@@ -196,6 +198,7 @@ export default function CorteOperador({ usuario }) {
       const payload = {
         fecha_corte:     fechaCorte,
         oficina_id:      usuario?.oficina_id ?? null,
+        operador_id:     usuario?.id ?? null,
         entrega:         entregaEfectivo?.entrega ?? null,
         comprobante_url: entregaEfectivo?.comprobante_url ?? null,
         decidido_por:    entregaEfectivo?.decidido_por ?? usuario?.id ?? null,
@@ -207,7 +210,7 @@ export default function CorteOperador({ usuario }) {
       };
       const { data, error } = await supabase
         .from("corte_efectivo_entrega")
-        .upsert(payload, { onConflict: "fecha_corte,oficina_id" })
+        .upsert(payload, { onConflict: "fecha_corte,oficina_id,operador_id" })
         .select()
         .single();
       if (error) throw error;
