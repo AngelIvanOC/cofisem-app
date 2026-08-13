@@ -14,9 +14,10 @@ import { subirDocumento, verDocumento, MAX_DOCUMENTO_BYTES } from "../../service
 
 const n = (v) => parseFloat(v) || 0;
 
+const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
+
 // Coberturas "amplia"/"limitada" exigen foto del vehículo además de la
-// identificación — se detecta por el texto libre de cobertura porque no
-// hay un catálogo fijo de coberturas en este formulario.
+// identificación.
 const esAmpliaOLimitada = (cobertura) => /AMPLIA|LIMITADA/i.test(cobertura || "");
 
 const VACIO = {
@@ -337,7 +338,10 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
               </div>
               <div className="col-span-2 sm:col-span-2">
                 <label className={lblModal}>Cobertura <span className="text-red-400">*</span></label>
-                <input value={form.cobertura} onChange={(e) => setF("cobertura", e.target.value.toUpperCase())} placeholder="Ej. TAXI BÁSICA 2500" className={inpModal} />
+                <select value={form.cobertura} onChange={(e) => setF("cobertura", e.target.value)} className={inpModal}>
+                  <option value="">Selecciona...</option>
+                  {COBERTURA_OPT.map((o) => <option key={o}>{o}</option>)}
+                </select>
               </div>
               <div>
                 <label className={lblModal}>Vigencia fin <span className="text-red-400">*</span></label>

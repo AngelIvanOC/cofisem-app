@@ -49,6 +49,7 @@ const FORMA_PAGO_OPT = [
   "SEMESTRAL",
   "ANUAL",
 ];
+const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
 const TIPO_OPT = [
   "COCHE",
   "SP TAXI",
@@ -464,14 +465,14 @@ export default function PoliciasDia({ usuario }) {
               </div>
               <div className="sm:col-span-2">
                 <label className={lblCls}>Cobertura</label>
-                <input
+                <select
                   value={form.cobertura}
-                  onChange={(e) =>
-                    setF("cobertura", e.target.value.toUpperCase())
-                  }
-                  placeholder="Ej. TAXI BÁSICA 2500"
+                  onChange={(e) => setF("cobertura", e.target.value)}
                   className={inpCls}
-                />
+                >
+                  <option value="">Selecciona...</option>
+                  {COBERTURA_OPT.map((o) => <option key={o}>{o}</option>)}
+                </select>
               </div>
               <div>
                 <label className={lblCls}>Forma de pago</label>
