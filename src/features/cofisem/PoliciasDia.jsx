@@ -50,6 +50,9 @@ const FORMA_PAGO_OPT = [
   "SEMESTRAL",
   "MENSUAL",
 ];
+// En modo "No tengo la póliza" no aplica CONTADO — ahí solo se registra
+// una cuota subsecuente (2+), y CONTADO es una sola exhibición sin cuota 2.
+const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT.filter((f) => f !== "CONTADO");
 const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
 
 // Entre cuántos pagos se reparte la Prima T. Anual según la forma de pago —
@@ -70,6 +73,7 @@ function calcularPrimerPago(primaAnual, formaPago) {
   const divisor = DIVISOR_PAGO[formaPago] ?? 1;
   return (anual / divisor).toFixed(2);
 }
+
 const TIPO_OPT = [
   "AUTO",
   "SP TAXI",
@@ -157,6 +161,8 @@ export default function PoliciasDia({ usuario }) {
   const [vendedores, setVendedores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [vista, setVista] = useState("lista"); // "lista" | "form"
+  const [modo, setModo] = useState("COMPLETA"); // "COMPLETA" | "PARCIAL"
+  const [numCuotaParcial, setNumCuotaParcial] = useState("");
   const [form, setForm] = useState({ ...FORM_VACIO });
   const [conVendedor, setConVendedor] = useState(false);
   const [modalVendedorAbierto, setModalVendedorAbierto] = useState(false);
@@ -241,8 +247,18 @@ export default function PoliciasDia({ usuario }) {
     setForm({ ...FORM_VACIO });
     setConVendedor(false);
     setErrorMsg(null);
+    setModo("COMPLETA");
+    setNumCuotaParcial("");
     compUuidsRef.current = {};
     setVista("form");
+  }
+
+  function cambiarModo(nuevo) {
+    setModo(nuevo);
+    setNumCuotaParcial("");
+    if (nuevo === "PARCIAL" && form.forma_pago === "CONTADO") {
+      setF("forma_pago", "");
+    }
   }
 
   function getCompUuid(tipo) {
@@ -308,6 +324,13 @@ export default function PoliciasDia({ usuario }) {
   async function handleGuardar(e) {
     e.preventDefault();
     if (guardando) return;
+    const esParcial = modo === "PARCIAL";
+    if (esParcial && (!form.forma_pago || !numCuotaParcial)) {
+      setErrorMsg(
+        "Selecciona la forma de pago y qué número de cuota vienes a registrar.",
+      );
+      return;
+    }
     setGuardando(true);
     setErrorMsg(null);
     try {
@@ -327,55 +350,118 @@ export default function PoliciasDia({ usuario }) {
         .join(" ")
         .trim();
 
+      const payload = esParcial
+        ? {
+            // Registro parcial: solo lo mínimo — sin vigencia, vehículo ni
+            // documentación (no se tienen). La cuota real que se está
+            // cobrando NO va aquí, se inserta aparte en pagos_cofisem.
+            aseguradora: form.aseguradora,
+            numero_poliza: form.numero_poliza,
+            folio: form.folio || null,
+            cobertura: form.cobertura || null,
+            forma_pago: form.forma_pago,
+            fecha_emision: HOY_ISO,
+            vigencia_inicio: null,
+            vigencia_fin: null,
+            asegurado_nombre,
+            asegurado_nombre_pila: form.asegurado_nombre_pila || null,
+            asegurado_apellido_paterno: form.asegurado_apellido_paterno || null,
+            asegurado_apellido_materno: form.asegurado_apellido_materno || null,
+            telefono: form.telefono || null,
+            vendedor_id: vendedorId,
+            vendedor_nombre: vendedorNombre,
+            placas: null,
+            num_serie: null,
+            tipo: null,
+            autorizacion: null,
+            observaciones: form.observaciones || null,
+            fecha_corte: HOY_ISO,
+            oficina_id: usuario?.oficina_id ?? null,
+            creado_por: usuario?.id ?? null,
+            completado: false,
+            registro_parcial: true,
+            // Cuál cuota es esta — para que las tablas de corte puedan
+            // mostrar "Cuota 3" en vez de asumir que es la 1. El monto se
+            // guarda también aquí (igual que en pagos_cofisem) para que
+            // esas mismas tablas puedan sumar/mostrar el pago sin tener
+            // que ir a buscarlo a otra tabla.
+            num_cuota_pago: Number(numCuotaParcial),
+            prima_anual: n(form.prima_anual),
+            prima_neta: n(form.prima_neta),
+            prima_primer_pago: n(form.prima_primer_pago),
+            prima_primer_pago_neta: n(form.prima_primer_pago_neta),
+            vale: n(form.vale),
+            pol_pend_pago: 0,
+            efectivo: 0,
+            cheque: 0,
+            tdc: 0,
+            comprobante_tdc_url: null,
+            comprobante_cheque_url: null,
+            comprobante_vale_url: form.comprobante_vale_path,
+            fotos_url: null,
+            factura_url: null,
+            t_circ_url: null,
+            identif_url: null,
+            pol_ant_url: null,
+            otro_url: null,
+          }
+        : {
+            aseguradora: form.aseguradora,
+            numero_poliza: form.numero_poliza,
+            folio: form.folio || null,
+            cobertura: form.cobertura || null,
+            forma_pago: form.forma_pago,
+            fecha_emision: form.fecha_emision,
+            vigencia_inicio: form.vigencia_inicio,
+            vigencia_fin: form.vigencia_fin || null,
+            asegurado_nombre,
+            asegurado_nombre_pila: form.asegurado_nombre_pila || null,
+            asegurado_apellido_paterno: form.asegurado_apellido_paterno || null,
+            asegurado_apellido_materno: form.asegurado_apellido_materno || null,
+            telefono: form.telefono || null,
+            vendedor_id: vendedorId,
+            vendedor_nombre: vendedorNombre,
+            placas: form.placas || null,
+            num_serie: form.num_serie ? form.num_serie.toUpperCase() : null,
+            tipo: form.tipo,
+            autorizacion: form.autorizacion || null,
+            observaciones: form.observaciones || null,
+            fecha_corte: HOY_ISO,
+            oficina_id: usuario?.oficina_id ?? null,
+            creado_por: usuario?.id ?? null,
+            completado: evaluarCompletado(form),
+            prima_anual: n(form.prima_anual),
+            prima_neta: n(form.prima_neta),
+            prima_primer_pago: n(form.prima_primer_pago),
+            prima_primer_pago_neta: n(form.prima_primer_pago_neta),
+            vale: n(form.vale),
+            pol_pend_pago: n(form.pol_pend_pago),
+            efectivo: n(form.efectivo),
+            cheque: n(form.cheque),
+            tdc: n(form.tdc),
+            comprobante_tdc_url: form.comprobante_tdc_path,
+            comprobante_cheque_url: form.comprobante_cheque_path,
+            comprobante_vale_url: form.comprobante_vale_path,
+            fotos_url: form.fotos_path,
+            factura_url: form.factura_path,
+            t_circ_url: form.t_circ_path,
+            identif_url: form.identif_path,
+            pol_ant_url: form.pol_ant_path,
+            otro_url: form.otro_path,
+          };
+
+      // Las cuotas 2..N (para COMPLETA y PARCIAL) las genera solo el
+      // trigger de BD generar_cuotas_cofisem() — tanto al crear como en
+      // cualquier edición posterior de forma_pago/primas mientras el
+      // corte siga abierto. Insertarlas aquí también duplicaría lo que
+      // el trigger ya hace y chocaría con su unique constraint.
       const { data, error } = await supabase
         .from("polizas_cofisem")
-        .insert({
-          aseguradora: form.aseguradora,
-          numero_poliza: form.numero_poliza,
-          folio: form.folio || null,
-          cobertura: form.cobertura || null,
-          forma_pago: form.forma_pago,
-          fecha_emision: form.fecha_emision,
-          vigencia_inicio: form.vigencia_inicio,
-          vigencia_fin: form.vigencia_fin || null,
-          asegurado_nombre,
-          asegurado_nombre_pila: form.asegurado_nombre_pila || null,
-          asegurado_apellido_paterno: form.asegurado_apellido_paterno || null,
-          asegurado_apellido_materno: form.asegurado_apellido_materno || null,
-          telefono: form.telefono || null,
-          vendedor_id: vendedorId,
-          vendedor_nombre: vendedorNombre,
-          placas: form.placas || null,
-          num_serie: form.num_serie ? form.num_serie.toUpperCase() : null,
-          tipo: form.tipo,
-          autorizacion: form.autorizacion || null,
-          observaciones: form.observaciones || null,
-          fecha_corte: HOY_ISO,
-          oficina_id: usuario?.oficina_id ?? null,
-          creado_por: usuario?.id ?? null,
-          completado: evaluarCompletado(form),
-          prima_anual: n(form.prima_anual),
-          prima_neta: n(form.prima_neta),
-          prima_primer_pago: n(form.prima_primer_pago),
-          prima_primer_pago_neta: n(form.prima_primer_pago_neta),
-          vale: n(form.vale),
-          pol_pend_pago: n(form.pol_pend_pago),
-          efectivo: n(form.efectivo),
-          cheque: n(form.cheque),
-          tdc: n(form.tdc),
-          comprobante_tdc_url: form.comprobante_tdc_path,
-          comprobante_cheque_url: form.comprobante_cheque_path,
-          comprobante_vale_url: form.comprobante_vale_path,
-          fotos_url: form.fotos_path,
-          factura_url: form.factura_path,
-          t_circ_url: form.t_circ_path,
-          identif_url: form.identif_path,
-          pol_ant_url: form.pol_ant_path,
-          otro_url: form.otro_path,
-        })
+        .insert(payload)
         .select()
         .single();
       if (error) throw error;
+
       setPolizas((prev) => [data, ...prev]);
       setVista("lista");
     } catch (e) {
@@ -429,6 +515,53 @@ export default function PoliciasDia({ usuario }) {
             <p className="text-xs text-gray-400 mt-0.5">
               {oficina} · {HOY_LABEL}
             </p>
+          </div>
+        </div>
+
+        {/* Tengo / No tengo la póliza */}
+        <div className="mb-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+            ¿Qué vienes a registrar?
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={() => cambiarModo("COMPLETA")}
+              className={`flex-1 text-left px-4 py-3 rounded-xl border-2 transition-all ${
+                modo === "COMPLETA"
+                  ? "border-[#1447e6] bg-[#1447e6]/5"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <p
+                className={`text-sm font-bold ${modo === "COMPLETA" ? "text-[#1447e6]" : "text-gray-600"}`}
+              >
+                Tengo la póliza
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Póliza nueva o su primer pago — se captura completa: vigencia,
+                vehículo, documentación.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => cambiarModo("PARCIAL")}
+              className={`flex-1 text-left px-4 py-3 rounded-xl border-2 transition-all ${
+                modo === "PARCIAL"
+                  ? "border-[#1447e6] bg-[#1447e6]/5"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <p
+                className={`text-sm font-bold ${modo === "PARCIAL" ? "text-[#1447e6]" : "text-gray-600"}`}
+              >
+                No tengo la póliza
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Vienen a pagar una cuota subsecuente (2+) de una póliza que no
+                quedó registrada — solo datos básicos.
+              </p>
+            </button>
           </div>
         </div>
 
@@ -488,7 +621,7 @@ export default function PoliciasDia({ usuario }) {
                   className={inpCls}
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div>
                 <label className={lblCls}>Cobertura</label>
                 <select
                   value={form.cobertura}
@@ -502,11 +635,18 @@ export default function PoliciasDia({ usuario }) {
                 </select>
               </div>
               <div>
-                <label className={lblCls}>Forma de pago</label>
+                <label className={lblCls}>
+                  Forma de pago{" "}
+                  {modo === "PARCIAL" && (
+                    <span className="text-red-400">*</span>
+                  )}
+                </label>
                 <select
                   value={form.forma_pago}
+                  required={modo === "PARCIAL"}
                   onChange={(e) => {
                     const forma_pago = e.target.value;
+                    setNumCuotaParcial("");
                     setForm((prev) => ({
                       ...prev,
                       forma_pago,
@@ -522,51 +662,82 @@ export default function PoliciasDia({ usuario }) {
                   }}
                   className={inpCls}
                 >
-                  {FORMA_PAGO_OPT.map((o) => (
+                  {modo === "PARCIAL" && (
+                    <option value="">Selecciona...</option>
+                  )}
+                  {(modo === "PARCIAL"
+                    ? FORMA_PAGO_OPT_PARCIAL
+                    : FORMA_PAGO_OPT
+                  ).map((o) => (
                     <option key={o}>{o}</option>
                   ))}
                 </select>
               </div>
+              {modo === "PARCIAL" && form.forma_pago && (
+                <div>
+                  <label className={lblCls}>
+                    Cuota a registrar <span className="text-red-400">*</span>
+                  </label>
+                  <select
+                    value={numCuotaParcial}
+                    required
+                    onChange={(e) => setNumCuotaParcial(e.target.value)}
+                    className={inpCls}
+                  >
+                    <option value="">Selecciona...</option>
+                    {Array.from(
+                      { length: (DIVISOR_PAGO[form.forma_pago] ?? 1) - 1 },
+                      (_, idx) => idx + 2,
+                    ).map((num) => (
+                      <option key={num} value={num}>
+                        Cuota {num} de {DIVISOR_PAGO[form.forma_pago]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* ── S2: Vigencia ── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <SeccionHeader>Vigencia</SeccionHeader>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className={lblCls}>Fecha de emisión</label>
-                <input
-                  type="date"
-                  value={form.fecha_emision}
-                  // min={FECHA_EMISION_MIN}
-                  // max={FECHA_EMISION_MAX}
-                  onChange={(e) => setF("fecha_emision", e.target.value)}
-                  className={inpCls}
-                />
-              </div>
-              <div>
-                <label className={lblCls}>Inicio de vigencia</label>
-                <input
-                  type="date"
-                  value={form.vigencia_inicio}
-                  // min={VIGENCIA_MIN}
-                  // max={VIGENCIA_MAX}
-                  onChange={(e) => setF("vigencia_inicio", e.target.value)}
-                  className={inpCls}
-                />
-              </div>
-              <div>
-                <label className={lblCls}>Fin de vigencia</label>
-                <input
-                  type="date"
-                  value={form.vigencia_fin}
-                  onChange={(e) => setF("vigencia_fin", e.target.value)}
-                  className={inpCls}
-                />
+          {/* ── S2: Vigencia (solo si tienes la póliza) ── */}
+          {modo === "COMPLETA" && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <SeccionHeader>Vigencia</SeccionHeader>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className={lblCls}>Fecha de emisión</label>
+                  <input
+                    type="date"
+                    value={form.fecha_emision}
+                    // min={FECHA_EMISION_MIN}
+                    // max={FECHA_EMISION_MAX}
+                    onChange={(e) => setF("fecha_emision", e.target.value)}
+                    className={inpCls}
+                  />
+                </div>
+                <div>
+                  <label className={lblCls}>Inicio de vigencia</label>
+                  <input
+                    type="date"
+                    value={form.vigencia_inicio}
+                    // min={VIGENCIA_MIN}
+                    // max={VIGENCIA_MAX}
+                    onChange={(e) => setF("vigencia_inicio", e.target.value)}
+                    className={inpCls}
+                  />
+                </div>
+                <div>
+                  <label className={lblCls}>Fin de vigencia</label>
+                  <input
+                    type="date"
+                    value={form.vigencia_fin}
+                    onChange={(e) => setF("vigencia_fin", e.target.value)}
+                    className={inpCls}
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* ── S3: Asegurado ── */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -700,58 +871,74 @@ export default function PoliciasDia({ usuario }) {
             </div>
           </div>
 
-          {/* ── S4: Vehículo ── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <SeccionHeader>Vehículo</SeccionHeader>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className={lblCls}>Placas</label>
-                <input
-                  value={form.placas}
-                  onChange={(e) => setF("placas", e.target.value.toUpperCase())}
-                  placeholder="Ej. ABC-123 o TRÁMITE"
-                  className={inpCls}
-                />
-              </div>
-              <div>
-                <label className={lblCls}>Número de serie</label>
-                <input
-                  value={form.num_serie}
-                  onChange={(e) => setF("num_serie", e.target.value.toUpperCase())}
-                  placeholder="Opcional — VIN del vehículo"
-                  className={inpCls}
-                />
-              </div>
-              <div>
-                <label className={lblCls}>Tipo de vehículo</label>
-                <select
-                  value={form.tipo}
-                  onChange={(e) => setF("tipo", e.target.value)}
-                  className={inpCls}
-                >
-                  {TIPO_OPT.map((o) => (
-                    <option key={o}>{o}</option>
-                  ))}
-                </select>
+          {/* ── S4: Vehículo (solo si tienes la póliza) ── */}
+          {modo === "COMPLETA" && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <SeccionHeader>Vehículo</SeccionHeader>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className={lblCls}>Placas</label>
+                  <input
+                    value={form.placas}
+                    onChange={(e) =>
+                      setF("placas", e.target.value.toUpperCase())
+                    }
+                    placeholder="Ej. ABC-123 o TRÁMITE"
+                    className={inpCls}
+                  />
+                </div>
+                <div>
+                  <label className={lblCls}>Número de serie</label>
+                  <input
+                    value={form.num_serie}
+                    onChange={(e) =>
+                      setF("num_serie", e.target.value.toUpperCase())
+                    }
+                    placeholder="Opcional — VIN del vehículo"
+                    className={inpCls}
+                  />
+                </div>
+                <div>
+                  <label className={lblCls}>Tipo de vehículo</label>
+                  <select
+                    value={form.tipo}
+                    onChange={(e) => setF("tipo", e.target.value)}
+                    className={inpCls}
+                  >
+                    {TIPO_OPT.map((o) => (
+                      <option key={o}>{o}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* ── S5: Cobro ── */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <SeccionHeader>Montos y cobro</SeccionHeader>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
-                { k: "prima_anual", label: "Prima T. Anual" },
-                { k: "prima_neta", label: "Prima Neta Anual" },
+                ...(modo === "COMPLETA"
+                  ? [
+                      { k: "prima_anual", label: "Prima T. Anual" },
+                      { k: "prima_neta", label: "Prima Neta Anual" },
+                    ]
+                  : []),
                 {
                   k: "prima_primer_pago",
-                  label: "Prima T. 1er Pago",
+                  label:
+                    modo === "PARCIAL"
+                      ? "Prima T. de la cuota"
+                      : "Prima T. 1er Pago",
                   req: true,
                 },
                 {
                   k: "prima_primer_pago_neta",
-                  label: "Prima N. 1er Pago",
+                  label:
+                    modo === "PARCIAL"
+                      ? "Prima N. de la cuota"
+                      : "Prima N. 1er Pago",
                   req: true,
                 },
                 { k: "vale", label: "Vale ($)" },
@@ -804,41 +991,44 @@ export default function PoliciasDia({ usuario }) {
                   </div>
                 </div>
               ))}
-              {[
-                { k: "efectivo", label: "Efectivo" },
-                { k: "cheque", label: "Cheque / Dep." },
-                { k: "tdc", label: "T. Crédito/Déb." },
-                { k: "pol_pend_pago", label: "Pól. Pend. Pago" },
-              ].map((f) => (
-                <div key={f.k}>
-                  <label className={lblCls}>{f.label}</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                      $
-                    </span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form[f.k]}
-                      onChange={(e) => setF(f.k, e.target.value)}
-                      placeholder="0.00"
-                      className={inpCls + " pl-7"}
-                    />
+              {modo === "COMPLETA" &&
+                [
+                  { k: "efectivo", label: "Efectivo" },
+                  { k: "cheque", label: "Cheque / Dep." },
+                  { k: "tdc", label: "T. Crédito/Déb." },
+                  { k: "pol_pend_pago", label: "Pól. Pend. Pago" },
+                ].map((f) => (
+                  <div key={f.k}>
+                    <label className={lblCls}>{f.label}</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                        $
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form[f.k]}
+                        onChange={(e) => setF(f.k, e.target.value)}
+                        placeholder="0.00"
+                        className={inpCls + " pl-7"}
+                      />
+                    </div>
                   </div>
+                ))}
+              {modo === "COMPLETA" && (
+                <div className="sm:col-span-2">
+                  <label className={lblCls}>Autorización</label>
+                  <input
+                    value={form.autorizacion}
+                    onChange={(e) =>
+                      setF("autorizacion", e.target.value.toUpperCase())
+                    }
+                    placeholder="Código de autorización"
+                    className={inpCls}
+                  />
                 </div>
-              ))}
-              <div className="sm:col-span-2">
-                <label className={lblCls}>Autorización</label>
-                <input
-                  value={form.autorizacion}
-                  onChange={(e) =>
-                    setF("autorizacion", e.target.value.toUpperCase())
-                  }
-                  placeholder="Código de autorización"
-                  className={inpCls}
-                />
-              </div>
+              )}
             </div>
 
             {(n(form.vale) > 0 || n(form.cheque) > 0 || n(form.tdc) > 0) && (
@@ -881,67 +1071,69 @@ export default function PoliciasDia({ usuario }) {
             )}
           </div>
 
-          {/* ── S6: Documentación ── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <SeccionHeader>Documentación recibida</SeccionHeader>
-            <p className="text-[11px] text-gray-400 -mt-2 mb-4">
-              Opcional por ahora — puedes dejarla pendiente y subirla después,
-              pero para cerrar el corte se exige identificación
-              {esAmpliaOLimitada(form.cobertura)
-                ? ", fotos del vehículo (cobertura amplia/limitada) y al menos una de Factura, T. Circulación o Póliza anterior."
-                : " y al menos una de Fotos, Factura, T. Circulación o Póliza anterior."}
-            </p>
-            <div className="space-y-2">
-              <ComprobanteField
-                label="Identificación"
-                path={form.identif_path}
-                subiendo={subiendoDocumento === "identif"}
-                onFile={(f) => handleDocumentoChange("identif", f)}
-                onVer={() => handleVerDocumento(form.identif_path)}
-                obligatorio={false}
-              />
-              <ComprobanteField
-                label="Fotos del vehículo"
-                path={form.fotos_path}
-                subiendo={subiendoDocumento === "fotos"}
-                onFile={(f) => handleDocumentoChange("fotos", f)}
-                onVer={() => handleVerDocumento(form.fotos_path)}
-                obligatorio={false}
-              />
-              <ComprobanteField
-                label="Factura"
-                path={form.factura_path}
-                subiendo={subiendoDocumento === "factura"}
-                onFile={(f) => handleDocumentoChange("factura", f)}
-                onVer={() => handleVerDocumento(form.factura_path)}
-                obligatorio={false}
-              />
-              <ComprobanteField
-                label="Tarjeta de circulación"
-                path={form.t_circ_path}
-                subiendo={subiendoDocumento === "t_circ"}
-                onFile={(f) => handleDocumentoChange("t_circ", f)}
-                onVer={() => handleVerDocumento(form.t_circ_path)}
-                obligatorio={false}
-              />
-              <ComprobanteField
-                label="Póliza anterior"
-                path={form.pol_ant_path}
-                subiendo={subiendoDocumento === "pol_ant"}
-                onFile={(f) => handleDocumentoChange("pol_ant", f)}
-                onVer={() => handleVerDocumento(form.pol_ant_path)}
-                obligatorio={false}
-              />
-              <ComprobanteField
-                label="Otro"
-                path={form.otro_path}
-                subiendo={subiendoDocumento === "otro"}
-                onFile={(f) => handleDocumentoChange("otro", f)}
-                onVer={() => handleVerDocumento(form.otro_path)}
-                obligatorio={false}
-              />
+          {/* ── S6: Documentación (solo si tienes la póliza) ── */}
+          {modo === "COMPLETA" && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <SeccionHeader>Documentación recibida</SeccionHeader>
+              <p className="text-[11px] text-gray-400 -mt-2 mb-4">
+                Opcional por ahora — puedes dejarla pendiente y subirla después,
+                pero para cerrar el corte se exige identificación
+                {esAmpliaOLimitada(form.cobertura)
+                  ? ", fotos del vehículo (cobertura amplia/limitada) y al menos una de Factura, T. Circulación o Póliza anterior."
+                  : " y al menos una de Fotos, Factura, T. Circulación o Póliza anterior."}
+              </p>
+              <div className="space-y-2">
+                <ComprobanteField
+                  label="Identificación"
+                  path={form.identif_path}
+                  subiendo={subiendoDocumento === "identif"}
+                  onFile={(f) => handleDocumentoChange("identif", f)}
+                  onVer={() => handleVerDocumento(form.identif_path)}
+                  obligatorio={false}
+                />
+                <ComprobanteField
+                  label="Fotos del vehículo"
+                  path={form.fotos_path}
+                  subiendo={subiendoDocumento === "fotos"}
+                  onFile={(f) => handleDocumentoChange("fotos", f)}
+                  onVer={() => handleVerDocumento(form.fotos_path)}
+                  obligatorio={false}
+                />
+                <ComprobanteField
+                  label="Factura"
+                  path={form.factura_path}
+                  subiendo={subiendoDocumento === "factura"}
+                  onFile={(f) => handleDocumentoChange("factura", f)}
+                  onVer={() => handleVerDocumento(form.factura_path)}
+                  obligatorio={false}
+                />
+                <ComprobanteField
+                  label="Tarjeta de circulación"
+                  path={form.t_circ_path}
+                  subiendo={subiendoDocumento === "t_circ"}
+                  onFile={(f) => handleDocumentoChange("t_circ", f)}
+                  onVer={() => handleVerDocumento(form.t_circ_path)}
+                  obligatorio={false}
+                />
+                <ComprobanteField
+                  label="Póliza anterior"
+                  path={form.pol_ant_path}
+                  subiendo={subiendoDocumento === "pol_ant"}
+                  onFile={(f) => handleDocumentoChange("pol_ant", f)}
+                  onVer={() => handleVerDocumento(form.pol_ant_path)}
+                  obligatorio={false}
+                />
+                <ComprobanteField
+                  label="Otro"
+                  path={form.otro_path}
+                  subiendo={subiendoDocumento === "otro"}
+                  onFile={(f) => handleDocumentoChange("otro", f)}
+                  onVer={() => handleVerDocumento(form.otro_path)}
+                  obligatorio={false}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ── S7: Observaciones ── */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -1168,7 +1360,8 @@ export default function PoliciasDia({ usuario }) {
                     "Vendedor",
                     "Cobertura",
                     "Forma Pago",
-                    "1er Pago",
+                    "Cuota",
+                    "Pago",
                     "Efectivo",
                     "F. Emisión",
                     "Acción",
@@ -1212,6 +1405,9 @@ export default function PoliciasDia({ usuario }) {
                     </td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                       {p.forma_pago || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-center font-bold text-gray-500">
+                      {p.num_cuota_pago ?? 1}
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-emerald-700">
                       {$(p.prima_primer_pago)}
@@ -1262,6 +1458,7 @@ export default function PoliciasDia({ usuario }) {
                   >
                     TOTALES
                   </td>
+                  <td />
                   <td className="px-4 py-3 text-right text-xs font-bold text-emerald-700">
                     {$(polizas.reduce((s, p) => s + n(p.prima_primer_pago), 0))}
                   </td>

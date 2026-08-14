@@ -7,6 +7,7 @@ import { verDocumento } from "../../services/documentacionPoliza";
 import { exportarCorteExcel } from "../../services/corteExport";
 import { hoyISO } from "../../utils/fecha";
 import CompletarPolizaModal, { CompletarBadge } from "./CompletarPolizaModal";
+import RegistrarCobroModal from "../pagos/RegistrarCobroModal";
 
 const DENOMINACIONES = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.5];
 const HOY_ISO = hoyISO();
@@ -21,6 +22,34 @@ const fmt = (d) =>
         year: "numeric",
       })
     : "—";
+
+// Convierte una cuota subsecuente (pagos_cofisem, con su póliza padre ya
+// unida) en una fila con la misma forma que un registro de polizas_cofisem,
+// para poder reutilizar exactamente las mismas columnas de la tabla —
+// datos de la póliza de solo lectura (spread del padre) + los campos de
+// cobro sobreescritos con los de ESTA cuota en particular.
+function cuotaARow(c) {
+  const p = c.polizas_cofisem ?? {};
+  return {
+    ...p,
+    id: `cuota-${c.id}`,
+    _esCuotaSubsecuente: true,
+    _cuotaEstatus: c.estatus,
+    _cuotaRaw: c,
+    num_cuota_pago: c.num_cuota,
+    prima_primer_pago: c.prima_total,
+    prima_primer_pago_neta: c.prima_neta,
+    vale: c.vale,
+    efectivo: c.efectivo,
+    cheque: c.cheque,
+    tdc: c.tdc,
+    pol_pend_pago: c.pol_pend_pago,
+    autorizacion: c.autorizacion,
+    comprobante_vale_url: c.comprobante_vale_url,
+    comprobante_cheque_url: c.comprobante_cheque_url,
+    comprobante_tdc_url: c.comprobante_tdc_url,
+  };
+}
 
 export default function CorteOperador({ usuario }) {
   const [searchParams] = useSearchParams();
@@ -38,6 +67,7 @@ export default function CorteOperador({ usuario }) {
   );
 
   const [registros, setRegistros] = useState([]);
+  const [cuotasDia, setCuotasDia] = useState([]); // pagos_cofisem: cuotas subsecuentes que vencieron hoy, se adelantaron a hoy, o ya se cobraron hoy
   const [loading, setLoading]     = useState(true);
   const [errorMsg, setErrorMsg]   = useState(null);
   const [gastos, setGastos]       = useState(0);
@@ -46,6 +76,7 @@ export default function CorteOperador({ usuario }) {
     Object.fromEntries(DENOMINACIONES.map((d) => [d, ""])),
   );
   const [modalRow, setModalRow] = useState(null);
+  const [modalCuota, setModalCuota] = useState(null);
 
   const [entregaEfectivo, setEntregaEfectivo] = useState(null);
   const [subiendoEfectivo, setSubiendoEfectivo] = useState(false);
@@ -58,12 +89,25 @@ export default function CorteOperador({ usuario }) {
 
   const oficina = usuario?.oficinas?.nombre ?? "OFICINA";
 
-  const totalEfectivo   = registros.reduce((s, r) => s + n(r.efectivo), 0);
-  const totalVales      = registros.reduce((s, r) => s + n(r.vale), 0);
-  const totalTDC        = registros.reduce((s, r) => s + n(r.tdc), 0);
-  const totalCheque     = registros.reduce((s, r) => s + n(r.cheque), 0);
-  const polPendPago     = registros.reduce((s, r) => s + n(r.pol_pend_pago), 0);
-  const sumaPrimerPago  = registros.reduce((s, r) => s + n(r.prima_primer_pago), 0);
+  // Cuotas subsecuentes que vencieron hoy (o se adelantaron a hoy) se
+  // muestran como filas estáticas más en la misma tabla — mismos
+  // campos de cobro, pero la póliza (vigencia, vehículo, etc.) es de
+  // solo lectura porque ya se registró antes. Cuentan para el efectivo
+  // y demás totales de cobro del día (es dinero que sí se cobró hoy),
+  // pero NO para "Prima T./Neta Anual" (eso es "venta nueva del día",
+  // no se debe sumar otra vez cada vez que a una póliza vieja le toca
+  // pagar) ni para el bloqueo de cierre por "pendientes de completar"
+  // (esas filas no tienen concepto de completado — si el cliente no
+  // vino, simplemente se sigue mostrando al día siguiente).
+  const filasCuotas = cuotasDia.map(cuotaARow);
+  const filasTabla  = [...registros, ...filasCuotas];
+
+  const totalEfectivo   = filasTabla.reduce((s, r) => s + n(r.efectivo), 0);
+  const totalVales      = filasTabla.reduce((s, r) => s + n(r.vale), 0);
+  const totalTDC        = filasTabla.reduce((s, r) => s + n(r.tdc), 0);
+  const totalCheque     = filasTabla.reduce((s, r) => s + n(r.cheque), 0);
+  const polPendPago     = filasTabla.reduce((s, r) => s + n(r.pol_pend_pago), 0);
+  const sumaPrimerPago  = filasTabla.reduce((s, r) => s + n(r.prima_primer_pago), 0);
   const sumaPrimaAnual  = registros.reduce((s, r) => s + n(r.prima_anual), 0);
   const sumaPrimaNeta   = registros.reduce((s, r) => s + n(r.prima_neta), 0);
   const pendientes      = registros.filter((r) => !r.completado).length;
@@ -80,6 +124,7 @@ export default function CorteOperador({ usuario }) {
     setLoading(true);
     cargar();
     cargarEntregaEfectivo();
+    cargarCuotasDia();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fechaCorte]);
 
@@ -124,6 +169,37 @@ export default function CorteOperador({ usuario }) {
     }
   }
 
+  // Cuotas subsecuentes que pertenecen al corte de este día:
+  //  - Ya cobradas ESE día (fecha_recibido = fechaCorte) — hecho histórico,
+  //    aplica aunque se esté consultando un día pasado.
+  //  - Todavía PENDIENTE, con vencimiento hoy o antes (no se pierden de
+  //    vista mientras no se cobren) o adelantadas a hoy — solo tiene
+  //    sentido mostrarlas como "pendientes de cobrar" en el día de hoy,
+  //    no al consultar un corte pasado ya cerrado.
+  // Se excluyen las cuotas de pólizas dadas de baja (perdida) y las de
+  // una póliza registrada este mismo día (esa ya aparece como registro
+  // nuevo — mostrarla también aquí duplicaría la misma cuota dos veces).
+  async function cargarCuotasDia() {
+    try {
+      let query = supabase
+        .from("pagos_cofisem")
+        .select("*, polizas_cofisem(*)")
+        .is("pago_gaman_id", null);
+      if (usuario?.id) query = query.eq("operador_id", usuario.id);
+      query = esHoy
+        ? query.or(`fecha_recibido.eq.${fechaCorte},and(estatus.eq.PENDIENTE,or(fecha_vencimiento.lte.${fechaCorte},fecha_adelantado.eq.${fechaCorte}))`)
+        : query.eq("fecha_recibido", fechaCorte);
+      const { data, error } = await query;
+      if (error) throw error;
+      const filtradas = (data ?? []).filter(
+        (c) => c.polizas_cofisem && !c.polizas_cofisem.perdida && c.polizas_cofisem.fecha_corte !== fechaCorte,
+      );
+      setCuotasDia(filtradas);
+    } catch (e) {
+      setErrorMsg(e.message);
+    }
+  }
+
   async function cargarEntregaEfectivo() {
     try {
       let query = supabase.from("corte_efectivo_entrega").select("*").eq("fecha_corte", fechaCorte);
@@ -155,6 +231,20 @@ export default function CorteOperador({ usuario }) {
   function handlePolizaGuardada(data) {
     setRegistros((prev) => prev.map((r) => (r.id === data.id ? data : r)));
     setModalRow(null);
+    setErrorMsg(null);
+  }
+
+  function handleCuotaGuardada(data) {
+    setCuotasDia((prev) => prev.map((c) => (c.id === data.id ? { ...c, ...data } : c)));
+    setModalCuota(null);
+    setErrorMsg(null);
+  }
+
+  // La póliza completa se dio por perdida — ninguna de sus cuotas debe
+  // seguir apareciendo como pendiente de cobrar en Pólizas del día.
+  function handleCuotaPerdida(polizaActualizada) {
+    setCuotasDia((prev) => prev.filter((c) => c.poliza_cofisem_id !== polizaActualizada.id));
+    setModalCuota(null);
     setErrorMsg(null);
   }
 
@@ -207,6 +297,10 @@ export default function CorteOperador({ usuario }) {
         cerrado_por:     usuario?.id ?? null,
         cierre_incompleto:    extra?.cierreIncompleto ?? false,
         nota_operador_cierre: extra?.notaOperador ?? null,
+        // Cada (re)cierre entra fresco a revisión — si admin ya lo había
+        // regresado o aprobado antes, no debe quedar pegado a ese estatus
+        // viejo ahora que se vuelve a cerrar.
+        estatus_revision: "PENDIENTE",
         updated_at:      new Date().toISOString(),
       };
       const { data, error } = await supabase
@@ -231,7 +325,7 @@ export default function CorteOperador({ usuario }) {
 
   function datosCorteExport() {
     return {
-      registros,
+      registros: filasTabla,
       oficina,
       fechaLabel,
       fechaIso: fechaCorte,
@@ -406,9 +500,14 @@ export default function CorteOperador({ usuario }) {
                 )}
               </span>
             )}
-            {entregaEfectivo?.cierre_incompleto && (
+            {corteCerrado && entregaEfectivo?.cierre_incompleto && (
               <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-full">
                 ⚠ Cerrado incompleto — pendiente de liberación
+              </span>
+            )}
+            {!corteCerrado && entregaEfectivo?.estatus_revision === "REGRESADO" && (
+              <span className="text-[11px] font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full">
+                ↩ El admin regresó este corte — corrígelo y vuelve a cerrarlo
               </span>
             )}
           </div>
@@ -430,7 +529,7 @@ export default function CorteOperador({ usuario }) {
             <button
               type="button"
               onClick={handleCerrarCorte}
-              disabled={cerrando || registros.length === 0}
+              disabled={cerrando || filasTabla.length === 0}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
               🔒 Cerrar corte
@@ -438,7 +537,7 @@ export default function CorteOperador({ usuario }) {
           )}
           <button
             onClick={handleExportarExcel}
-            disabled={registros.length === 0}
+            disabled={filasTabla.length === 0}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <FileSpreadsheet className="w-4 h-4" />
@@ -466,7 +565,7 @@ export default function CorteOperador({ usuario }) {
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#1447e6] flex-wrap">
           <div className="flex items-center gap-3">
             <p className="text-sm font-bold text-white">Pólizas del día</p>
-            <span className="text-white/50 text-xs">{registros.length} registros</span>
+            <span className="text-white/50 text-xs">{filasTabla.length} registros</span>
             {pendientes > 0 && (
               <span className="text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full">
                 {pendientes} por completar
@@ -511,7 +610,8 @@ export default function CorteOperador({ usuario }) {
                   <TH rowSpan={2}>Vale $</TH>
                   <TH rowSpan={2}>Prima T. Anual</TH>
                   <TH rowSpan={2}>Prima Neta Anual</TH>
-                  <TH rowSpan={2}>Prima T. 1er Pago</TH>
+                  <TH rowSpan={2}>Cuota</TH>
+                  <TH rowSpan={2}>Pago</TH>
                   <TH rowSpan={2}>Cobertura</TH>
                   <TH colSpan={2}>Uso / Vehículo</TH>
                 </tr>
@@ -524,7 +624,7 @@ export default function CorteOperador({ usuario }) {
               </thead>
 
               <tbody className="divide-y divide-gray-50">
-                {registros.length === 0 && (
+                {filasTabla.length === 0 && (
                   <tr>
                     <td colSpan={16} className="px-5 py-12 text-center text-sm text-gray-400">
                       {esHoy ? (
@@ -536,11 +636,18 @@ export default function CorteOperador({ usuario }) {
                   </tr>
                 )}
 
-                {registros.map((r, i) => (
-                  <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
+                {filasTabla.map((r, i) => (
+                  <tr key={r.id} className={`hover:bg-gray-50/60 transition-colors ${r._esCuotaSubsecuente ? "bg-amber-50/20" : ""}`}>
                     <td className="px-3 py-2.5 text-center font-bold text-[#1447e6]">{i + 1}</td>
                     <td className="px-3 py-2.5 text-center font-semibold text-gray-700">{r.aseguradora || "—"}</td>
-                    <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-bold text-[#1447e6]">{r.numero_poliza || "—"}</td>
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-bold text-[#1447e6]">
+                      {r.numero_poliza || "—"}
+                      {r._esCuotaSubsecuente && (
+                        <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle whitespace-nowrap">
+                          pago subsecuente
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap">{fmt(r.fecha_emision)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap bg-blue-50/20">{fmt(r.vigencia_inicio)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap bg-blue-50/20">{fmt(r.vigencia_fin)}</td>
@@ -555,6 +662,7 @@ export default function CorteOperador({ usuario }) {
                     </td>
                     <td className="px-3 py-2.5 text-center font-semibold text-[#1447e6]">{$(r.prima_anual)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-700">{$(r.prima_neta)}</td>
+                    <td className="px-3 py-2.5 text-center font-bold text-gray-500">{r.num_cuota_pago ?? 1}</td>
                     <td className="px-3 py-2.5 text-center font-bold text-emerald-700">{$(r.prima_primer_pago)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 max-w-[110px] truncate">{r.cobertura || "—"}</td>
                     <td className="px-3 py-2.5 text-center font-mono text-gray-600 bg-blue-50/20">{r.placas || "—"}</td>
@@ -562,12 +670,13 @@ export default function CorteOperador({ usuario }) {
                   </tr>
                 ))}
 
-                {registros.length > 0 && (
+                {filasTabla.length > 0 && (
                   <tr className="bg-[#1447e6]/5 font-bold border-t-2 border-[#1447e6]/20">
                     <td colSpan={9} className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">TOTAL</td>
                     <td className="px-3 py-3 text-right text-xs text-[#1447e6]">{$(totalVales)}</td>
                     <td className="px-3 py-3 text-right text-xs text-[#1447e6]">{$(sumaPrimaAnual)}</td>
                     <td className="px-3 py-3 text-right text-xs text-[#1447e6]">{$(sumaPrimaNeta)}</td>
+                    <td />
                     <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(sumaPrimerPago)}</td>
                     <td colSpan={3} />
                   </tr>
@@ -604,7 +713,7 @@ export default function CorteOperador({ usuario }) {
               </thead>
 
               <tbody className="divide-y divide-gray-50">
-                {registros.length === 0 && (
+                {filasTabla.length === 0 && (
                   <tr>
                     <td colSpan={16} className="px-5 py-12 text-center text-sm text-gray-400">
                       {esHoy ? (
@@ -616,8 +725,8 @@ export default function CorteOperador({ usuario }) {
                   </tr>
                 )}
 
-                {registros.map((r, i) => (
-                  <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
+                {filasTabla.map((r, i) => (
+                  <tr key={r.id} className={`hover:bg-gray-50/60 transition-colors ${r._esCuotaSubsecuente ? "bg-amber-50/20" : ""}`}>
                     <td className="px-3 py-2.5 text-center font-bold text-[#1447e6]">{i + 1}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap">{r.forma_pago || "—"}</td>
                     <td className="px-3 py-2.5 text-center font-bold text-emerald-700 bg-emerald-50/20">{$(r.efectivo)}</td>
@@ -647,12 +756,29 @@ export default function CorteOperador({ usuario }) {
                       </td>
                     ))}
                     <td className="px-3 py-2.5 text-center">
-                      <CompletarBadge completado={r.completado} onClick={() => !corteCerrado && setModalRow(r)} />
+                      {r._esCuotaSubsecuente ? (
+                        r._cuotaEstatus === "PENDIENTE" ? (
+                          <button
+                            type="button"
+                            onClick={() => !corteCerrado && setModalCuota(r._cuotaRaw)}
+                            disabled={corteCerrado}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 text-white text-[11px] font-bold hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                          >
+                            Registrar cobro
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-bold">
+                            ✓ Cobrado
+                          </span>
+                        )
+                      ) : (
+                        <CompletarBadge completado={r.completado} onClick={() => !corteCerrado && setModalRow(r)} />
+                      )}
                     </td>
                   </tr>
                 ))}
 
-                {registros.length > 0 && (
+                {filasTabla.length > 0 && (
                   <tr className="bg-[#1447e6]/5 font-bold border-t-2 border-[#1447e6]/20">
                     <td colSpan={2} className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">TOTAL</td>
                     <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(totalEfectivo)}</td>
@@ -887,6 +1013,14 @@ export default function CorteOperador({ usuario }) {
         usuario={usuario}
         onClose={() => setModalRow(null)}
         onSaved={handlePolizaGuardada}
+      />
+
+      <RegistrarCobroModal
+        row={modalCuota}
+        usuario={usuario}
+        onClose={() => setModalCuota(null)}
+        onSaved={handleCuotaGuardada}
+        onPerdida={handleCuotaPerdida}
       />
 
       {/* ── Confirmar cierre del corte ── */}

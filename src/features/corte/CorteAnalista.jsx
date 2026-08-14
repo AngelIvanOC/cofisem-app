@@ -94,6 +94,7 @@ export default function CorteAnalista({ usuario }) {
         .from("corte_efectivo_entrega")
         .select("*")
         .eq("cierre_incompleto", true)
+        .eq("cerrado", true)
         .not("estatus_revision", "in", "(APROBADO,RECIBIDO)")
         .order("fecha_corte", { ascending: false })
         .limit(30);
@@ -213,7 +214,10 @@ export default function CorteAnalista({ usuario }) {
 
   async function handleConfirmarRegresar() {
     if (!textoObservacion.trim() || !entregaActiva) return;
-    await actualizarEntrega(entregaActiva.id, { estatus_revision: "REGRESADO", notas_admin: textoObservacion.trim() });
+    // Regresar reabre el corte del operador (cerrado:false) — se le devuelve
+    // la pelota para que corrija y lo vuelva a cerrar; si no, se quedaba
+    // "cerrado" para siempre y nunca salía de Liberaciones de corte.
+    await actualizarEntrega(entregaActiva.id, { estatus_revision: "REGRESADO", notas_admin: textoObservacion.trim(), cerrado: false });
     setModalRegresar(false);
   }
 
@@ -457,7 +461,7 @@ export default function CorteAnalista({ usuario }) {
                         <table className="text-xs" style={{ minWidth: "1500px", width: "100%" }}>
                           <thead>
                             <tr className="bg-gray-50/80 border-b border-gray-100">
-                              {["No.", "Aseguradora", "Póliza", "Folio", "Asegurado", "Vendedor", "Cobertura", "F. Pago", "Efectivo", "Cheque", "TDC", "Vale", "P. Anual", "P. Neta", "1er Pago", "Observaciones", "Pago (admin)"].map((h) => (
+                              {["No.", "Aseguradora", "Póliza", "Folio", "Asegurado", "Vendedor", "Cobertura", "F. Pago", "Efectivo", "Cheque", "TDC", "Vale", "P. Anual", "P. Neta", "Cuota", "Pago", "Observaciones", "Pago (admin)"].map((h) => (
                                 <th key={h} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-3 py-2.5 border-r border-gray-100 last:border-r-0 whitespace-nowrap">{h}</th>
                               ))}
                             </tr>
@@ -496,6 +500,7 @@ export default function CorteAnalista({ usuario }) {
                                   </td>
                                   <td className="px-3 py-2.5 text-right font-semibold text-[#1447e6]">{$(r.prima_anual)}</td>
                                   <td className="px-3 py-2.5 text-right text-gray-700">{$(r.prima_neta)}</td>
+                                  <td className="px-3 py-2.5 text-center font-bold text-gray-500">{r.num_cuota_pago ?? 1}</td>
                                   <td className="px-3 py-2.5 text-right font-bold text-emerald-700">{$(r.prima_primer_pago)}</td>
                                   <td className="px-3 py-2.5 text-gray-400 max-w-40 truncate">{r.observaciones || "—"}</td>
                                   <td className="px-3 py-2.5">
@@ -520,6 +525,7 @@ export default function CorteAnalista({ usuario }) {
                               <td className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">{$(t.vale)}</td>
                               <td className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">{$(t.primaAnual)}</td>
                               <td className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">{$(t.primaNeta)}</td>
+                              <td />
                               <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(t.primerPago)}</td>
                               <td colSpan={2} />
                             </tr>

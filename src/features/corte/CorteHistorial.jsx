@@ -157,12 +157,12 @@ export default function CorteHistorial({ usuario }) {
                             Sin ventas registradas
                           </span>
                         )}
-                        {e.cerrado && (
+                        {(e.cerrado || e.estatus_revision === "REGRESADO") && (
                           <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${revMeta.cls}`}>
                             {revMeta.label}
                           </span>
                         )}
-                        {e.cierre_incompleto && (
+                        {e.cerrado && e.cierre_incompleto && (
                           <span className="inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-amber-100 text-amber-800 border-amber-200">
                             ⚠ Cerrado incompleto
                           </span>

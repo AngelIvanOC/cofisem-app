@@ -7,12 +7,13 @@ import {
   MAX_PAGO_COMPROBANTE_BYTES,
 } from "../../services/comprobantesPagoCofisem";
 import { hoyISO } from "../../utils/fecha";
+import RegistrarCobroModal from "./RegistrarCobroModal";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) => `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmt = (d) =>
   d ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
-const hoyIso = () => hoyISO();
+const HOY_ISO = hoyISO();
 
 const ESTATUS_META = {
   PENDIENTE: { label: "Pendiente", cls: "bg-amber-50 text-amber-700 border-amber-200" },
@@ -118,7 +119,10 @@ function agruparPorPoliza(polizas) {
     const porCobrar = pendientes.reduce((s, c) => s + n(c._info.primaTotal), 0);
     const recibido = [...recibidos, ...aplicados].reduce((s, c) => s + n(c._info.primaTotal), 0);
     const proxVence = pendientes.map((c) => c._info.vence).filter(Boolean).sort()[0] ?? null;
-    const cancelada = ESTATUS_GAMAN_BLOQUEADOS.includes(p.poliza_gaman_estatus);
+    // "perdida" (el cliente no volvió a pagar, se dio de baja la póliza en
+    // COFISEM) se trata igual que una cancelación en GAMAN: se sigue
+    // mostrando como historial, pero ya no se puede registrar ningún cobro.
+    const cancelada = ESTATUS_GAMAN_BLOQUEADOS.includes(p.poliza_gaman_estatus) || !!p.perdida;
     return { polizaId: p.id, poliza: p, cuotas, pendientes, recibidos, aplicados, porCobrar, recibido, proxVence, cancelada };
   });
   arr.sort((a, b) => {
@@ -168,6 +172,7 @@ export default function PagosOperador({ usuario }) {
           fecha_emision, prima_primer_pago, prima_primer_pago_neta,
           efectivo, cheque, tdc, pol_pend_pago, poliza_gaman_estatus,
           comprobante_cheque_url, comprobante_tdc_url,
+          perdida, perdida_nota,
           pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
         `)
         .order("fecha_emision", { ascending: true });
@@ -208,6 +213,27 @@ export default function PagosOperador({ usuario }) {
           : { ...p, pagos_cofisem: (p.pagos_cofisem ?? []).map((c) => (c.id === actualizado.id ? { ...c, ...actualizado } : c)) }
       )
     );
+  }
+
+  // La póliza completa se dio por perdida — refresca el árbol para que se
+  // vea bloqueada (gris) igual que una cancelada de GAMAN.
+  function actualizarPolizaPerdida(polizaActualizada) {
+    setPolizas((prev) => prev.map((p) => (p.id === polizaActualizada.id ? { ...p, ...polizaActualizada } : p)));
+  }
+
+  async function handleAdelantar(c) {
+    try {
+      const { data, error } = await supabase
+        .from("pagos_cofisem")
+        .update({ fecha_adelantado: HOY_ISO })
+        .eq("id", c.id)
+        .select()
+        .single();
+      if (error) throw error;
+      actualizarCuota(data);
+    } catch (e) {
+      setErrorMsg("No se pudo adelantar la cuota: " + e.message);
+    }
   }
 
   return (
@@ -278,7 +304,7 @@ export default function PagosOperador({ usuario }) {
                         {p.numero_poliza || "—"}
                         {g.cancelada && (
                           <span className="ml-1.5 inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600">
-                            {p.poliza_gaman_estatus}
+                            {p.poliza_gaman_estatus || "PERDIDA"}
                           </span>
                         )}
                       </td>
@@ -325,15 +351,21 @@ export default function PagosOperador({ usuario }) {
         onVerComprobante={verComprobante}
         onMarcarRecibido={(c) => setModalRow(c)}
         onAdjuntarArchivo={(c) => setModalGamanRow(c)}
+        onAdelantar={handleAdelantar}
       />
 
-      <ModalRecibirPago
+      <RegistrarCobroModal
         row={modalRow}
         usuario={usuario}
         onClose={() => setModalRow(null)}
         onSaved={(actualizado) => {
           actualizarCuota(actualizado);
           setModalRow(null);
+        }}
+        onPerdida={(polizaActualizada) => {
+          actualizarPolizaPerdida(polizaActualizada);
+          setModalRow(null);
+          setModalPolizaId(null);
         }}
       />
 
@@ -355,7 +387,9 @@ export default function PagosOperador({ usuario }) {
 // queda en una fila por póliza sin perder el detalle por cuota. Las filas
 // virtuales (1er pago de pólizas que no son de GAMAN) no tienen acción:
 // ese dato se edita desde "Completar", no desde aquí.
-function ModalCuotasPoliza({ grupo, onClose, onVerComprobante, onMarcarRecibido, onAdjuntarArchivo }) {
+function ModalCuotasPoliza({ grupo, onClose, onVerComprobante, onMarcarRecibido, onAdjuntarArchivo, onAdelantar }) {
+  const [confirmandoAdelantoId, setConfirmandoAdelantoId] = useState(null);
+  useEffect(() => { setConfirmandoAdelantoId(null); }, [grupo?.polizaId]);
   if (!grupo) return null;
   const p = grupo.poliza;
   const cobradas = grupo.aplicados.length + grupo.recibidos.length;
@@ -376,7 +410,9 @@ function ModalCuotasPoliza({ grupo, onClose, onVerComprobante, onMarcarRecibido,
         <div className="p-6 space-y-5">
           {grupo.cancelada && (
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-100 border border-gray-200 text-gray-500 text-xs font-semibold">
-              🔒 Póliza {p.poliza_gaman_estatus} en GAMAN — no se pueden registrar más cobros aquí.
+              🔒 {p.perdida
+                ? <>Póliza dada de baja — el cliente no acudió a pagar. No se pueden registrar más cobros aquí.{p.perdida_nota && <> Nota: {p.perdida_nota}</>}</>
+                : <>Póliza {p.poliza_gaman_estatus} en GAMAN — no se pueden registrar más cobros aquí.</>}
             </div>
           )}
           <div className="grid grid-cols-3 gap-3">
@@ -437,13 +473,47 @@ function ModalCuotasPoliza({ grupo, onClose, onVerComprobante, onMarcarRecibido,
                         {c.comprobante_url ? "Cambiar archivo" : "Adjuntar archivo"}
                       </button>
                     ) : c.estatus === "PENDIENTE" && (
-                      <button
-                        type="button"
-                        onClick={() => onMarcarRecibido(c)}
-                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold whitespace-nowrap"
-                      >
-                        Marcar recibido
-                      </button>
+                      <>
+                        {c.fecha_vencimiento > HOY_ISO && (
+                          c.fecha_adelantado === HOY_ISO ? (
+                            <span className="text-[11px] font-semibold text-blue-600 whitespace-nowrap">Se cobra hoy</span>
+                          ) : confirmandoAdelantoId === c.id ? (
+                            <span className="flex items-center gap-1.5">
+                              <span className="text-[11px] text-gray-500 whitespace-nowrap">¿Traer al corte de hoy?</span>
+                              <button
+                                type="button"
+                                onClick={() => { onAdelantar(c); setConfirmandoAdelantoId(null); }}
+                                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold whitespace-nowrap"
+                              >
+                                Sí, adelantar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmandoAdelantoId(null)}
+                                className="px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-[11px] font-bold whitespace-nowrap"
+                              >
+                                Cancelar
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmandoAdelantoId(c.id)}
+                              className="px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold whitespace-nowrap"
+                              title="Traer esta cuota al corte de hoy para cobrarla antes de su fecha"
+                            >
+                              Adelantar
+                            </button>
+                          )
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => onMarcarRecibido(c)}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold whitespace-nowrap"
+                        >
+                          Registrar cobro
+                        </button>
+                      </>
                     ))}
                   </div>
                 </div>
@@ -595,160 +665,3 @@ function ModalAdjuntarArchivo({ row, usuario, onClose, onSaved }) {
   );
 }
 
-function ModalRecibirPago({ row, usuario, onClose, onSaved }) {
-  const [primaTotal, setPrimaTotal] = useState("");
-  const [primaNeta, setPrimaNeta] = useState("");
-  const [fechaRecibido, setFechaRecibido] = useState(hoyIso());
-  const [comprobantePath, setComprobantePath] = useState(null);
-  const [subiendo, setSubiendo] = useState(false);
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (!row) return;
-    setPrimaTotal(row.prima_total || "");
-    setPrimaNeta(row.prima_neta || "");
-    setFechaRecibido(row.fecha_recibido || hoyIso());
-    setComprobantePath(row.comprobante_url ?? null);
-    setError(null);
-  }, [row]);
-
-  if (!row) return null;
-
-  async function handleArchivo(file) {
-    if (file.size > MAX_PAGO_COMPROBANTE_BYTES) {
-      setError("El archivo es muy grande (máx. 8 MB).");
-      return;
-    }
-    setError(null);
-    setSubiendo(true);
-    try {
-      const basePath = `${usuario?.oficina_id ?? "sin-oficina"}/${row.poliza_cofisem_id}/cuota-${row.num_cuota}`;
-      const path = await subirComprobantePago(basePath, file);
-      setComprobantePath(path);
-    } catch (e) {
-      setError("No se pudo subir el comprobante: " + e.message);
-    } finally {
-      setSubiendo(false);
-    }
-  }
-
-  async function guardar(e) {
-    e.preventDefault();
-    if (!comprobantePath) {
-      setError("Sube el comprobante de pago antes de continuar.");
-      return;
-    }
-    setGuardando(true);
-    setError(null);
-    try {
-      const { data, error: err } = await supabase
-        .from("pagos_cofisem")
-        .update({
-          prima_total: n(primaTotal),
-          prima_neta: n(primaNeta),
-          fecha_recibido: fechaRecibido,
-          comprobante_url: comprobantePath,
-          estatus: "RECIBIDO",
-          recibido_por: usuario?.id ?? null,
-        })
-        .eq("id", row.id)
-        .select()
-        .single();
-      if (err) throw err;
-      onSaved(data);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  const p = row.polizas_cofisem ?? {};
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <p className="text-sm font-bold text-[#1447e6]">Marcar cuota como recibida</p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Póliza <strong className="font-mono">{p.numero_poliza || "—"}</strong> · Cuota {row.num_cuota}
-          </p>
-        </div>
-
-        <form onSubmit={guardar} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-xs font-semibold text-red-700">
-              {error}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Prima Total</label>
-              <input type="number" min="0" step="0.01" value={primaTotal} onChange={(e) => setPrimaTotal(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Prima Neta</label>
-              <input type="number" min="0" step="0.01" value={primaNeta} onChange={(e) => setPrimaNeta(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]" />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Fecha en que recibió el pago</label>
-            <input type="date" value={fechaRecibido} onChange={(e) => setFechaRecibido(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]" />
-          </div>
-
-          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/70 px-4 py-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Paperclip className="w-4 h-4 shrink-0 text-gray-400" />
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-gray-600">Comprobante de pago</p>
-                <p className={`text-[11px] ${comprobantePath ? "text-emerald-600 font-semibold" : "text-amber-600"}`}>
-                  {subiendo ? "Subiendo…" : comprobantePath ? "✓ Comprobante adjunto" : "Obligatorio — sube foto o PDF"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {comprobantePath && !subiendo && (
-                <button type="button" onClick={() => verComprobantePago(comprobantePath)} className="text-xs font-bold text-[#1447e6] underline underline-offset-2">
-                  Ver
-                </button>
-              )}
-              <label className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors whitespace-nowrap ${
-                subiendo ? "bg-gray-200 text-gray-400 cursor-wait" : comprobantePath ? "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50" : "bg-[#1447e6] text-white hover:bg-[#0f36b3]"
-              }`}>
-                {subiendo ? "..." : comprobantePath ? "Cambiar" : "Subir"}
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  capture="environment"
-                  className="hidden"
-                  disabled={subiendo}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = "";
-                    if (f) handleArchivo(f);
-                  }}
-                />
-              </label>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
-            <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
-              Cancelar
-            </button>
-            <button type="submit" disabled={guardando || subiendo}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50">
-              {guardando ? "Guardando…" : "Marcar recibido"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}

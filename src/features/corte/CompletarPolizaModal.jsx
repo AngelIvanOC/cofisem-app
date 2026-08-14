@@ -18,13 +18,21 @@ import { hoyISO } from "../../utils/fecha";
 const n = (v) => parseFloat(v) || 0;
 
 const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
+const FORMA_PAGO_OPT = ["CONTADO", "4 PARCIALES", "TRIMESTRAL", "CUATRIMESTRAL", "SEMESTRAL", "MENSUAL"];
+// En registro parcial no aplica CONTADO — ahí siempre se está registrando
+// una cuota subsecuente (2+), y CONTADO es una sola exhibición sin cuota 2.
+const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT.filter((f) => f !== "CONTADO");
+// Mismo mapeo que usa el trigger de BD — para no dejar elegir una forma de
+// pago cuya cantidad de parcialidades sea menor a la cuota que ya se
+// registró (ej. no tiene sentido pasar a SEMESTRAL si esto es la cuota 5).
+const DIVISOR_PAGO = { CONTADO: 1, MENSUAL: 12, SEMESTRAL: 2, TRIMESTRAL: 3, CUATRIMESTRAL: 4, "4 PARCIALES": 4 };
 
 // Coberturas "amplia"/"limitada" exigen foto del vehículo además de la
 // identificación.
 const esAmpliaOLimitada = (cobertura) => /AMPLIA|LIMITADA/i.test(cobertura || "");
 
 const VACIO = {
-  folio: "", cobertura: "", vigencia_fin: "", placas: "", num_serie: "",
+  folio: "", cobertura: "", forma_pago: "", vigencia_fin: "", placas: "", num_serie: "",
   vendedor_nombre: "", telefono: "",
   prima_anual: "", prima_neta: "", prima_primer_pago: "", prima_primer_pago_neta: "",
   vale: "", pol_pend_pago: "",
@@ -67,7 +75,14 @@ const lblModal = "block text-[11px] font-bold text-gray-400 uppercase tracking-w
 // Igual que evaluarCompletado(), pero además regresa CUÁLES requisitos
 // faltan — para el botón "Completar": si no está listo, se le dice al
 // operador exactamente qué le falta en vez de solo negarse en silencio.
-export function faltantesCompletado(f) {
+// `registroParcial` (polizas_cofisem.registro_parcial): pólizas creadas
+// desde "No tengo la póliza" — solo capturan lo básico (folio, cobertura,
+// vendedor, teléfono, vale) porque la venta original nunca quedó
+// registrada; no tiene sentido exigirles vigencia, placas, primas
+// anuales/1er pago, tipo de pago ni documentación, porque esos datos
+// sencillamente no existen aquí (la cuota real que sí se cobró vive
+// aparte, en pagos_cofisem).
+export function faltantesCompletado(f, { registroParcial = false } = {}) {
   const amplLim = esAmpliaOLimitada(f.cobertura);
   const grupoMinimo = amplLim
     ? [f.factura_path, f.t_circ_path, f.pol_ant_path]
@@ -76,17 +91,17 @@ export function faltantesCompletado(f) {
   const detalle = {
     folio: !(f.folio && f.folio.trim()),
     cobertura: !(f.cobertura && f.cobertura.trim()),
-    vigenciaFin: !f.vigencia_fin,
-    placas: !(f.placas && f.placas.trim()),
-    primas: !(n(f.prima_anual) > 0 && n(f.prima_neta) > 0 && n(f.prima_primer_pago) > 0 && n(f.prima_primer_pago_neta) > 0),
-    pago: !(n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0 || n(f.pol_pend_pago) > 0),
-    autorizacion: n(f.tdc) > 0 && !(f.autorizacion && f.autorizacion.trim()),
-    comprobanteTdc: n(f.tdc) > 0 && !f.comprobante_tdc_path,
-    comprobanteCheque: n(f.cheque) > 0 && !f.comprobante_cheque_path,
+    vigenciaFin: !registroParcial && !f.vigencia_fin,
+    placas: !registroParcial && !(f.placas && f.placas.trim()),
+    primas: !registroParcial && !(n(f.prima_anual) > 0 && n(f.prima_neta) > 0 && n(f.prima_primer_pago) > 0 && n(f.prima_primer_pago_neta) > 0),
+    pago: !registroParcial && !(n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0 || n(f.pol_pend_pago) > 0),
+    autorizacion: !registroParcial && n(f.tdc) > 0 && !(f.autorizacion && f.autorizacion.trim()),
+    comprobanteTdc: !registroParcial && n(f.tdc) > 0 && !f.comprobante_tdc_path,
+    comprobanteCheque: !registroParcial && n(f.cheque) > 0 && !f.comprobante_cheque_path,
     comprobanteVale: n(f.vale) > 0 && !f.comprobante_vale_path,
-    identif: !f.identif_path,
-    fotos: amplLim && !f.fotos_path,
-    documentoMinimo: !grupoMinimo.some(Boolean),
+    identif: !registroParcial && !f.identif_path,
+    fotos: !registroParcial && amplLim && !f.fotos_path,
+    documentoMinimo: !registroParcial && !grupoMinimo.some(Boolean),
   };
 
   const labels = {
@@ -111,8 +126,8 @@ export function faltantesCompletado(f) {
   return { detalle, mensajes, completo: mensajes.length === 0 };
 }
 
-export function evaluarCompletado(f) {
-  return faltantesCompletado(f).completo;
+export function evaluarCompletado(f, opts) {
+  return faltantesCompletado(f, opts).completo;
 }
 
 // Botón de estado — reutilizado en las tablas de /corte y /polizas.
@@ -201,6 +216,10 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
   // Póliza real de GAMAN (no capturada a mano en COFISEM): las primas se
   // leen de GAMAN y ya no se pueden editar aquí — ver services/primaGaman.js.
   const esGaman = !!row?.poliza_id;
+  // Registro creado desde "No tengo la póliza" (ver PoliciasDia.jsx) — solo
+  // trae folio/cobertura/vendedor/teléfono/vale, nunca vigencia, vehículo,
+  // primas ni documentación, porque esos datos no existen para esta venta.
+  const esRegistroParcial = !!row?.registro_parcial;
   // Mientras no se confirme que GAMAN ya tiene el primer pago recibido, no
   // se puede describir "cómo" se pagó — sería inventar un cobro que GAMAN
   // no tiene registrado.
@@ -225,6 +244,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
     setForm({
       folio:             row.folio ?? "",
       cobertura:         row.cobertura ?? "",
+      forma_pago:        row.forma_pago ?? "",
       vigencia_fin:      row.vigencia_fin ?? "",
       placas:            row.placas ?? "",
       num_serie:         row.num_serie ?? "",
@@ -275,7 +295,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
     };
   }
 
-  const chequeo = faltantesCompletado(construirDatos());
+  const chequeo = faltantesCompletado(construirDatos(), { registroParcial: esRegistroParcial });
   // Los avisos rojos solo se activan después de intentar "Completar" — no
   // deben estorbar mientras el operador todavía está llenando el formulario.
   const falta = (k) => intentoCompletar && chequeo.detalle[k];
@@ -350,7 +370,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
       return;
     }
     const datos = construirDatos();
-    const chk = faltantesCompletado(datos);
+    const chk = faltantesCompletado(datos, { registroParcial: esRegistroParcial });
     if (completar && !chk.completo) {
       setIntentoCompletar(true);
       await Swal.fire({
@@ -367,6 +387,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
       const payload = {
         folio:             datos.folio || null,
         cobertura:         datos.cobertura || null,
+        forma_pago:        datos.forma_pago || null,
         vigencia_fin:      datos.vigencia_fin || null,
         placas:            datos.placas || null,
         num_serie:         datos.num_serie ? datos.num_serie.toUpperCase() : null,
@@ -421,6 +442,11 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
                   <Lock className="w-2.5 h-2.5" /> Vinculada a GAMAN
                 </span>
               )}
+              {row.registro_parcial && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                  Registro parcial — pago sin póliza completa
+                </span>
+              )}
             </p>
             <p className="text-xs text-gray-400 mt-0.5">
               Póliza <strong className="font-mono">{row.numero_poliza || "—"}</strong> · {row.asegurado_nombre || "—"}
@@ -457,18 +483,37 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
                   {COBERTURA_OPT.map((o) => <option key={o}>{o}</option>)}
                 </select>
               </div>
+              {!esGaman && (
+              <div>
+                <label className={lblModal}>Forma de pago</label>
+                <select value={form.forma_pago} onChange={(e) => setF("forma_pago", e.target.value)} className={inpModal}>
+                  {(esRegistroParcial ? FORMA_PAGO_OPT_PARCIAL : FORMA_PAGO_OPT)
+                    .filter((f) => !esRegistroParcial || (DIVISOR_PAGO[f] ?? 1) >= (row.num_cuota_pago ?? 2))
+                    .map((o) => <option key={o}>{o}</option>)}
+                </select>
+                {esRegistroParcial && (
+                  <p className="text-[10px] text-gray-400 mt-1">Cambia las parcialidades restantes de esta cuota {row.num_cuota_pago} en adelante.</p>
+                )}
+              </div>
+              )}
+              {!esRegistroParcial && (
               <div>
                 <label className={lblModal}>Vigencia fin <span className={astCls("vigenciaFin")}>*</span></label>
                 <input type="date" value={form.vigencia_fin} onChange={(e) => setF("vigencia_fin", e.target.value)} className={campoCls("vigenciaFin")} />
               </div>
+              )}
+              {!esRegistroParcial && (
               <div>
                 <label className={lblModal}>Placas <span className={astCls("placas")}>*</span></label>
                 <input value={form.placas} onChange={(e) => setF("placas", e.target.value.toUpperCase())} placeholder="Ej. ABC-123 o TRÁMITE" className={campoCls("placas")} />
               </div>
+              )}
+              {!esRegistroParcial && (
               <div>
                 <label className={lblModal}>Número de serie</label>
                 <input value={form.num_serie} onChange={(e) => setF("num_serie", e.target.value.toUpperCase())} placeholder="Opcional — VIN del vehículo" className={inpModal} />
               </div>
+              )}
               <div className="col-span-2 sm:col-span-3">
                 <label className={lblModal}>Vendedor</label>
                 <input value={form.vendedor_nombre} onChange={(e) => setF("vendedor_nombre", e.target.value.toUpperCase())} placeholder="Opcional — nombre del vendedor" className={inpModal} />
@@ -488,16 +533,27 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
                   <Lock className="w-3 h-3" /> {gamanLoading ? "leyendo de GAMAN…" : "primas desde GAMAN, solo lectura"}
                 </span>
               )}
+              {esRegistroParcial && (
+                <span className="normal-case tracking-normal font-semibold text-gray-400">
+                  solo la cuota {row.num_cuota_pago} — no hay prima anual porque la póliza no está registrada
+                </span>
+              )}
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                { k: "prima_anual", label: "Prima T. Anual", gamanVal: gaman?.primaAnual },
-                { k: "prima_neta", label: "Prima Neta Anual", gamanVal: gaman?.primaNetaAnual },
-                { k: "prima_primer_pago", label: "Prima T. 1er Pago", gamanVal: gaman?.primaPrimerPago },
-                { k: "prima_primer_pago_neta", label: "Prima N. 1er Pago", gamanVal: gaman?.primaPrimerPagoNeta },
-              ].map((f) => (
+              {(esRegistroParcial
+                ? [
+                    { k: "prima_primer_pago", label: "Prima T. de la cuota", gamanVal: undefined },
+                    { k: "prima_primer_pago_neta", label: "Prima N. de la cuota", gamanVal: undefined },
+                  ]
+                : [
+                    { k: "prima_anual", label: "Prima T. Anual", gamanVal: gaman?.primaAnual },
+                    { k: "prima_neta", label: "Prima Neta Anual", gamanVal: gaman?.primaNetaAnual },
+                    { k: "prima_primer_pago", label: "Prima T. 1er Pago", gamanVal: gaman?.primaPrimerPago },
+                    { k: "prima_primer_pago_neta", label: "Prima N. 1er Pago", gamanVal: gaman?.primaPrimerPagoNeta },
+                  ]
+              ).map((f) => (
                 <div key={f.k}>
-                  <label className={lblModal}>{f.label} <span className={astCls("primas")}>*</span></label>
+                  <label className={lblModal}>{f.label} {!esRegistroParcial && <span className={astCls("primas")}>*</span>}</label>
                   {esGaman ? (
                     <div className={`${campoCls("primas")} bg-gray-50 text-gray-500 font-semibold cursor-not-allowed`}>
                       {gamanLoading ? "…" : `$${n(f.gamanVal).toLocaleString("es-MX", { minimumFractionDigits: 2 })}`}
@@ -524,6 +580,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
             />
           )}
 
+          {!esRegistroParcial && (
           <div>
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
               Tipo de pago
@@ -582,7 +639,9 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
               </div>
             )}
           </div>
+          )}
 
+          {!esRegistroParcial && (
           <div>
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1">Documentación recibida</p>
             <p className="text-[11px] text-gray-400 mb-3">
@@ -641,6 +700,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
               />
             </div>
           </div>
+          )}
 
           <div>
             <label className={lblModal}>Observaciones</label>
