@@ -60,6 +60,16 @@ const lblCls =
   "block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5";
 const req = <span className="text-red-400 ml-0.5">*</span>;
 
+// Fecha local en YYYY-MM-DD sin pasar por toISOString() (que convierte a UTC y
+// puede regresar el día siguiente/anterior según la hora del día — ej. de noche
+// en México ya es el día siguiente en UTC).
+function fechaLocalISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 const ANIOS = getAnios();
 const ANIOS_MANUAL = Array.from(
   { length: new Date().getFullYear() - 1989 },
@@ -101,7 +111,7 @@ export default function FormCotizacion({
     clienteId: cotizacionInicial?.clienteId ?? null,
     vendedorId: cotizacionInicial?.vendedorId ?? 1,
     concesionario: cotizacionInicial?.concesionario ?? null,
-    fechaInicio: cotizacionInicial?.fechaInicio ?? "",
+    fechaInicio: cotizacionInicial?.fechaInicio ?? fechaLocalISO(new Date()),
     formaPago: cotizacionInicial?.formaPago ?? "CONTADO",
     esGestor: cotizacionInicial?.esGestor ?? false,
   });
@@ -410,13 +420,14 @@ export default function FormCotizacion({
     concesionariosDisponibles.find((c) => c.id === form.concesionario)?.label ??
     "—";
 
-  const todayStr = new Date().toISOString().split("T")[0];
-  const maxDateStr = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
-  const maxDateNormal = new Date(Date.now() + 29 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
+  const hoyLocal = new Date();
+  const todayStr = fechaLocalISO(hoyLocal);
+  const maxDateStr = fechaLocalISO(
+    new Date(hoyLocal.getFullYear(), hoyLocal.getMonth(), hoyLocal.getDate() + 365),
+  );
+  const maxDateNormal = fechaLocalISO(
+    new Date(hoyLocal.getFullYear(), hoyLocal.getMonth(), hoyLocal.getDate() + 29),
+  );
   const fechaInicioValida = permitirFechasPas
     ? !!(form.fechaInicio && form.fechaInicio <= maxDateStr)
     : !!(

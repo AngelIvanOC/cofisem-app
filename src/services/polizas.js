@@ -2,6 +2,7 @@ import { supabase } from "../supabaseClient";
 import { EMPRESA } from "../components/pdf/mockData";
 import { mockCoberturas, mockCondiciones } from "../components/pdf/mockData";
 import { obtenerPrimaGaman } from "./primaGaman";
+import { hoyISO } from "../utils/fecha";
 
 // Convierte cobertura_rubros de la BD al formato que espera Coberturas.jsx
 function rubrosACoberturasPDF(rubros = []) {
@@ -434,7 +435,7 @@ export async function emitirPoliza({
         vendedor.id && vendedor.id !== 1
           ? [vendedor.nombre, vendedor.apellido].filter(Boolean).join(' ').trim()
           : 'COFISEM';
-      const hoyIso = new Date().toISOString().split('T')[0];
+      const hoyIso = hoyISO();
 
       // Prima anual/neta y 1er pago total/neta se leen de GAMAN con el
       // mismo cálculo que usa el recibo PDF oficial (calcularImportesRecibo)
@@ -521,7 +522,7 @@ export async function emitirPoliza({
       // Si aún está dentro de su vigencia (renovación anticipada), no se toca — expirará
       // naturalmente en su fecha_fin y calcularEstatus la mostrará como VENCIDA.
       if (esRenovacion && renovacionDeId) {
-        const hoy = new Date().toISOString().split('T')[0];
+        const hoy = hoyISO();
         const { data: origAnterior } = await supabase
           .from('polizas').select('fecha_fin').eq('id', renovacionDeId).single();
         if (origAnterior && origAnterior.fecha_fin <= hoy) {
@@ -640,7 +641,7 @@ export async function renovarPoliza(polizaId, creadoPor) {
 
   // 4. Calcular nuevas fechas (inicio = día siguiente al vencimiento original)
   const fechaInicioNueva = (() => {
-    const d = new Date((original.fecha_fin ?? new Date().toISOString().split('T')[0]) + 'T12:00:00');
+    const d = new Date((original.fecha_fin ?? hoyISO()) + 'T12:00:00');
     d.setDate(d.getDate() + 1);
     return d.toISOString().split('T')[0];
   })();

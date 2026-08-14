@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Paperclip, Inbox, CheckCircle2, Loader2 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import { verComprobante as abrirComprobante } from "../../services/comprobantesPago";
+import { hoyISO } from "../../utils/fecha";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) => `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -10,7 +11,7 @@ const fmt = (d) =>
   d ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
 const fmtDateTime = (ts) =>
   ts ? new Date(ts).toLocaleString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
-const hoyIso = () => new Date().toISOString().split("T")[0];
+const hoyIso = () => hoyISO();
 
 const REVISION_META = {
   PENDIENTE: { label: "Pendiente de revisión", cls: "bg-amber-50 text-amber-700 border-amber-200" },

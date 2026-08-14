@@ -6,6 +6,7 @@ import {
   ChevronRight, Loader2, Settings, Building2, Pencil,
 } from "lucide-react";
 import { fetchPermitirFechasPasadas, setPermitirFechasPasadas, fetchPermitirNumeroManual, setPermitirNumeroManual } from "../../services/configuracion";
+import { hoyISO } from "../../utils/fecha";
 
 function esHexValido(c) {
   return typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c);
@@ -24,7 +25,7 @@ function fmt$(n) {
 }
 
 function hoy() {
-  return new Date().toISOString().split("T")[0];
+  return hoyISO();
 }
 
 // ── Modal: Actualizar costos de emisión ──────────────────────

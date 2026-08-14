@@ -6,12 +6,13 @@ import {
   verComprobantePago,
   MAX_PAGO_COMPROBANTE_BYTES,
 } from "../../services/comprobantesPagoCofisem";
+import { hoyISO } from "../../utils/fecha";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) => `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmt = (d) =>
   d ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
-const hoyIso = () => new Date().toISOString().split("T")[0];
+const hoyIso = () => hoyISO();
 
 const ESTATUS_META = {
   PENDIENTE: { label: "Pendiente", cls: "bg-amber-50 text-amber-700 border-amber-200" },

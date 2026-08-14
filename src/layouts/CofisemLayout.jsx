@@ -243,6 +243,7 @@ export default function CofisemLayout() {
               <NavLink
                 key={item.label}
                 to={item.path}
+                end
                 className={({ isActive }) =>
                   [
                     "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all",

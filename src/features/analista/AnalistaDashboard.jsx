@@ -9,6 +9,7 @@ import {
   AlertTriangle, ArrowRight, CheckCircle2, CreditCard,
   FileText, Loader2, Clock,
 } from "lucide-react";
+import { hoyISO } from "../../utils/fecha";
 
 function fmt$(n) {
   return `$${Number(n || 0).toLocaleString("es-MX", {
@@ -76,7 +77,7 @@ export default function AnalistaDashboard({ usuario }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const hoy = new Date().toISOString().split("T")[0];
+      const hoy = hoyISO();
       const [pagosRes, alertasRes] = await Promise.all([
         supabase
           .from("pagos")

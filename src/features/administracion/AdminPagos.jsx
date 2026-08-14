@@ -7,6 +7,7 @@ import {
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 import { mapCuota, construirPolizaRecibo, abrirRecibo } from "../../utils/recibo";
+import { hoyISO } from "../../utils/fecha";
 import StatusBadge from "../operador/components/StatusBadge";
 
 const ESTATUS_BLOQUEADOS = ["CANCELADA", "VENCIDA", "ANULADA"];
@@ -58,7 +59,7 @@ function CuotaBadge({ cuota }) {
 
 // ── Modal: recibir un pago pendiente (crea el ADEUDO) ───────────
 function ModalRecibirPago({ poliza, cuota, onClose, onRecibir }) {
-  const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
+  const [fecha, setFecha] = useState(hoyISO());
   const [monto, setMonto] = useState(cuota.monto.toFixed(2));
   const [enviando, setEnviando] = useState(false);
 

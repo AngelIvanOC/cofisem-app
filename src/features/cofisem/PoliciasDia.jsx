@@ -19,8 +19,9 @@ import {
 import { fetchVendedores, crearVendedor } from "../../services/vendedores";
 import SelectTypeahead from "../../components/SelectTypeahead";
 import ModalNuevoVendedor from "../operador/components/ModalNuevoVendedor";
+import { hoyISO } from "../../utils/fecha";
 
-const HOY_ISO = new Date().toISOString().split("T")[0];
+const HOY_ISO = hoyISO();
 const HOY_LABEL = new Date().toLocaleDateString("es-MX", {
   weekday: "long",
   day: "2-digit",
@@ -97,6 +98,7 @@ const FORM_VACIO = {
   telefono: "",
   vendedor_id: null,
   placas: "",
+  num_serie: "",
   tipo: "AUTO",
   prima_anual: "",
   prima_neta: "",
@@ -344,6 +346,7 @@ export default function PoliciasDia({ usuario }) {
           vendedor_id: vendedorId,
           vendedor_nombre: vendedorNombre,
           placas: form.placas || null,
+          num_serie: form.num_serie ? form.num_serie.toUpperCase() : null,
           tipo: form.tipo,
           autorizacion: form.autorizacion || null,
           observaciones: form.observaciones || null,
@@ -707,6 +710,15 @@ export default function PoliciasDia({ usuario }) {
                   value={form.placas}
                   onChange={(e) => setF("placas", e.target.value.toUpperCase())}
                   placeholder="Ej. ABC-123 o TRÁMITE"
+                  className={inpCls}
+                />
+              </div>
+              <div>
+                <label className={lblCls}>Número de serie</label>
+                <input
+                  value={form.num_serie}
+                  onChange={(e) => setF("num_serie", e.target.value.toUpperCase())}
+                  placeholder="Opcional — VIN del vehículo"
                   className={inpCls}
                 />
               </div>

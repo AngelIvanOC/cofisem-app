@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, History, Banknote } from "lucide-react";
 import { supabase } from "../../supabaseClient";
+import { hoyISO } from "../../utils/fecha";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) => `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -16,6 +17,21 @@ const REVISION_META = {
 };
 
 const PAGE_SIZE = 10;
+const HOY_ISO = hoyISO();
+
+// Todas las fechas ISO entre desde y hoy (ambas incluidas), descendente —
+// así el operador ve TODOS sus días desde que empezó a trabajar, no solo
+// los que tuvieron ventas.
+function rangoDesde(desdeIso) {
+  const out = [];
+  const desde = new Date(desdeIso + "T00:00:00");
+  const d = new Date(HOY_ISO + "T00:00:00");
+  while (d >= desde) {
+    out.push(d.toISOString().split("T")[0]);
+    d.setDate(d.getDate() - 1);
+  }
+  return out;
+}
 
 export default function CorteHistorial({ usuario }) {
   const [entregas, setEntregas] = useState([]);
@@ -24,26 +40,50 @@ export default function CorteHistorial({ usuario }) {
   const [errorMsg, setErrorMsg] = useState(null);
   const [pagina, setPagina] = useState(0);
 
+  // La lista de días cubre TODO el rango desde el primer día que el
+  // operador tuvo actividad (una póliza o una entrega registrada) hasta
+  // hoy — incluidos los días sin ninguna venta, para que nunca "desaparezca"
+  // un día. corte_efectivo_entrega solo tiene fila el día que el operador
+  // toca "Entrega de efectivo" o cierra el corte, así que los días sin esa
+  // fila (o sin pólizas) se completan con un estado "en proceso" vacío.
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      let q = supabase.from("corte_efectivo_entrega").select("*").order("fecha_corte", { ascending: false }).limit(90);
-      q = usuario?.oficina_id ? q.eq("oficina_id", usuario.oficina_id) : q.is("oficina_id", null);
-      q = usuario?.id ? q.eq("operador_id", usuario.id) : q.is("operador_id", null);
-      const { data: dEntregas, error: e1 } = await q;
+      let qp = supabase
+        .from("polizas_cofisem")
+        .select("fecha_corte, prima_primer_pago");
+      qp = usuario?.id ? qp.eq("creado_por", usuario.id) : qp;
+      const { data: dPolizas, error: e2 } = await qp;
+      if (e2) throw e2;
+
+      let qe = supabase.from("corte_efectivo_entrega").select("*");
+      qe = usuario?.oficina_id ? qe.eq("oficina_id", usuario.oficina_id) : qe.is("oficina_id", null);
+      qe = usuario?.id ? qe.eq("operador_id", usuario.id) : qe.is("operador_id", null);
+      const { data: dEntregas, error: e1 } = await qe;
       if (e1) throw e1;
 
-      const fechas = (dEntregas ?? []).map((e) => e.fecha_corte);
-      let dPolizas = [];
-      if (fechas.length) {
-        let q2 = supabase.from("polizas_cofisem").select("fecha_corte, prima_primer_pago").in("fecha_corte", fechas);
-        q2 = usuario?.id ? q2.eq("creado_por", usuario.id) : q2;
-        const { data, error: e2 } = await q2;
-        if (e2) throw e2;
-        dPolizas = data ?? [];
-      }
-      setEntregas(dEntregas ?? []);
-      setPolizas(dPolizas);
+      const fechasConActividad = [
+        ...(dPolizas ?? []).map((p) => p.fecha_corte),
+        ...(dEntregas ?? []).map((e) => e.fecha_corte),
+      ];
+      const primerDia = fechasConActividad.length ? fechasConActividad.sort()[0] : null;
+      const fechas = primerDia ? rangoDesde(primerDia).slice(0, 90) : [];
+
+      const entregaPorFecha = new Map((dEntregas ?? []).map((e) => [e.fecha_corte, e]));
+      const dias = fechas.map((fecha_corte) => entregaPorFecha.get(fecha_corte) ?? {
+        id: `sin-entrega-${fecha_corte}`,
+        fecha_corte,
+        cerrado: false,
+        estatus_revision: null,
+        cierre_incompleto: false,
+        entrega: null,
+        comprobante_url: null,
+        notas_admin: null,
+        nota_operador_cierre: null,
+      });
+
+      setEntregas(dias);
+      setPolizas(dPolizas ?? []);
       setErrorMsg(null);
     } catch (e) {
       setErrorMsg(e.message);
@@ -112,6 +152,11 @@ export default function CorteHistorial({ usuario }) {
                         <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${e.cerrado ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                           {e.cerrado ? "Cerrado" : "En proceso"}
                         </span>
+                        {count === 0 && (
+                          <span className="inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-gray-100 text-gray-500 border-gray-200">
+                            Sin ventas registradas
+                          </span>
+                        )}
                         {e.cerrado && (
                           <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${revMeta.cls}`}>
                             {revMeta.label}

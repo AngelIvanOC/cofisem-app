@@ -8,6 +8,7 @@ import {
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 import { isoAMX, abrirRecibo } from "../../utils/recibo";
+import { hoyISO } from "../../utils/fecha";
 import {
   Banknote,
   Check,
@@ -67,7 +68,7 @@ function CuotaBadge({ cuota }) {
 
 // ── Modal confirmar pago (operador → ADEUDO) ──────────────────
 function ModalAplicarPago({ poliza, cuota, onClose, onAplicar }) {
-  const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
+  const [fecha, setFecha] = useState(hoyISO());
   const [monto, setMonto] = useState(cuota.monto.toFixed(2));
   const [aplicando, setAplicando] = useState(false);
 

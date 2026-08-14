@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { hoyISO } from "../utils/fecha";
 
 // Carga TODAS las versiones históricas de configuracion_costos
 // Útil cuando necesitas calcular el config de múltiples fechas sin N+1 queries
@@ -13,7 +14,7 @@ export async function fetchTodasVersionesConfig() {
 // Dado un array de versiones ya cargadas, devuelve el config vigente para una fecha
 // fecha: string 'YYYY-MM-DD' — si es null usa hoy
 export function configParaFecha(todasVersiones, fecha = null) {
-  const diaRef = fecha ?? new Date().toISOString().split("T")[0];
+  const diaRef = fecha ?? hoyISO();
   const config = {};
   for (const row of todasVersiones) {
     // Ya vienen ordenadas DESC por vigente_desde, tomamos la primera que aplique
@@ -28,7 +29,7 @@ export function configParaFecha(todasVersiones, fecha = null) {
 // Sin fecha → valores vigentes HOY (nuevas pólizas, UI general)
 // Con fecha → valores que estaban vigentes ESE día (pólizas históricas)
 export async function fetchConfigCostos(fecha = null) {
-  const diaRef = fecha ?? new Date().toISOString().split("T")[0];
+  const diaRef = fecha ?? hoyISO();
   const { data } = await supabase
     .from("configuracion_costos")
     .select("clave, valor")

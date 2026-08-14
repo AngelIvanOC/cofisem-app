@@ -17,6 +17,7 @@ import {
 import { fetchConfigCostos } from "../../services/configuracion";
 import { actualizarNombreCliente } from "../../services/clientes";
 import { actualizarNombreConcesionario } from "../../services/concesionarios";
+import { hoyISO } from "../../utils/fecha";
 import { pdf, PDFViewer } from "@react-pdf/renderer";
 import EndosoCancelacionPDF from "../../components/pdf/EndosoCancelacionPDF";
 import CancelacionProrrataPDF from "../../components/pdf/CancelacionProrrataPDF";
@@ -2352,7 +2353,7 @@ export default function AdminPolizas() {
                                 Devengar
                               </button>
                               {p.estatus === "VENCIDA" &&
-                                p.fecha_fin >= new Date().toISOString().split("T")[0] && (
+                                p.fecha_fin >= hoyISO() && (
                                   <button
                                     onClick={() => {
                                       setPolSel(p);

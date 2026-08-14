@@ -5,10 +5,11 @@ import { supabase } from "../../supabaseClient";
 import { subirComprobante, verComprobante as abrirComprobante, COMPROBANTE_BUCKET, MAX_COMPROBANTE_BYTES } from "../../services/comprobantesPago";
 import { verDocumento } from "../../services/documentacionPoliza";
 import { exportarCorteExcel } from "../../services/corteExport";
+import { hoyISO } from "../../utils/fecha";
 import CompletarPolizaModal, { CompletarBadge } from "./CompletarPolizaModal";
 
 const DENOMINACIONES = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.5];
-const HOY_ISO = new Date().toISOString().split("T")[0];
+const HOY_ISO = hoyISO();
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) => `$${n(v).toFixed(2)}`;
@@ -526,7 +527,11 @@ export default function CorteOperador({ usuario }) {
                 {registros.length === 0 && (
                   <tr>
                     <td colSpan={16} className="px-5 py-12 text-center text-sm text-gray-400">
-                      Sin pólizas registradas hoy. Registra pólizas en la sección <strong>Pólizas</strong>.
+                      {esHoy ? (
+                        <>Sin pólizas registradas hoy. Registra pólizas en la sección <strong>Pólizas</strong>.</>
+                      ) : (
+                        <>No registraste ninguna venta este día.</>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -602,7 +607,11 @@ export default function CorteOperador({ usuario }) {
                 {registros.length === 0 && (
                   <tr>
                     <td colSpan={16} className="px-5 py-12 text-center text-sm text-gray-400">
-                      Sin pólizas registradas hoy. Registra pólizas en la sección <strong>Pólizas</strong>.
+                      {esHoy ? (
+                        <>Sin pólizas registradas hoy. Registra pólizas en la sección <strong>Pólizas</strong>.</>
+                      ) : (
+                        <>No registraste ninguna venta este día.</>
+                      )}
                     </td>
                   </tr>
                 )}
