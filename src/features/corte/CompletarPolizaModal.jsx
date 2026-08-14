@@ -7,10 +7,11 @@
 // para todas — ver evaluarCompletado().
 // ============================================================
 import { useState, useEffect } from "react";
-import { Paperclip } from "lucide-react";
+import { Paperclip, Lock } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import { subirComprobante, verComprobante, MAX_COMPROBANTE_BYTES } from "../../services/comprobantesPago";
 import { subirDocumento, verDocumento, MAX_DOCUMENTO_BYTES } from "../../services/documentacionPoliza";
+import { obtenerPrimaGaman } from "../../services/primaGaman";
 
 const n = (v) => parseFloat(v) || 0;
 
@@ -44,7 +45,11 @@ const lblModal = "block text-[11px] font-bold text-gray-400 uppercase tracking-w
 //   - Folio, Cobertura, Vigencia fin, Placas: siempre requeridos.
 //   - Prima T. Anual, Prima Neta Anual, Prima T. 1er Pago, Prima N. 1er
 //     Pago: siempre > 0.
-//   - Al menos una forma de pago (efectivo/cheque/tdc) con monto > 0.
+//   - Al menos una forma de pago (efectivo/cheque/tdc/pól. pend. pago) con
+//     monto > 0 — pól. pend. pago SÍ cuenta como forma de pago: significa
+//     que la venta quedó registrada con un saldo pendiente en lugar de un
+//     cobro inmediato, pero ya es una respuesta completa, no un dato
+//     faltante.
 //   - Identificación: siempre obligatoria. Además, mínimo uno de
 //     {Fotos, Factura, T. Circulación, Póliza anterior} — "Otro" no
 //     cuenta para este mínimo, es un extra sin peso. Si la cobertura es
@@ -53,18 +58,17 @@ const lblModal = "block text-[11px] font-bold text-gray-400 uppercase tracking-w
 //     {Factura, T. Circulación, Póliza anterior}.
 //   - Autorización solo si se pagó con T. Crédito/Déb.
 //   - Comprobante adjunto para cada forma de pago que sí se usó.
-//   - Vendedor, Teléfono, Vale, Pól. Pend. Pago y Observaciones quedan
-//     opcionales a propósito: no toda venta tiene vendedor, no siempre
-//     se consigue el teléfono, y no toda póliza trae vale o saldo
-//     pendiente — un $0 o vacío ahí es una respuesta válida, no un dato
-//     faltante.
+//   - Vendedor, Teléfono, Vale y Observaciones quedan opcionales a
+//     propósito: no toda venta tiene vendedor, no siempre se consigue el
+//     teléfono y no toda póliza trae vale — un $0 o vacío ahí es una
+//     respuesta válida, no un dato faltante.
 export function evaluarCompletado(f) {
   const tieneFolio      = !!(f.folio && f.folio.trim());
   const tieneCobertura  = !!(f.cobertura && f.cobertura.trim());
   const tieneVigenciaFin = !!f.vigencia_fin;
   const tienePlacas     = !!(f.placas && f.placas.trim());
   const tienePrimas     = n(f.prima_anual) > 0 && n(f.prima_neta) > 0 && n(f.prima_primer_pago) > 0 && n(f.prima_primer_pago_neta) > 0;
-  const tienePago       = n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0;
+  const tienePago       = n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0 || n(f.pol_pend_pago) > 0;
   const autorizacionOk  = n(f.tdc) <= 0 || !!(f.autorizacion && f.autorizacion.trim());
   const comprobantesOk =
     (n(f.tdc) <= 0 || !!f.comprobante_tdc_path) &&
@@ -164,6 +168,30 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
   const [guardando, setGuardando]       = useState(false);
   const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | 'vale' | null
   const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | 't_circ' | 'identif' | 'pol_ant' | 'otro' | null
+  const [gaman, setGaman] = useState(null); // primas reales de GAMAN cuando row.poliza_id existe
+  const [gamanLoading, setGamanLoading] = useState(false);
+
+  // Póliza real de GAMAN (no capturada a mano en COFISEM): las primas se
+  // leen de GAMAN y ya no se pueden editar aquí — ver services/primaGaman.js.
+  const esGaman = !!row?.poliza_id;
+  // Mientras no se confirme que GAMAN ya tiene el primer pago recibido, no
+  // se puede describir "cómo" se pagó — sería inventar un cobro que GAMAN
+  // no tiene registrado.
+  const pagoBloqueado = esGaman && (gamanLoading || !gaman || !gaman.cuota1Pagada);
+
+  useEffect(() => {
+    if (!row?.poliza_id) {
+      setGaman(null);
+      return;
+    }
+    let vivo = true;
+    setGamanLoading(true);
+    obtenerPrimaGaman(row.poliza_id)
+      .then((r) => { if (vivo) setGaman(r); })
+      .catch((e) => { if (vivo) setModalError("No se pudo leer la información de GAMAN: " + e.message); })
+      .finally(() => { if (vivo) setGamanLoading(false); });
+    return () => { vivo = false; };
+  }, [row?.poliza_id]);
 
   useEffect(() => {
     if (!row) return;
@@ -259,36 +287,53 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
     e.preventDefault();
     if (guardando) return;
     setModalError(null);
+    if (esGaman && gamanLoading) {
+      setModalError("Espera a que termine de cargar la información de GAMAN.");
+      return;
+    }
     setGuardando(true);
     try {
+      // Para pólizas ligadas a GAMAN, las primas y (si aplica) el bloqueo de
+      // "cómo se pagó" se toman de lo que se leyó de GAMAN, no de los
+      // inputs (que están deshabilitados) — ver esGaman/pagoBloqueado.
+      const datos = {
+        ...form,
+        ...(esGaman && gaman ? {
+          prima_anual: gaman.primaAnual,
+          prima_neta: gaman.primaNetaAnual,
+          prima_primer_pago: gaman.primaPrimerPago,
+          prima_primer_pago_neta: gaman.primaPrimerPagoNeta,
+        } : {}),
+        ...(pagoBloqueado ? { efectivo: 0, cheque: 0, tdc: 0, pol_pend_pago: 0 } : {}),
+      };
       const payload = {
-        folio:             form.folio || null,
-        cobertura:         form.cobertura || null,
-        vigencia_fin:      form.vigencia_fin || null,
-        placas:            form.placas || null,
-        vendedor_nombre:   form.vendedor_nombre || null,
-        telefono:          form.telefono || null,
-        prima_anual:       n(form.prima_anual),
-        prima_neta:        n(form.prima_neta),
-        prima_primer_pago:      n(form.prima_primer_pago),
-        prima_primer_pago_neta: n(form.prima_primer_pago_neta),
-        vale:          n(form.vale),
-        pol_pend_pago: n(form.pol_pend_pago),
-        efectivo:      n(form.efectivo),
-        cheque:        n(form.cheque),
-        tdc:           n(form.tdc),
-        autorizacion:  form.autorizacion || null,
-        fotos_url:     form.fotos_path,
-        factura_url:   form.factura_path,
-        t_circ_url:    form.t_circ_path,
-        identif_url:   form.identif_path,
-        pol_ant_url:   form.pol_ant_path,
-        otro_url:      form.otro_path,
-        observaciones: form.observaciones || null,
-        comprobante_tdc_url:    form.comprobante_tdc_path,
-        comprobante_cheque_url: form.comprobante_cheque_path,
-        comprobante_vale_url:   form.comprobante_vale_path,
-        completado:    evaluarCompletado(form),
+        folio:             datos.folio || null,
+        cobertura:         datos.cobertura || null,
+        vigencia_fin:      datos.vigencia_fin || null,
+        placas:            datos.placas || null,
+        vendedor_nombre:   datos.vendedor_nombre || null,
+        telefono:          datos.telefono || null,
+        prima_anual:       n(datos.prima_anual),
+        prima_neta:        n(datos.prima_neta),
+        prima_primer_pago:      n(datos.prima_primer_pago),
+        prima_primer_pago_neta: n(datos.prima_primer_pago_neta),
+        vale:          n(datos.vale),
+        pol_pend_pago: n(datos.pol_pend_pago),
+        efectivo:      n(datos.efectivo),
+        cheque:        n(datos.cheque),
+        tdc:           n(datos.tdc),
+        autorizacion:  datos.autorizacion || null,
+        fotos_url:     datos.fotos_path,
+        factura_url:   datos.factura_path,
+        t_circ_url:    datos.t_circ_path,
+        identif_url:   datos.identif_path,
+        pol_ant_url:   datos.pol_ant_path,
+        otro_url:      datos.otro_path,
+        observaciones: datos.observaciones || null,
+        comprobante_tdc_url:    datos.comprobante_tdc_path,
+        comprobante_cheque_url: datos.comprobante_cheque_path,
+        comprobante_vale_url:   datos.comprobante_vale_path,
+        completado:    evaluarCompletado(datos),
       };
       const { data, error } = await supabase
         .from("polizas_cofisem")
@@ -310,7 +355,14 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
           <div>
-            <p className="text-sm font-bold text-[#1447e6]">Completar registro</p>
+            <p className="text-sm font-bold text-[#1447e6] flex items-center gap-1.5">
+              Completar registro
+              {esGaman && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                  <Lock className="w-2.5 h-2.5" /> Vinculada a GAMAN
+                </span>
+              )}
+            </p>
             <p className="text-xs text-gray-400 mt-0.5">
               Póliza <strong className="font-mono">{row.numero_poliza || "—"}</strong> · {row.asegurado_nombre || "—"}
             </p>
@@ -366,24 +418,32 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
           </div>
 
           <div>
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Montos y cobro</p>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+              Montos y cobro
+              {esGaman && (
+                <span className="inline-flex items-center gap-1 normal-case tracking-normal font-semibold text-gray-400">
+                  <Lock className="w-3 h-3" /> {gamanLoading ? "leyendo de GAMAN…" : "primas desde GAMAN, solo lectura"}
+                </span>
+              )}
+            </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div>
-                <label className={lblModal}>Prima T. Anual <span className="text-red-400">*</span></label>
-                <input type="number" min="0" step="0.01" value={form.prima_anual} onChange={(e) => setF("prima_anual", e.target.value)} placeholder="0.00" className={inpModal} />
-              </div>
-              <div>
-                <label className={lblModal}>Prima Neta Anual <span className="text-red-400">*</span></label>
-                <input type="number" min="0" step="0.01" value={form.prima_neta} onChange={(e) => setF("prima_neta", e.target.value)} placeholder="0.00" className={inpModal} />
-              </div>
-              <div>
-                <label className={lblModal}>Prima T. 1er Pago <span className="text-red-400">*</span></label>
-                <input type="number" min="0" step="0.01" value={form.prima_primer_pago} onChange={(e) => setF("prima_primer_pago", e.target.value)} placeholder="0.00" className={inpModal} />
-              </div>
-              <div>
-                <label className={lblModal}>Prima N. 1er Pago <span className="text-red-400">*</span></label>
-                <input type="number" min="0" step="0.01" value={form.prima_primer_pago_neta} onChange={(e) => setF("prima_primer_pago_neta", e.target.value)} placeholder="0.00" className={inpModal} />
-              </div>
+              {[
+                { k: "prima_anual", label: "Prima T. Anual", gamanVal: gaman?.primaAnual },
+                { k: "prima_neta", label: "Prima Neta Anual", gamanVal: gaman?.primaNetaAnual },
+                { k: "prima_primer_pago", label: "Prima T. 1er Pago", gamanVal: gaman?.primaPrimerPago },
+                { k: "prima_primer_pago_neta", label: "Prima N. 1er Pago", gamanVal: gaman?.primaPrimerPagoNeta },
+              ].map((f) => (
+                <div key={f.k}>
+                  <label className={lblModal}>{f.label} <span className="text-red-400">*</span></label>
+                  {esGaman ? (
+                    <div className={`${inpModal} bg-gray-50 text-gray-500 font-semibold cursor-not-allowed`}>
+                      {gamanLoading ? "…" : `$${n(f.gamanVal).toLocaleString("es-MX", { minimumFractionDigits: 2 })}`}
+                    </div>
+                  ) : (
+                    <input type="number" min="0" step="0.01" value={form[f.k]} onChange={(e) => setF(f.k, e.target.value)} placeholder="0.00" className={inpModal} />
+                  )}
+                </div>
+              ))}
               <div>
                 <label className={lblModal}>Vale ($)</label>
                 <input type="number" min="0" step="0.01" value={form.vale} onChange={(e) => setF("vale", e.target.value)} placeholder="0.00" className={inpModal} />
@@ -403,31 +463,37 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
 
           <div>
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Tipo de pago <span className="text-red-400 normal-case tracking-normal">— marca al menos uno</span></p>
+            {esGaman && pagoBloqueado && (
+              <div className="mb-3 flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-xs font-semibold text-amber-700">
+                <Lock className="w-3.5 h-3.5 shrink-0" />
+                {gamanLoading ? "Verificando con GAMAN…" : "GAMAN aún no registra el cobro del primer pago — no se puede indicar cómo se pagó hasta que se reciba allá."}
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
                 <label className={lblModal}>Efectivo</label>
-                <input type="number" min="0" step="0.01" value={form.efectivo} onChange={(e) => setF("efectivo", e.target.value)} placeholder="0.00" className={inpModal} />
+                <input type="number" min="0" step="0.01" disabled={pagoBloqueado} value={pagoBloqueado ? 0 : form.efectivo} onChange={(e) => setF("efectivo", e.target.value)} placeholder="0.00" className={`${inpModal} disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed`} />
               </div>
               <div>
                 <label className={lblModal}>Cheque / Dep.</label>
-                <input type="number" min="0" step="0.01" value={form.cheque} onChange={(e) => setF("cheque", e.target.value)} placeholder="0.00" className={inpModal} />
+                <input type="number" min="0" step="0.01" disabled={pagoBloqueado} value={pagoBloqueado ? 0 : form.cheque} onChange={(e) => setF("cheque", e.target.value)} placeholder="0.00" className={`${inpModal} disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed`} />
               </div>
               <div>
                 <label className={lblModal}>T. Crédito/Déb.</label>
-                <input type="number" min="0" step="0.01" value={form.tdc} onChange={(e) => setF("tdc", e.target.value)} placeholder="0.00" className={inpModal} />
+                <input type="number" min="0" step="0.01" disabled={pagoBloqueado} value={pagoBloqueado ? 0 : form.tdc} onChange={(e) => setF("tdc", e.target.value)} placeholder="0.00" className={`${inpModal} disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed`} />
               </div>
               <div>
                 <label className={lblModal}>Pól. Pend. Pago</label>
-                <input type="number" min="0" step="0.01" value={form.pol_pend_pago} onChange={(e) => setF("pol_pend_pago", e.target.value)} placeholder="0.00" className={inpModal} />
+                <input type="number" min="0" step="0.01" disabled={pagoBloqueado} value={pagoBloqueado ? 0 : form.pol_pend_pago} onChange={(e) => setF("pol_pend_pago", e.target.value)} placeholder="0.00" className={`${inpModal} disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed`} />
               </div>
             </div>
-            {n(form.tdc) > 0 && (
+            {!pagoBloqueado && n(form.tdc) > 0 && (
               <div className="mt-4">
                 <label className={lblModal}>Autorización <span className="text-red-400">*</span></label>
                 <input value={form.autorizacion} onChange={(e) => setF("autorizacion", e.target.value.toUpperCase())} placeholder="Código de autorización" className={inpModal + " sm:max-w-xs"} />
               </div>
             )}
-            {(n(form.cheque) > 0 || n(form.tdc) > 0) && (
+            {!pagoBloqueado && (n(form.cheque) > 0 || n(form.tdc) > 0) && (
               <div className="mt-3 space-y-2">
                 {n(form.cheque) > 0 && (
                   <ComprobanteField

@@ -1,6 +1,7 @@
 import { supabase } from "../supabaseClient";
 import { EMPRESA } from "../components/pdf/mockData";
 import { mockCoberturas, mockCondiciones } from "../components/pdf/mockData";
+import { obtenerPrimaGaman } from "./primaGaman";
 
 // Convierte cobertura_rubros de la BD al formato que espera Coberturas.jsx
 function rubrosACoberturasPDF(rubros = []) {
@@ -434,6 +435,18 @@ export async function emitirPoliza({
           ? [vendedor.nombre, vendedor.apellido].filter(Boolean).join(' ').trim()
           : 'COFISEM';
       const hoyIso = new Date().toISOString().split('T')[0];
+
+      // Prima anual/neta y 1er pago total/neta se leen de GAMAN con el
+      // mismo cálculo que usa el recibo PDF oficial (calcularImportesRecibo)
+      // — es la fuente de verdad; si por lo que sea falla, se cae a los
+      // valores que ya traía esta función para no tumbar la emisión.
+      let primaGaman = null;
+      try {
+        primaGaman = await obtenerPrimaGaman(finalPoliza.id);
+      } catch (e) {
+        console.error('No se pudo leer la prima de GAMAN para el corte:', e);
+      }
+
       const { error } = await supabase.from('polizas_cofisem').upsert({
         poliza_id:         finalPoliza.id,
         fecha_corte:       hoyIso,
@@ -452,9 +465,10 @@ export async function emitirPoliza({
         tipo:              'COCHE',
         cobertura:         resolvedCoberturaNombre ?? finalPoliza.tipo_poliza ?? null,
         forma_pago:        finalPoliza.forma_pago || 'CONTADO',
-        prima_anual:       primaTotal ?? 0,
-        prima_neta:        primaNeta ?? 0,
-        prima_primer_pago: pagos?.primerPago ?? 0,
+        prima_anual:            primaGaman?.primaAnual          ?? primaTotal ?? 0,
+        prima_neta:             primaGaman?.primaNetaAnual      ?? primaNeta ?? 0,
+        prima_primer_pago:      primaGaman?.primaPrimerPago     ?? pagos?.primerPago ?? 0,
+        prima_primer_pago_neta: primaGaman?.primaPrimerPagoNeta ?? 0,
         // No se asume forma de pago — la operadora debe indicar cómo se
         // cobró (efectivo/cheque/tdc/vale) desde "Completar", igual que
         // con las pólizas capturadas manualmente en /polizas.

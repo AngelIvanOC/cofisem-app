@@ -46,6 +46,8 @@ const OperadorVendedores = lazy(() =>
 const CorteOperador = lazy(() => import("./features/corte/CorteOperador"));
 const CorteAnalista = lazy(() => import("./features/corte/CorteAnalista"));
 const CorteHistorial = lazy(() => import("./features/corte/CorteHistorial"));
+const PagosOperador = lazy(() => import("./features/pagos/PagosOperador"));
+const PagosAnalista = lazy(() => import("./features/pagos/PagosAnalista"));
 const PoliciasDia = lazy(() => import("./features/cofisem/PoliciasDia"));
 
 // ── VENCIMIENTOS (compartido: administración, analista, operador) ─────
@@ -409,6 +411,8 @@ export default function App() {
             />
             <Route path="/corte/analista" element={<CorteAnalista usuario={usuario} />} />
             <Route path="/corte/historial" element={<CorteHistorial usuario={usuario} />} />
+            <Route path="/pagos" element={<PagosOperador usuario={usuario} />} />
+            <Route path="/pagos/analista" element={<PagosAnalista usuario={usuario} />} />
           </Route>
 
           {/* ── Login unificado ── */}
