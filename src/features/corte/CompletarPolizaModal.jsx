@@ -19,9 +19,11 @@ const n = (v) => parseFloat(v) || 0;
 
 const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
 const FORMA_PAGO_OPT = ["CONTADO", "4 PARCIALES", "TRIMESTRAL", "CUATRIMESTRAL", "SEMESTRAL", "MENSUAL"];
-// En registro parcial no aplica CONTADO — ahí siempre se está registrando
-// una cuota subsecuente (2+), y CONTADO es una sola exhibición sin cuota 2.
-const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT.filter((f) => f !== "CONTADO");
+// En registro parcial también aplica CONTADO: pago único ("1 de 1") de una
+// póliza que nunca quedó registrada. El filtro de abajo (por DIVISOR_PAGO)
+// ya evita ofrecerlo cuando num_cuota_pago es 2 o más, donde no tendría
+// sentido (no existe "cuota 2" de un pago de una sola exhibición).
+const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT;
 // Mismo mapeo que usa el trigger de BD — para no dejar elegir una forma de
 // pago cuya cantidad de parcialidades sea menor a la cuota que ya se
 // registró (ej. no tiene sentido pasar a SEMESTRAL si esto es la cuota 5).
@@ -35,13 +37,20 @@ const VACIO = {
   folio: "", cobertura: "", forma_pago: "", vigencia_fin: "", placas: "", num_serie: "",
   vendedor_nombre: "", telefono: "",
   prima_anual: "", prima_neta: "", prima_primer_pago: "", prima_primer_pago_neta: "",
-  vale: "", pol_pend_pago: "",
+  pol_pend_pago: "",
   efectivo: "", cheque: "", tdc: "", autorizacion: "",
   fotos_path: null, factura_path: null, t_circ_path: null,
   identif_path: null, pol_ant_path: null, otro_path: null,
+  fotos_verificado: false, fotos_verificado_nota: "",
   observaciones: "",
-  comprobante_tdc_path: null, comprobante_cheque_path: null, comprobante_vale_path: null,
+  comprobante_tdc_path: null, comprobante_cheque_path: null,
 };
+
+// El vehículo se puede "verificar" sin necesidad de subir la foto (ej. ya
+// se verificó en persona, o no fue posible tomarla) — cuenta como
+// equivalente a tener fotos_path para efectos de completitud, siempre que
+// venga acompañado de una nota explicando cómo/dónde se verificó.
+const fotosOk = (f) => !!f.fotos_path || (f.fotos_verificado && !!(f.fotos_verificado_nota && f.fotos_verificado_nota.trim()));
 
 const inpModal =
   "w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] transition-all";
@@ -68,39 +77,43 @@ const lblModal = "block text-[11px] font-bold text-gray-400 uppercase tracking-w
 //     {Factura, T. Circulación, Póliza anterior}.
 //   - Autorización solo si se pagó con T. Crédito/Déb.
 //   - Comprobante adjunto para cada forma de pago que sí se usó.
-//   - Vendedor, Teléfono, Vale y Observaciones quedan opcionales a
-//     propósito: no toda venta tiene vendedor, no siempre se consigue el
-//     teléfono y no toda póliza trae vale — un $0 o vacío ahí es una
-//     respuesta válida, no un dato faltante.
+//   - Vendedor, Teléfono y Observaciones quedan opcionales a propósito:
+//     no toda venta tiene vendedor y no siempre se consigue el teléfono —
+//     un vacío ahí es una respuesta válida, no un dato faltante. El vale
+//     (comisión del vendedor) ya no se captura aquí — se mueve a la
+//     sección Comisiones, porque normalmente se calcula días después de
+//     la venta.
 // Igual que evaluarCompletado(), pero además regresa CUÁLES requisitos
 // faltan — para el botón "Completar": si no está listo, se le dice al
 // operador exactamente qué le falta en vez de solo negarse en silencio.
 // `registroParcial` (polizas_cofisem.registro_parcial): pólizas creadas
 // desde "No tengo la póliza" — solo capturan lo básico (folio, cobertura,
-// vendedor, teléfono, vale) porque la venta original nunca quedó
-// registrada; no tiene sentido exigirles vigencia, placas, primas
-// anuales/1er pago, tipo de pago ni documentación, porque esos datos
-// sencillamente no existen aquí (la cuota real que sí se cobró vive
-// aparte, en pagos_cofisem).
+// vendedor, teléfono) porque la venta original nunca quedó registrada;
+// no tiene sentido exigirles vigencia, placas, primas anuales ni
+// documentación, porque esos datos sencillamente no existen aquí. Pero
+// el tipo de pago (cómo se pagó esta cuota) SÍ aplica igual que a
+// cualquier otra póliza — se captura aquí mismo, en el mismo formulario.
 export function faltantesCompletado(f, { registroParcial = false } = {}) {
   const amplLim = esAmpliaOLimitada(f.cobertura);
   const grupoMinimo = amplLim
     ? [f.factura_path, f.t_circ_path, f.pol_ant_path]
-    : [f.fotos_path, f.factura_path, f.t_circ_path, f.pol_ant_path];
+    : [fotosOk(f), f.factura_path, f.t_circ_path, f.pol_ant_path];
 
   const detalle = {
     folio: !(f.folio && f.folio.trim()),
     cobertura: !(f.cobertura && f.cobertura.trim()),
     vigenciaFin: !registroParcial && !f.vigencia_fin,
     placas: !registroParcial && !(f.placas && f.placas.trim()),
-    primas: !registroParcial && !(n(f.prima_anual) > 0 && n(f.prima_neta) > 0 && n(f.prima_primer_pago) > 0 && n(f.prima_primer_pago_neta) > 0),
-    pago: !registroParcial && !(n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0 || n(f.pol_pend_pago) > 0),
-    autorizacion: !registroParcial && n(f.tdc) > 0 && !(f.autorizacion && f.autorizacion.trim()),
-    comprobanteTdc: !registroParcial && n(f.tdc) > 0 && !f.comprobante_tdc_path,
-    comprobanteCheque: !registroParcial && n(f.cheque) > 0 && !f.comprobante_cheque_path,
-    comprobanteVale: n(f.vale) > 0 && !f.comprobante_vale_path,
+    primas: !registroParcial
+      ? !(n(f.prima_anual) > 0 && n(f.prima_neta) > 0 && n(f.prima_primer_pago) > 0 && n(f.prima_primer_pago_neta) > 0)
+      : !(n(f.prima_primer_pago) > 0 && n(f.prima_primer_pago_neta) > 0),
+    pago: !(n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0 || n(f.pol_pend_pago) > 0),
+    autorizacion: n(f.tdc) > 0 && !(f.autorizacion && f.autorizacion.trim()),
+    comprobanteTdc: n(f.tdc) > 0 && !f.comprobante_tdc_path,
+    comprobanteCheque: n(f.cheque) > 0 && !f.comprobante_cheque_path,
     identif: !registroParcial && !f.identif_path,
-    fotos: !registroParcial && amplLim && !f.fotos_path,
+    fotos: !registroParcial && amplLim && !fotosOk(f),
+    fotosVerificadoNota: !registroParcial && f.fotos_verificado && !(f.fotos_verificado_nota && f.fotos_verificado_nota.trim()),
     documentoMinimo: !registroParcial && !grupoMinimo.some(Boolean),
   };
 
@@ -109,14 +122,16 @@ export function faltantesCompletado(f, { registroParcial = false } = {}) {
     cobertura: "Cobertura",
     vigenciaFin: "Vigencia fin",
     placas: "Placas",
-    primas: "Prima T. Anual, Prima Neta Anual, Prima T. 1er Pago y Prima N. 1er Pago (todas mayores a $0)",
+    primas: registroParcial
+      ? "Prima T. de la cuota y Prima N. de la cuota (ambas mayores a $0)"
+      : "Prima T. Anual, Prima Neta Anual, Prima T. 1er Pago y Prima N. 1er Pago (todas mayores a $0)",
     pago: "Tipo de pago — marca al menos uno (Efectivo, Cheque/Dep., T. Crédito/Déb. o Pól. Pend. Pago)",
     autorizacion: "Autorización (obligatoria porque se pagó con T. Crédito/Déb.)",
     comprobanteTdc: "Comprobante de la terminal (TDC)",
     comprobanteCheque: "Comprobante de cheque / depósito",
-    comprobanteVale: "Comprobante del vale",
     identif: "Identificación",
-    fotos: "Fotos del vehículo (obligatorias por cobertura Amplia/Limitada)",
+    fotos: "Fotos del vehículo (obligatorias por cobertura Amplia/Limitada — o marca Verificado con una nota)",
+    fotosVerificadoNota: "Nota que explique dónde/cómo se verificaron las fotos del vehículo",
     documentoMinimo: amplLim
       ? "Mínimo un documento: Factura, T. Circulación o Póliza anterior"
       : "Mínimo un documento: Fotos, Factura, T. Circulación o Póliza anterior",
@@ -199,6 +214,82 @@ export function ComprobanteField({ label, path, subiendo, onFile, onVer, obligat
   );
 }
 
+// Variante de ComprobanteField solo para "Fotos del vehículo": mismo diseño
+// que cualquier otro documento, pero con un switch (foquito) a la izquierda
+// del botón "Subir" — al activarlo se reemplaza el botón de subida por una
+// nota obligatoria (verificado en persona, o por qué no se pudo tomar la
+// foto), sin exigir el archivo. Exportado — también se usa en /polizas.
+export function FotosVehiculoField({ path, verificado, nota, subiendo, onFile, onVer, onToggleVerificado, onNotaChange, obligatorio = true, notaFalta = false }) {
+  return (
+    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/70 px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Paperclip className="w-4 h-4 shrink-0 text-gray-400" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-gray-600">Fotos del vehículo</p>
+            <p className={`text-[11px] ${verificado || path ? "text-emerald-600 font-semibold" : obligatorio ? "text-amber-600" : "text-gray-400"}`}>
+              {verificado ? "✓ Verificado sin foto" : subiendo ? "Subiendo…" : path ? "✓ Comprobante adjunto" : obligatorio ? "Obligatorio — sube foto o PDF" : "Opcional — sube foto o PDF"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {!verificado && path && !subiendo && (
+            <button type="button" onClick={onVer} className="text-xs font-bold text-[#1447e6] underline underline-offset-2">
+              Ver
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onToggleVerificado(!verificado)}
+            title="Marcar como verificado sin subir foto"
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none ${verificado ? "bg-[#1447e6]" : "bg-gray-300"}`}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${verificado ? "translate-x-[18px]" : "translate-x-[3px]"}`}
+            />
+          </button>
+          {!verificado && (
+            <label
+              className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors whitespace-nowrap ${
+                subiendo
+                  ? "bg-gray-200 text-gray-400 cursor-wait"
+                  : path
+                    ? "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    : "bg-[#1447e6] text-white hover:bg-[#0f36b3]"
+              }`}
+            >
+              {subiendo ? "..." : path ? "Cambiar" : "Subir"}
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                capture="environment"
+                className="hidden"
+                disabled={subiendo}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) onFile(f);
+                }}
+              />
+            </label>
+          )}
+        </div>
+      </div>
+      {verificado && (
+        <div className="mt-2.5">
+          <textarea
+            rows={2}
+            value={nota}
+            onChange={(e) => onNotaChange(e.target.value)}
+            placeholder="Explica dónde/cómo verificaste el vehículo, o por qué no se pudo tomar la foto…"
+            className={`w-full px-3 py-2 rounded-lg border bg-white text-xs text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] resize-none ${notaFalta ? "border-red-300 ring-2 ring-red-100" : "border-gray-200"}`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // `row`: registro de polizas_cofisem a completar, o null para no mostrar el modal.
 // `onClose()`: se llama al cancelar/cerrar.
 // `onSaved(registroActualizado)`: se llama tras guardar con éxito.
@@ -208,7 +299,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
   const [accionGuardando, setAccionGuardando] = useState(null); // 'guardar' | 'completar' | null
   const guardando = accionGuardando !== null;
   const [intentoCompletar, setIntentoCompletar] = useState(false);
-  const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | 'vale' | null
+  const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | null
   const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | 't_circ' | 'identif' | 'pol_ant' | 'otro' | null
   const [gaman, setGaman] = useState(null); // primas reales de GAMAN cuando row.poliza_id existe
   const [gamanLoading, setGamanLoading] = useState(false);
@@ -217,7 +308,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
   // leen de GAMAN y ya no se pueden editar aquí — ver services/primaGaman.js.
   const esGaman = !!row?.poliza_id;
   // Registro creado desde "No tengo la póliza" (ver PoliciasDia.jsx) — solo
-  // trae folio/cobertura/vendedor/teléfono/vale, nunca vigencia, vehículo,
+  // trae folio/cobertura/vendedor/teléfono, nunca vigencia, vehículo,
   // primas ni documentación, porque esos datos no existen para esta venta.
   const esRegistroParcial = !!row?.registro_parcial;
   // Mientras no se confirme que GAMAN ya tiene el primer pago recibido, no
@@ -254,7 +345,6 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
       prima_neta:        row.prima_neta || "",
       prima_primer_pago:      row.prima_primer_pago || "",
       prima_primer_pago_neta: row.prima_primer_pago_neta || "",
-      vale:          row.vale || "",
       pol_pend_pago: row.pol_pend_pago || "",
       efectivo:      row.efectivo || "",
       cheque:        row.cheque || "",
@@ -266,10 +356,11 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
       identif_path:  row.identif_url  ?? null,
       pol_ant_path:  row.pol_ant_url  ?? null,
       otro_path:     row.otro_url     ?? null,
+      fotos_verificado:      row.fotos_verificado ?? false,
+      fotos_verificado_nota: row.fotos_verificado_nota ?? "",
       observaciones: row.observaciones ?? "",
       comprobante_tdc_path:    row.comprobante_tdc_url    ?? null,
       comprobante_cheque_path: row.comprobante_cheque_url ?? null,
-      comprobante_vale_path:   row.comprobante_vale_url   ?? null,
     });
     setModalError(null);
     setIntentoCompletar(false);
@@ -397,7 +488,6 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
         prima_neta:        n(datos.prima_neta),
         prima_primer_pago:      n(datos.prima_primer_pago),
         prima_primer_pago_neta: n(datos.prima_primer_pago_neta),
-        vale:          n(datos.vale),
         pol_pend_pago: n(datos.pol_pend_pago),
         efectivo:      n(datos.efectivo),
         cheque:        n(datos.cheque),
@@ -409,10 +499,11 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
         identif_url:   datos.identif_path,
         pol_ant_url:   datos.pol_ant_path,
         otro_url:      datos.otro_path,
+        fotos_verificado:      datos.fotos_verificado,
+        fotos_verificado_nota: datos.fotos_verificado ? (datos.fotos_verificado_nota || null) : null,
         observaciones: datos.observaciones || null,
         comprobante_tdc_url:    datos.comprobante_tdc_path,
         comprobante_cheque_url: datos.comprobante_cheque_path,
-        comprobante_vale_url:   datos.comprobante_vale_path,
         completado:    chk.completo,
       };
       const { data, error } = await supabase
@@ -553,7 +644,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
                   ]
               ).map((f) => (
                 <div key={f.k}>
-                  <label className={lblModal}>{f.label} {!esRegistroParcial && <span className={astCls("primas")}>*</span>}</label>
+                  <label className={lblModal}>{f.label} <span className={astCls("primas")}>*</span></label>
                   {esGaman ? (
                     <div className={`${campoCls("primas")} bg-gray-50 text-gray-500 font-semibold cursor-not-allowed`}>
                       {gamanLoading ? "…" : `$${n(f.gamanVal).toLocaleString("es-MX", { minimumFractionDigits: 2 })}`}
@@ -563,24 +654,9 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
                   )}
                 </div>
               ))}
-              <div>
-                <label className={lblModal}>Vale ($)</label>
-                <input type="number" min="0" step="0.01" value={form.vale} onChange={(e) => setF("vale", e.target.value)} placeholder="0.00" className={inpModal} />
-              </div>
             </div>
           </div>
 
-          {n(form.vale) > 0 && (
-            <ComprobanteField
-              label="Comprobante del vale (foto del papel)"
-              path={form.comprobante_vale_path}
-              subiendo={subiendoComprobante === "vale"}
-              onFile={(f) => handleComprobanteChange("vale", f)}
-              onVer={() => handleVer(form.comprobante_vale_path)}
-            />
-          )}
-
-          {!esRegistroParcial && (
           <div>
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
               Tipo de pago
@@ -598,7 +674,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
                 <input type="number" min="0" step="0.01" disabled={pagoBloqueado} value={pagoBloqueado ? 0 : form.efectivo} onChange={(e) => setF("efectivo", e.target.value)} placeholder="0.00" className={`${campoCls("pago")} disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed`} />
               </div>
               <div>
-                <label className={lblModal}>Cheque / Dep.</label>
+                <label className={lblModal}>Transf / Dep.</label>
                 <input type="number" min="0" step="0.01" disabled={pagoBloqueado} value={pagoBloqueado ? 0 : form.cheque} onChange={(e) => setF("cheque", e.target.value)} placeholder="0.00" className={`${campoCls("pago")} disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed`} />
               </div>
               <div>
@@ -639,7 +715,6 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
               </div>
             )}
           </div>
-          )}
 
           {!esRegistroParcial && (
           <div>
@@ -647,7 +722,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
             <p className="text-[11px] text-gray-400 mb-3">
               Identificación siempre obligatoria.{" "}
               {esAmpliaOLimitada(form.cobertura)
-                ? "Cobertura amplia/limitada: fotos también obligatorias, y mínimo una de Factura, T. Circulación o Póliza anterior."
+                ? "Cobertura amplia/limitada: fotos también obligatorias (o marca Verificado con una nota), y mínimo una de Factura, T. Circulación o Póliza anterior."
                 : "Mínimo una de Fotos, Factura, T. Circulación o Póliza anterior."}
             </p>
             <div className="space-y-2">
@@ -658,13 +733,17 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
                 onFile={(f) => handleDocumentoChange("identif", f)}
                 onVer={() => handleVerDocumento(form.identif_path)}
               />
-              <ComprobanteField
-                label="Fotos del vehículo"
+              <FotosVehiculoField
                 path={form.fotos_path}
+                verificado={form.fotos_verificado}
+                nota={form.fotos_verificado_nota}
                 subiendo={subiendoDocumento === "fotos"}
                 onFile={(f) => handleDocumentoChange("fotos", f)}
                 onVer={() => handleVerDocumento(form.fotos_path)}
+                onToggleVerificado={(v) => setF("fotos_verificado", v)}
+                onNotaChange={(v) => setF("fotos_verificado_nota", v)}
                 obligatorio={esAmpliaOLimitada(form.cobertura)}
+                notaFalta={falta("fotosVerificadoNota")}
               />
               <ComprobanteField
                 label="Factura"

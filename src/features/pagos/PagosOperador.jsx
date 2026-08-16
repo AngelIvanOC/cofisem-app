@@ -21,21 +21,23 @@ const ESTATUS_META = {
   APLICADO:  { label: "Aplicado", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
 };
 
-// El 1er pago de una póliza que NO viene de GAMAN no vive en pagos_cofisem
-// — ya se capturó directo en polizas_cofisem (prima_primer_pago +
-// efectivo/cheque/tdc/pol_pend_pago) al completarla. Aquí solo se
-// representa de solo lectura para que "Pagos" sea el historial completo,
-// no se duplica el dato ni se puede editar desde esta vista.
+// La cuota que se capturó directo en polizas_cofisem (prima_primer_pago +
+// efectivo/cheque/tdc/pol_pend_pago) — cuota 1 de una póliza completa, o
+// la cuota num_cuota_pago de un registro parcial ("No tengo la póliza")
+// — nunca vive en pagos_cofisem. Aquí solo se representa de solo lectura
+// para que "Pagos" sea el historial completo; no se duplica el dato ni
+// se puede editar desde esta vista (se edita vía Completar).
 const VIRTUAL_META = {
   PENDIENTE: { label: "Pendiente", cls: "bg-amber-50 text-amber-700 border-amber-200" },
   APLICADO:  { label: "Cobrado al vender", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
 };
-function cuotaUnoVirtual(p) {
+function cuotaPropiaVirtual(p) {
   const cobrado = n(p.efectivo) + n(p.cheque) + n(p.tdc);
+  const numCuota = p.registro_parcial ? (p.num_cuota_pago ?? 1) : 1;
   return {
-    id: `virtual-1-${p.id}`,
+    id: `virtual-${numCuota}-${p.id}`,
     poliza_cofisem_id: p.id,
-    num_cuota: 1,
+    num_cuota: numCuota,
     prima_total: p.prima_primer_pago,
     prima_neta: p.prima_primer_pago_neta,
     fecha_vencimiento: p.fecha_emision,
@@ -96,13 +98,15 @@ function infoFila(c) {
 }
 
 // Todas las cuotas de una póliza — las reales de pagos_cofisem (incluida
-// la cuota 1 enlazada de GAMAN cuando aplica) más, si la póliza NO es de
-// GAMAN, la cuota 1 virtual (ver arriba).
+// la cuota 1 enlazada de GAMAN cuando aplica) más, si falta, la cuota
+// propia virtual (cuota 1 de una póliza completa, o num_cuota_pago de un
+// registro parcial — ver arriba).
 function cuotasDePoliza(p) {
   const reales = (p.pagos_cofisem ?? []).map((c) => ({ ...c, polizas_cofisem: p, _info: infoFila(c) }));
   if (p.poliza_id) return reales;
-  if (reales.some((c) => c.num_cuota === 1)) return reales;
-  const virtual = cuotaUnoVirtual(p);
+  const numCuotaPropia = p.registro_parcial ? (p.num_cuota_pago ?? 1) : 1;
+  if (reales.some((c) => c.num_cuota === numCuotaPropia)) return reales;
+  const virtual = cuotaPropiaVirtual(p);
   return [{ ...virtual, _info: infoFila(virtual) }, ...reales];
 }
 
@@ -172,7 +176,7 @@ export default function PagosOperador({ usuario }) {
           fecha_emision, prima_primer_pago, prima_primer_pago_neta,
           efectivo, cheque, tdc, pol_pend_pago, poliza_gaman_estatus,
           comprobante_cheque_url, comprobante_tdc_url,
-          perdida, perdida_nota,
+          perdida, perdida_nota, registro_parcial,
           pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
         `)
         .order("fecha_emision", { ascending: true });

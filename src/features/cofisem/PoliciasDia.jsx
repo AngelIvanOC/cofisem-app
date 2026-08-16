@@ -4,6 +4,7 @@ import { supabase } from "../../supabaseClient";
 import CompletarPolizaModal, {
   CompletarBadge,
   ComprobanteField,
+  FotosVehiculoField,
   evaluarCompletado,
 } from "../corte/CompletarPolizaModal";
 import {
@@ -50,9 +51,11 @@ const FORMA_PAGO_OPT = [
   "SEMESTRAL",
   "MENSUAL",
 ];
-// En modo "No tengo la póliza" no aplica CONTADO — ahí solo se registra
-// una cuota subsecuente (2+), y CONTADO es una sola exhibición sin cuota 2.
-const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT.filter((f) => f !== "CONTADO");
+// En modo "No tengo la póliza" también se permite CONTADO: representa un
+// pago único ("1 de 1") de una póliza que nunca quedó registrada — se
+// deja la constancia incompleta igual que las demás formas de pago, solo
+// que aquí no hay cuota 2+ que elegir (ver "Cuota a registrar" abajo).
+const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT;
 const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
 
 // Entre cuántos pagos se reparte la Prima T. Anual según la forma de pago —
@@ -108,7 +111,6 @@ const FORM_VACIO = {
   prima_neta: "",
   prima_primer_pago: "",
   prima_primer_pago_neta: "",
-  vale: "",
   pol_pend_pago: "",
   efectivo: "",
   cheque: "",
@@ -120,10 +122,11 @@ const FORM_VACIO = {
   identif_path: null,
   pol_ant_path: null,
   otro_path: null,
+  fotos_verificado: false,
+  fotos_verificado_nota: "",
   observaciones: "",
   comprobante_tdc_path: null,
   comprobante_cheque_path: null,
-  comprobante_vale_path: null,
 };
 
 const esAmpliaOLimitada = (cobertura) =>
@@ -169,7 +172,7 @@ export default function PoliciasDia({ usuario }) {
   const [guardando, setGuardando] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [modalRow, setModalRow] = useState(null);
-  const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | 'vale' | null
+  const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | null
   const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | ... | null
   const [corteInfo, setCorteInfo] = useState(null);
   const compUuidsRef = useRef({});
@@ -255,10 +258,7 @@ export default function PoliciasDia({ usuario }) {
 
   function cambiarModo(nuevo) {
     setModo(nuevo);
-    setNumCuotaParcial("");
-    if (nuevo === "PARCIAL" && form.forma_pago === "CONTADO") {
-      setF("forma_pago", "");
-    }
+    setNumCuotaParcial(nuevo === "PARCIAL" && form.forma_pago === "CONTADO" ? "1" : "");
   }
 
   function getCompUuid(tipo) {
@@ -352,9 +352,10 @@ export default function PoliciasDia({ usuario }) {
 
       const payload = esParcial
         ? {
-            // Registro parcial: solo lo mínimo — sin vigencia, vehículo ni
-            // documentación (no se tienen). La cuota real que se está
-            // cobrando NO va aquí, se inserta aparte en pagos_cofisem.
+            // Registro parcial: sin vigencia, vehículo ni documentación
+            // (no se tienen) — pero el tipo de pago de esta cuota sí se
+            // captura aquí mismo, igual que la cuota 1 de una póliza
+            // completa.
             aseguradora: form.aseguradora,
             numero_poliza: form.numero_poliza,
             folio: form.folio || null,
@@ -373,31 +374,26 @@ export default function PoliciasDia({ usuario }) {
             placas: null,
             num_serie: null,
             tipo: null,
-            autorizacion: null,
+            autorizacion: form.autorizacion || null,
             observaciones: form.observaciones || null,
             fecha_corte: HOY_ISO,
             oficina_id: usuario?.oficina_id ?? null,
             creado_por: usuario?.id ?? null,
-            completado: false,
+            completado: evaluarCompletado(form, { registroParcial: true }),
             registro_parcial: true,
             // Cuál cuota es esta — para que las tablas de corte puedan
-            // mostrar "Cuota 3" en vez de asumir que es la 1. El monto se
-            // guarda también aquí (igual que en pagos_cofisem) para que
-            // esas mismas tablas puedan sumar/mostrar el pago sin tener
-            // que ir a buscarlo a otra tabla.
+            // mostrar "Cuota 3" en vez de asumir que es la 1.
             num_cuota_pago: Number(numCuotaParcial),
             prima_anual: n(form.prima_anual),
             prima_neta: n(form.prima_neta),
             prima_primer_pago: n(form.prima_primer_pago),
             prima_primer_pago_neta: n(form.prima_primer_pago_neta),
-            vale: n(form.vale),
-            pol_pend_pago: 0,
-            efectivo: 0,
-            cheque: 0,
-            tdc: 0,
-            comprobante_tdc_url: null,
-            comprobante_cheque_url: null,
-            comprobante_vale_url: form.comprobante_vale_path,
+            pol_pend_pago: n(form.pol_pend_pago),
+            efectivo: n(form.efectivo),
+            cheque: n(form.cheque),
+            tdc: n(form.tdc),
+            comprobante_tdc_url: form.comprobante_tdc_path,
+            comprobante_cheque_url: form.comprobante_cheque_path,
             fotos_url: null,
             factura_url: null,
             t_circ_url: null,
@@ -434,20 +430,20 @@ export default function PoliciasDia({ usuario }) {
             prima_neta: n(form.prima_neta),
             prima_primer_pago: n(form.prima_primer_pago),
             prima_primer_pago_neta: n(form.prima_primer_pago_neta),
-            vale: n(form.vale),
             pol_pend_pago: n(form.pol_pend_pago),
             efectivo: n(form.efectivo),
             cheque: n(form.cheque),
             tdc: n(form.tdc),
             comprobante_tdc_url: form.comprobante_tdc_path,
             comprobante_cheque_url: form.comprobante_cheque_path,
-            comprobante_vale_url: form.comprobante_vale_path,
             fotos_url: form.fotos_path,
             factura_url: form.factura_path,
             t_circ_url: form.t_circ_path,
             identif_url: form.identif_path,
             pol_ant_url: form.pol_ant_path,
             otro_url: form.otro_path,
+            fotos_verificado: form.fotos_verificado,
+            fotos_verificado_nota: form.fotos_verificado ? (form.fotos_verificado_nota || null) : null,
           };
 
       // Las cuotas 2..N (para COMPLETA y PARCIAL) las genera solo el
@@ -558,8 +554,9 @@ export default function PoliciasDia({ usuario }) {
                 No tengo la póliza
               </p>
               <p className="text-xs text-gray-400 mt-0.5">
-                Vienen a pagar una cuota subsecuente (2+) de una póliza que no
-                quedó registrada — solo datos básicos.
+                Vienen a pagar una cuota subsecuente (2+), o el pago único de
+                contado, de una póliza que no quedó registrada — solo datos
+                básicos.
               </p>
             </button>
           </div>
@@ -646,7 +643,9 @@ export default function PoliciasDia({ usuario }) {
                   required={modo === "PARCIAL"}
                   onChange={(e) => {
                     const forma_pago = e.target.value;
-                    setNumCuotaParcial("");
+                    setNumCuotaParcial(
+                      modo === "PARCIAL" && forma_pago === "CONTADO" ? "1" : "",
+                    );
                     setForm((prev) => ({
                       ...prev,
                       forma_pago,
@@ -678,22 +677,28 @@ export default function PoliciasDia({ usuario }) {
                   <label className={lblCls}>
                     Cuota a registrar <span className="text-red-400">*</span>
                   </label>
-                  <select
-                    value={numCuotaParcial}
-                    required
-                    onChange={(e) => setNumCuotaParcial(e.target.value)}
-                    className={inpCls}
-                  >
-                    <option value="">Selecciona...</option>
-                    {Array.from(
-                      { length: (DIVISOR_PAGO[form.forma_pago] ?? 1) - 1 },
-                      (_, idx) => idx + 2,
-                    ).map((num) => (
-                      <option key={num} value={num}>
-                        Cuota {num} de {DIVISOR_PAGO[form.forma_pago]}
-                      </option>
-                    ))}
-                  </select>
+                  {form.forma_pago === "CONTADO" ? (
+                    <div className={inpCls + " bg-gray-50 text-gray-500 font-semibold cursor-default"}>
+                      Pago de contado — 1 de 1
+                    </div>
+                  ) : (
+                    <select
+                      value={numCuotaParcial}
+                      required
+                      onChange={(e) => setNumCuotaParcial(e.target.value)}
+                      className={inpCls}
+                    >
+                      <option value="">Selecciona...</option>
+                      {Array.from(
+                        { length: (DIVISOR_PAGO[form.forma_pago] ?? 1) - 1 },
+                        (_, idx) => idx + 2,
+                      ).map((num) => (
+                        <option key={num} value={num}>
+                          Cuota {num} de {DIVISOR_PAGO[form.forma_pago]}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               )}
             </div>
@@ -941,7 +946,6 @@ export default function PoliciasDia({ usuario }) {
                       : "Prima N. 1er Pago",
                   req: true,
                 },
-                { k: "vale", label: "Vale ($)" },
               ].map((f) => (
                 <div key={f.k}>
                   <label className={lblCls}>
@@ -991,10 +995,9 @@ export default function PoliciasDia({ usuario }) {
                   </div>
                 </div>
               ))}
-              {modo === "COMPLETA" &&
-                [
+              {[
                   { k: "efectivo", label: "Efectivo" },
-                  { k: "cheque", label: "Cheque / Dep." },
+                  { k: "cheque", label: "Transf / Dep." },
                   { k: "tdc", label: "T. Crédito/Déb." },
                   { k: "pol_pend_pago", label: "Pól. Pend. Pago" },
                 ].map((f) => (
@@ -1016,33 +1019,21 @@ export default function PoliciasDia({ usuario }) {
                     </div>
                   </div>
                 ))}
-              {modo === "COMPLETA" && (
-                <div className="sm:col-span-2">
-                  <label className={lblCls}>Autorización</label>
-                  <input
-                    value={form.autorizacion}
-                    onChange={(e) =>
-                      setF("autorizacion", e.target.value.toUpperCase())
-                    }
-                    placeholder="Código de autorización"
-                    className={inpCls}
-                  />
-                </div>
-              )}
+              <div className="sm:col-span-2">
+                <label className={lblCls}>Autorización</label>
+                <input
+                  value={form.autorizacion}
+                  onChange={(e) =>
+                    setF("autorizacion", e.target.value.toUpperCase())
+                  }
+                  placeholder="Código de autorización"
+                  className={inpCls}
+                />
+              </div>
             </div>
 
-            {(n(form.vale) > 0 || n(form.cheque) > 0 || n(form.tdc) > 0) && (
+            {(n(form.cheque) > 0 || n(form.tdc) > 0) && (
               <div className="mt-4 space-y-2">
-                {n(form.vale) > 0 && (
-                  <ComprobanteField
-                    obligatorio={false}
-                    label="Comprobante del vale (foto del papel)"
-                    path={form.comprobante_vale_path}
-                    subiendo={subiendoComprobante === "vale"}
-                    onFile={(f) => handleComprobanteChange("vale", f)}
-                    onVer={() => handleVer(form.comprobante_vale_path)}
-                  />
-                )}
                 {n(form.cheque) > 0 && (
                   <ComprobanteField
                     obligatorio={false}
@@ -1091,12 +1082,15 @@ export default function PoliciasDia({ usuario }) {
                   onVer={() => handleVerDocumento(form.identif_path)}
                   obligatorio={false}
                 />
-                <ComprobanteField
-                  label="Fotos del vehículo"
+                <FotosVehiculoField
                   path={form.fotos_path}
+                  verificado={form.fotos_verificado}
+                  nota={form.fotos_verificado_nota}
                   subiendo={subiendoDocumento === "fotos"}
                   onFile={(f) => handleDocumentoChange("fotos", f)}
                   onVer={() => handleVerDocumento(form.fotos_path)}
+                  onToggleVerificado={(v) => setF("fotos_verificado", v)}
+                  onNotaChange={(v) => setF("fotos_verificado_nota", v)}
                   obligatorio={false}
                 />
                 <ComprobanteField

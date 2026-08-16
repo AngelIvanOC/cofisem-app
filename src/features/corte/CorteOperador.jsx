@@ -1,8 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { Paperclip, FileSpreadsheet, Printer, History } from "lucide-react";
+import { Paperclip, FileSpreadsheet, Printer, History, BadgeCheck } from "lucide-react";
 import { supabase } from "../../supabaseClient";
-import { subirComprobante, verComprobante as abrirComprobante, COMPROBANTE_BUCKET, MAX_COMPROBANTE_BYTES } from "../../services/comprobantesPago";
+import {
+  subirComprobante,
+  verComprobante as abrirComprobante,
+  COMPROBANTE_BUCKET,
+  MAX_COMPROBANTE_BYTES,
+} from "../../services/comprobantesPago";
 import { verDocumento } from "../../services/documentacionPoliza";
 import { exportarCorteExcel } from "../../services/corteExport";
 import { hoyISO } from "../../utils/fecha";
@@ -68,11 +73,11 @@ export default function CorteOperador({ usuario }) {
 
   const [registros, setRegistros] = useState([]);
   const [cuotasDia, setCuotasDia] = useState([]); // pagos_cofisem: cuotas subsecuentes que vencieron hoy, se adelantaron a hoy, o ya se cobraron hoy
-  const [loading, setLoading]     = useState(true);
-  const [errorMsg, setErrorMsg]   = useState(null);
-  const [gastos, setGastos]       = useState(0);
-  const [vista, setVista]         = useState("poliza"); // "poliza" | "pago"
-  const [billetes, setBilletes]   = useState(
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [gastos, setGastos] = useState(0);
+  const [vista, setVista] = useState("poliza"); // "poliza" | "pago"
+  const [billetes, setBilletes] = useState(
     Object.fromEntries(DENOMINACIONES.map((d) => [d, ""])),
   );
   const [modalRow, setModalRow] = useState(null);
@@ -80,7 +85,7 @@ export default function CorteOperador({ usuario }) {
 
   const [entregaEfectivo, setEntregaEfectivo] = useState(null);
   const [subiendoEfectivo, setSubiendoEfectivo] = useState(false);
-  const [tabEntrega, setTabEntrega]     = useState("PERSONAL"); // "PERSONAL" | "DEPOSITO"
+  const [tabEntrega, setTabEntrega] = useState("PERSONAL"); // "PERSONAL" | "DEPOSITO"
   const [previewEfectivo, setPreviewEfectivo] = useState(null); // { url, isPdf } | null
   const [cerrando, setCerrando] = useState(false);
   const [confirmandoCierre, setConfirmandoCierre] = useState(false);
@@ -100,22 +105,28 @@ export default function CorteOperador({ usuario }) {
   // (esas filas no tienen concepto de completado — si el cliente no
   // vino, simplemente se sigue mostrando al día siguiente).
   const filasCuotas = cuotasDia.map(cuotaARow);
-  const filasTabla  = [...registros, ...filasCuotas];
+  const filasTabla = [...registros, ...filasCuotas];
 
-  const totalEfectivo   = filasTabla.reduce((s, r) => s + n(r.efectivo), 0);
-  const totalVales      = filasTabla.reduce((s, r) => s + n(r.vale), 0);
-  const totalTDC        = filasTabla.reduce((s, r) => s + n(r.tdc), 0);
-  const totalCheque     = filasTabla.reduce((s, r) => s + n(r.cheque), 0);
-  const polPendPago     = filasTabla.reduce((s, r) => s + n(r.pol_pend_pago), 0);
-  const sumaPrimerPago  = filasTabla.reduce((s, r) => s + n(r.prima_primer_pago), 0);
-  const sumaPrimaAnual  = registros.reduce((s, r) => s + n(r.prima_anual), 0);
-  const sumaPrimaNeta   = registros.reduce((s, r) => s + n(r.prima_neta), 0);
-  const pendientes      = registros.filter((r) => !r.completado).length;
+  const totalEfectivo = filasTabla.reduce((s, r) => s + n(r.efectivo), 0);
+  const totalVales = filasTabla.reduce((s, r) => s + n(r.vale), 0);
+  const totalTDC = filasTabla.reduce((s, r) => s + n(r.tdc), 0);
+  const totalCheque = filasTabla.reduce((s, r) => s + n(r.cheque), 0);
+  const polPendPago = filasTabla.reduce((s, r) => s + n(r.pol_pend_pago), 0);
+  const sumaPrimerPago = filasTabla.reduce(
+    (s, r) => s + n(r.prima_primer_pago),
+    0,
+  );
+  const sumaPrimaAnual = registros.reduce((s, r) => s + n(r.prima_anual), 0);
+  const sumaPrimaNeta = registros.reduce((s, r) => s + n(r.prima_neta), 0);
+  const pendientes = registros.filter((r) => !r.completado).length;
 
-  const subEfectivo   = totalEfectivo - n(gastos);
-  const totalCobro    = subEfectivo + totalTDC + totalCheque;
-  const totalBilletes = DENOMINACIONES.reduce((s, d) => s + n(billetes[d]) * d, 0);
-  const diferencia    = +(totalBilletes - totalCobro).toFixed(2);
+  const subEfectivo = totalEfectivo - n(gastos);
+  const totalCobro = subEfectivo + totalTDC + totalCheque;
+  const totalBilletes = DENOMINACIONES.reduce(
+    (s, d) => s + n(billetes[d]) * d,
+    0,
+  );
+  const diferencia = +(totalBilletes - totalCobro).toFixed(2);
   const efectivoBloqueado = totalEfectivo === 0;
   const tabEntregaMostrada = efectivoBloqueado ? "PERSONAL" : tabEntrega;
   const corteCerrado = !!entregaEfectivo?.cerrado;
@@ -136,10 +147,15 @@ export default function CorteOperador({ usuario }) {
     if (entregaEfectivo?.entrega === "DEPOSITO") {
       setTabEntrega("DEPOSITO");
       if (entregaEfectivo.comprobante_url) {
-        supabase.storage.from(COMPROBANTE_BUCKET).createSignedUrl(entregaEfectivo.comprobante_url, 3600)
+        supabase.storage
+          .from(COMPROBANTE_BUCKET)
+          .createSignedUrl(entregaEfectivo.comprobante_url, 3600)
           .then(({ data }) => {
             if (activo && data?.signedUrl) {
-              setPreviewEfectivo({ url: data.signedUrl, isPdf: entregaEfectivo.comprobante_url.endsWith(".pdf") });
+              setPreviewEfectivo({
+                url: data.signedUrl,
+                isPdf: entregaEfectivo.comprobante_url.endsWith(".pdf"),
+              });
             }
           });
       } else {
@@ -148,7 +164,9 @@ export default function CorteOperador({ usuario }) {
     } else if (entregaEfectivo?.entrega === "PERSONAL") {
       setTabEntrega("PERSONAL");
     }
-    return () => { activo = false; };
+    return () => {
+      activo = false;
+    };
   }, [entregaEfectivo?.entrega, entregaEfectivo?.comprobante_url]);
 
   async function cargar() {
@@ -176,9 +194,11 @@ export default function CorteOperador({ usuario }) {
   //    vista mientras no se cobren) o adelantadas a hoy — solo tiene
   //    sentido mostrarlas como "pendientes de cobrar" en el día de hoy,
   //    no al consultar un corte pasado ya cerrado.
-  // Se excluyen las cuotas de pólizas dadas de baja (perdida) y las de
-  // una póliza registrada este mismo día (esa ya aparece como registro
-  // nuevo — mostrarla también aquí duplicaría la misma cuota dos veces).
+  // Se excluyen las cuotas de pólizas dadas de baja (perdida). La cuota
+  // que corresponde al pago capturado al crear un registro parcial
+  // (num_cuota_pago) nunca aparece aquí — se captura directo en
+  // polizas_cofisem, igual que la cuota 1 de una póliza completa, y el
+  // trigger de BD no genera ninguna fila en pagos_cofisem para ella.
   async function cargarCuotasDia() {
     try {
       let query = supabase
@@ -187,12 +207,14 @@ export default function CorteOperador({ usuario }) {
         .is("pago_gaman_id", null);
       if (usuario?.id) query = query.eq("operador_id", usuario.id);
       query = esHoy
-        ? query.or(`fecha_recibido.eq.${fechaCorte},and(estatus.eq.PENDIENTE,or(fecha_vencimiento.lte.${fechaCorte},fecha_adelantado.eq.${fechaCorte}))`)
+        ? query.or(
+            `fecha_recibido.eq.${fechaCorte},and(estatus.eq.PENDIENTE,or(fecha_vencimiento.lte.${fechaCorte},fecha_adelantado.eq.${fechaCorte}))`,
+          )
         : query.eq("fecha_recibido", fechaCorte);
       const { data, error } = await query;
       if (error) throw error;
       const filtradas = (data ?? []).filter(
-        (c) => c.polizas_cofisem && !c.polizas_cofisem.perdida && c.polizas_cofisem.fecha_corte !== fechaCorte,
+        (c) => c.polizas_cofisem && !c.polizas_cofisem.perdida,
       );
       setCuotasDia(filtradas);
     } catch (e) {
@@ -202,9 +224,16 @@ export default function CorteOperador({ usuario }) {
 
   async function cargarEntregaEfectivo() {
     try {
-      let query = supabase.from("corte_efectivo_entrega").select("*").eq("fecha_corte", fechaCorte);
-      query = usuario?.oficina_id ? query.eq("oficina_id", usuario.oficina_id) : query.is("oficina_id", null);
-      query = usuario?.id ? query.eq("operador_id", usuario.id) : query.is("operador_id", null);
+      let query = supabase
+        .from("corte_efectivo_entrega")
+        .select("*")
+        .eq("fecha_corte", fechaCorte);
+      query = usuario?.oficina_id
+        ? query.eq("oficina_id", usuario.oficina_id)
+        : query.is("oficina_id", null);
+      query = usuario?.id
+        ? query.eq("operador_id", usuario.id)
+        : query.is("operador_id", null);
       const { data } = await query.maybeSingle();
       setEntregaEfectivo(data ?? null);
     } catch {
@@ -235,7 +264,9 @@ export default function CorteOperador({ usuario }) {
   }
 
   function handleCuotaGuardada(data) {
-    setCuotasDia((prev) => prev.map((c) => (c.id === data.id ? { ...c, ...data } : c)));
+    setCuotasDia((prev) =>
+      prev.map((c) => (c.id === data.id ? { ...c, ...data } : c)),
+    );
     setModalCuota(null);
     setErrorMsg(null);
   }
@@ -243,7 +274,9 @@ export default function CorteOperador({ usuario }) {
   // La póliza completa se dio por perdida — ninguna de sus cuotas debe
   // seguir apareciendo como pendiente de cobrar en Pólizas del día.
   function handleCuotaPerdida(polizaActualizada) {
-    setCuotasDia((prev) => prev.filter((c) => c.poliza_cofisem_id !== polizaActualizada.id));
+    setCuotasDia((prev) =>
+      prev.filter((c) => c.poliza_cofisem_id !== polizaActualizada.id),
+    );
     setModalCuota(null);
     setErrorMsg(null);
   }
@@ -251,13 +284,13 @@ export default function CorteOperador({ usuario }) {
   async function guardarEntrega({ entrega, comprobante_url }) {
     try {
       const payload = {
-        fecha_corte:     fechaCorte,
-        oficina_id:      usuario?.oficina_id ?? null,
-        operador_id:     usuario?.id ?? null,
+        fecha_corte: fechaCorte,
+        oficina_id: usuario?.oficina_id ?? null,
+        operador_id: usuario?.id ?? null,
         entrega,
         comprobante_url,
-        decidido_por:    usuario?.id ?? null,
-        updated_at:      new Date().toISOString(),
+        decidido_por: usuario?.id ?? null,
+        updated_at: new Date().toISOString(),
       };
       const { data, error } = await supabase
         .from("corte_efectivo_entrega")
@@ -287,21 +320,21 @@ export default function CorteOperador({ usuario }) {
     setCerrando(true);
     try {
       const payload = {
-        fecha_corte:     fechaCorte,
-        oficina_id:      usuario?.oficina_id ?? null,
-        operador_id:     usuario?.id ?? null,
-        entrega:         entregaEfectivo?.entrega ?? null,
+        fecha_corte: fechaCorte,
+        oficina_id: usuario?.oficina_id ?? null,
+        operador_id: usuario?.id ?? null,
+        entrega: entregaEfectivo?.entrega ?? null,
         comprobante_url: entregaEfectivo?.comprobante_url ?? null,
-        decidido_por:    entregaEfectivo?.decidido_por ?? usuario?.id ?? null,
-        cerrado:         true,
-        cerrado_por:     usuario?.id ?? null,
-        cierre_incompleto:    extra?.cierreIncompleto ?? false,
+        decidido_por: entregaEfectivo?.decidido_por ?? usuario?.id ?? null,
+        cerrado: true,
+        cerrado_por: usuario?.id ?? null,
+        cierre_incompleto: extra?.cierreIncompleto ?? false,
         nota_operador_cierre: extra?.notaOperador ?? null,
         // Cada (re)cierre entra fresco a revisión — si admin ya lo había
         // regresado o aprobado antes, no debe quedar pegado a ese estatus
         // viejo ahora que se vuelve a cerrar.
         estatus_revision: "PENDIENTE",
-        updated_at:      new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       const { data, error } = await supabase
         .from("corte_efectivo_entrega")
@@ -320,7 +353,10 @@ export default function CorteOperador({ usuario }) {
 
   function handleSolicitarCierreIncompleto() {
     if (!notaIncompleto.trim()) return;
-    confirmarCierre({ cierreIncompleto: true, notaOperador: notaIncompleto.trim() });
+    confirmarCierre({
+      cierreIncompleto: true,
+      notaOperador: notaIncompleto.trim(),
+    });
   }
 
   function datosCorteExport() {
@@ -330,10 +366,19 @@ export default function CorteOperador({ usuario }) {
       fechaLabel,
       fechaIso: fechaCorte,
       totales: {
-        efectivo: totalEfectivo, vale: totalVales, tdc: totalTDC, cheque: totalCheque,
-        gastos, subEfectivo, totalCobro, polPendPago,
-        primaAnual: sumaPrimaAnual, primaNeta: sumaPrimaNeta, primerPago: sumaPrimerPago,
-        totalBilletes, diferencia,
+        efectivo: totalEfectivo,
+        vale: totalVales,
+        tdc: totalTDC,
+        cheque: totalCheque,
+        gastos,
+        subEfectivo,
+        totalCobro,
+        polPendPago,
+        primaAnual: sumaPrimaAnual,
+        primaNeta: sumaPrimaNeta,
+        primerPago: sumaPrimerPago,
+        totalBilletes,
+        diferencia,
       },
     };
   }
@@ -345,10 +390,22 @@ export default function CorteOperador({ usuario }) {
       generadoPor: usuario?.nombre ?? "—",
       cerrado: corteCerrado,
       cerradoAt: entregaEfectivo?.cerrado_at
-        ? new Date(entregaEfectivo.cerrado_at).toLocaleString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+        ? new Date(entregaEfectivo.cerrado_at).toLocaleString("es-MX", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
         : null,
       entregaTipo: entregaEfectivo?.entrega ?? null,
-      impresoEn: new Date().toLocaleString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+      impresoEn: new Date().toLocaleString("es-MX", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       totales,
     };
     try {
@@ -378,7 +435,10 @@ export default function CorteOperador({ usuario }) {
       // Se guarda la decisión de inmediato, aunque todavía no haya
       // comprobante — así se puede cerrar el corte y subirlo después.
       if (entregaEfectivo?.entrega !== "DEPOSITO") {
-        guardarEntrega({ entrega: "DEPOSITO", comprobante_url: entregaEfectivo?.comprobante_url ?? null });
+        guardarEntrega({
+          entrega: "DEPOSITO",
+          comprobante_url: entregaEfectivo?.comprobante_url ?? null,
+        });
       }
     }
   }
@@ -389,7 +449,10 @@ export default function CorteOperador({ usuario }) {
       setErrorMsg("El archivo es muy grande (máx. 8 MB).");
       return;
     }
-    setPreviewEfectivo({ url: URL.createObjectURL(file), isPdf: file.type === "application/pdf" });
+    setPreviewEfectivo({
+      url: URL.createObjectURL(file),
+      isPdf: file.type === "application/pdf",
+    });
     setSubiendoEfectivo(true);
     try {
       const basePath = `${usuario?.oficina_id ?? "sin-oficina"}/${fechaCorte}/efectivo-deposito`;
@@ -397,11 +460,15 @@ export default function CorteOperador({ usuario }) {
       if (corteCerrado) {
         // El corte ya está cerrado — solo se permite completar el
         // comprobante de depósito que quedó pendiente, vía RPC.
-        if (!entregaEfectivo?.id) throw new Error("No se encontró el registro del corte.");
-        const { data, error } = await supabase.rpc("subir_comprobante_efectivo_corte", {
-          p_entrega_id: entregaEfectivo.id,
-          p_comprobante_url: path,
-        });
+        if (!entregaEfectivo?.id)
+          throw new Error("No se encontró el registro del corte.");
+        const { data, error } = await supabase.rpc(
+          "subir_comprobante_efectivo_corte",
+          {
+            p_entrega_id: entregaEfectivo.id,
+            p_comprobante_url: path,
+          },
+        );
         if (error) throw error;
         setEntregaEfectivo(Array.isArray(data) ? data[0] : data);
       } else {
@@ -419,7 +486,7 @@ export default function CorteOperador({ usuario }) {
     "w-full px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] tabular-nums";
 
   const FilaBillete = ({ d }) => {
-    const cant   = parseFloat(billetes[d]) || 0;
+    const cant = parseFloat(billetes[d]) || 0;
     const subtot = cant * d;
     return (
       <div className="grid grid-cols-3 gap-2 items-center">
@@ -430,11 +497,17 @@ export default function CorteOperador({ usuario }) {
           <span className="text-xs text-gray-400">×</span>
         </div>
         <input
-          type="number" min="0" step="1" placeholder="0"
+          type="number"
+          min="0"
+          step="1"
+          placeholder="0"
           value={billetes[d]}
           disabled={corteCerrado}
           onChange={(e) => setBilletes((b) => ({ ...b, [d]: e.target.value }))}
-          className={iResumen + " text-center py-1 disabled:opacity-50 disabled:cursor-not-allowed"}
+          className={
+            iResumen +
+            " text-center py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          }
         />
         <p className="text-xs font-bold text-[#1447e6] text-right tabular-nums">
           {subtot > 0 ? `$${subtot.toFixed(2)}` : "—"}
@@ -463,8 +536,19 @@ export default function CorteOperador({ usuario }) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-400 text-sm gap-2">
         <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8v8z"
+          />
         </svg>
         Cargando corte del día…
       </div>
@@ -476,26 +560,44 @@ export default function CorteOperador({ usuario }) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#1447e6]">
-            Corte Diario{!esHoy && <span className="text-base font-semibold text-gray-400"> · consulta</span>}
+            Corte Diario
+            {!esHoy && (
+              <span className="text-base font-semibold text-gray-400">
+                {" "}
+                · consulta
+              </span>
+            )}
           </h1>
           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
             <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
               {oficina}
             </span>
-            <span className="text-xs text-gray-400 capitalize">{fechaLabel}</span>
+            <span className="text-xs text-gray-400 capitalize">
+              {fechaLabel}
+            </span>
             <span className="text-xs text-gray-400">
               Generado por:{" "}
-              <strong className="text-gray-600">{usuario?.nombre ?? "—"}</strong>
+              <strong className="text-gray-600">
+                {usuario?.nombre ?? "—"}
+              </strong>
             </span>
             {corteCerrado && (
               <span className="text-[11px] font-bold text-gray-600 bg-gray-200 px-2.5 py-1 rounded-full">
                 🔒 Corte cerrado
                 {entregaEfectivo?.cerrado_at && (
                   <>
-                    {" "}el{" "}
-                    {new Date(entregaEfectivo.cerrado_at).toLocaleString("es-MX", {
-                      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
-                    })}
+                    {" "}
+                    el{" "}
+                    {new Date(entregaEfectivo.cerrado_at).toLocaleString(
+                      "es-MX",
+                      {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      },
+                    )}
                   </>
                 )}
               </span>
@@ -505,15 +607,17 @@ export default function CorteOperador({ usuario }) {
                 ⚠ Cerrado incompleto — pendiente de liberación
               </span>
             )}
-            {!corteCerrado && entregaEfectivo?.estatus_revision === "REGRESADO" && (
-              <span className="text-[11px] font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full">
-                ↩ El admin regresó este corte — corrígelo y vuelve a cerrarlo
-              </span>
-            )}
+            {!corteCerrado &&
+              entregaEfectivo?.estatus_revision === "REGRESADO" && (
+                <span className="text-[11px] font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full">
+                  ↩ El admin regresó este corte — corrígelo y vuelve a cerrarlo
+                </span>
+              )}
           </div>
           {entregaEfectivo?.notas_admin && (
             <p className="text-xs text-gray-500 mt-2 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1.5 inline-block">
-              <strong className="text-gray-600">Nota de administración:</strong> {entregaEfectivo.notas_admin}
+              <strong className="text-gray-600">Nota de administración:</strong>{" "}
+              {entregaEfectivo.notas_admin}
             </p>
           )}
         </div>
@@ -556,7 +660,12 @@ export default function CorteOperador({ usuario }) {
       {errorMsg && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex items-center justify-between">
           {errorMsg}
-          <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-600 ml-3">✕</button>
+          <button
+            onClick={() => setErrorMsg(null)}
+            className="text-red-400 hover:text-red-600 ml-3"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -565,7 +674,9 @@ export default function CorteOperador({ usuario }) {
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#1447e6] flex-wrap">
           <div className="flex items-center gap-3">
             <p className="text-sm font-bold text-white">Pólizas del día</p>
-            <span className="text-white/50 text-xs">{filasTabla.length} registros</span>
+            <span className="text-white/50 text-xs">
+              {filasTabla.length} registros
+            </span>
             {pendientes > 0 && (
               <span className="text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full">
                 {pendientes} por completar
@@ -577,7 +688,9 @@ export default function CorteOperador({ usuario }) {
               type="button"
               onClick={() => setVista("poliza")}
               className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                vista === "poliza" ? "bg-white text-[#1447e6]" : "text-white/70 hover:text-white"
+                vista === "poliza"
+                  ? "bg-white text-[#1447e6]"
+                  : "text-white/70 hover:text-white"
               }`}
             >
               Datos de póliza
@@ -586,7 +699,9 @@ export default function CorteOperador({ usuario }) {
               type="button"
               onClick={() => setVista("pago")}
               className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                vista === "pago" ? "bg-white text-[#1447e6]" : "text-white/70 hover:text-white"
+                vista === "pago"
+                  ? "bg-white text-[#1447e6]"
+                  : "text-white/70 hover:text-white"
               }`}
             >
               Pago y respaldo
@@ -626,9 +741,15 @@ export default function CorteOperador({ usuario }) {
               <tbody className="divide-y divide-gray-50">
                 {filasTabla.length === 0 && (
                   <tr>
-                    <td colSpan={16} className="px-5 py-12 text-center text-sm text-gray-400">
+                    <td
+                      colSpan={16}
+                      className="px-5 py-12 text-center text-sm text-gray-400"
+                    >
                       {esHoy ? (
-                        <>Sin pólizas registradas hoy. Registra pólizas en la sección <strong>Pólizas</strong>.</>
+                        <>
+                          Sin pólizas registradas hoy. Registra pólizas en la
+                          sección <strong>Pólizas</strong>.
+                        </>
                       ) : (
                         <>No registraste ninguna venta este día.</>
                       )}
@@ -637,9 +758,16 @@ export default function CorteOperador({ usuario }) {
                 )}
 
                 {filasTabla.map((r, i) => (
-                  <tr key={r.id} className={`hover:bg-gray-50/60 transition-colors ${r._esCuotaSubsecuente ? "bg-amber-50/20" : ""}`}>
-                    <td className="px-3 py-2.5 text-center font-bold text-[#1447e6]">{i + 1}</td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-gray-700">{r.aseguradora || "—"}</td>
+                  <tr
+                    key={r.id}
+                    className={`hover:bg-gray-50/60 transition-colors ${r._esCuotaSubsecuente ? "bg-amber-50/20" : ""}`}
+                  >
+                    <td className="px-3 py-2.5 text-center font-bold text-[#1447e6]">
+                      {i + 1}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-semibold text-gray-700">
+                      {r.aseguradora || "—"}
+                    </td>
                     <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-bold text-[#1447e6]">
                       {r.numero_poliza || "—"}
                       {r._esCuotaSubsecuente && (
@@ -648,36 +776,82 @@ export default function CorteOperador({ usuario }) {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap">{fmt(r.fecha_emision)}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap bg-blue-50/20">{fmt(r.vigencia_inicio)}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap bg-blue-50/20">{fmt(r.vigencia_fin)}</td>
-                    <td className="px-3 py-2.5 text-center font-mono text-gray-600">{r.folio || "—"}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-700 whitespace-nowrap">{r.vendedor_nombre || "—"}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-700 whitespace-nowrap">{r.asegurado_nombre || "—"}</td>
+                    <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap">
+                      {fmt(r.fecha_emision)}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap bg-blue-50/20">
+                      {fmt(r.vigencia_inicio)}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap bg-blue-50/20">
+                      {fmt(r.vigencia_fin)}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-600">
+                      {r.folio || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-700 whitespace-nowrap">
+                      {r.vendedor_nombre || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-700 whitespace-nowrap">
+                      {r.asegurado_nombre || "—"}
+                    </td>
                     <td className="px-3 py-2.5 text-center font-semibold text-gray-700">
                       {n(r.vale) > 0 ? $(r.vale) : "—"}
                       {r.comprobante_vale_url && (
-                        <button type="button" onClick={() => verComprobante(r.comprobante_vale_url)} title="Ver comprobante" className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                        <button
+                          type="button"
+                          onClick={() => verComprobante(r.comprobante_vale_url)}
+                          title="Ver comprobante"
+                          className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"
+                        >
+                          <Paperclip className="w-3.5 h-3.5" />
+                        </button>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-[#1447e6]">{$(r.prima_anual)}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-700">{$(r.prima_neta)}</td>
-                    <td className="px-3 py-2.5 text-center font-bold text-gray-500">{r.num_cuota_pago ?? 1}</td>
-                    <td className="px-3 py-2.5 text-center font-bold text-emerald-700">{$(r.prima_primer_pago)}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-600 max-w-[110px] truncate">{r.cobertura || "—"}</td>
-                    <td className="px-3 py-2.5 text-center font-mono text-gray-600 bg-blue-50/20">{r.placas || "—"}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-600 bg-blue-50/20">{r.tipo || "—"}</td>
+                    <td className="px-3 py-2.5 text-center font-semibold text-[#1447e6]">
+                      {$(r.prima_anual)}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-700">
+                      {$(r.prima_neta)}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-bold text-gray-500">
+                      {r.num_cuota_pago ?? 1}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-bold text-emerald-700">
+                      {$(r.prima_primer_pago)}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-600 max-w-[110px] truncate">
+                      {r.cobertura || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-600 bg-blue-50/20">
+                      {r.placas || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-600 bg-blue-50/20">
+                      {r.tipo || "—"}
+                    </td>
                   </tr>
                 ))}
 
                 {filasTabla.length > 0 && (
                   <tr className="bg-[#1447e6]/5 font-bold border-t-2 border-[#1447e6]/20">
-                    <td colSpan={9} className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">TOTAL</td>
-                    <td className="px-3 py-3 text-right text-xs text-[#1447e6]">{$(totalVales)}</td>
-                    <td className="px-3 py-3 text-right text-xs text-[#1447e6]">{$(sumaPrimaAnual)}</td>
-                    <td className="px-3 py-3 text-right text-xs text-[#1447e6]">{$(sumaPrimaNeta)}</td>
+                    <td
+                      colSpan={9}
+                      className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]"
+                    >
+                      TOTAL
+                    </td>
+                    <td className="px-3 py-3 text-right text-xs text-[#1447e6]">
+                      {$(totalVales)}
+                    </td>
+                    <td className="px-3 py-3 text-right text-xs text-[#1447e6]">
+                      {$(sumaPrimaAnual)}
+                    </td>
+                    <td className="px-3 py-3 text-right text-xs text-[#1447e6]">
+                      {$(sumaPrimaNeta)}
+                    </td>
                     <td />
-                    <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(sumaPrimerPago)}</td>
+                    <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">
+                      {$(sumaPrimerPago)}
+                    </td>
                     <td colSpan={3} />
                   </tr>
                 )}
@@ -715,9 +889,15 @@ export default function CorteOperador({ usuario }) {
               <tbody className="divide-y divide-gray-50">
                 {filasTabla.length === 0 && (
                   <tr>
-                    <td colSpan={16} className="px-5 py-12 text-center text-sm text-gray-400">
+                    <td
+                      colSpan={16}
+                      className="px-5 py-12 text-center text-sm text-gray-400"
+                    >
                       {esHoy ? (
-                        <>Sin pólizas registradas hoy. Registra pólizas en la sección <strong>Pólizas</strong>.</>
+                        <>
+                          Sin pólizas registradas hoy. Registra pólizas en la
+                          sección <strong>Pólizas</strong>.
+                        </>
                       ) : (
                         <>No registraste ninguna venta este día.</>
                       )}
@@ -726,33 +906,90 @@ export default function CorteOperador({ usuario }) {
                 )}
 
                 {filasTabla.map((r, i) => (
-                  <tr key={r.id} className={`hover:bg-gray-50/60 transition-colors ${r._esCuotaSubsecuente ? "bg-amber-50/20" : ""}`}>
-                    <td className="px-3 py-2.5 text-center font-bold text-[#1447e6]">{i + 1}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap">{r.forma_pago || "—"}</td>
-                    <td className="px-3 py-2.5 text-center font-bold text-emerald-700 bg-emerald-50/20">{$(r.efectivo)}</td>
+                  <tr
+                    key={r.id}
+                    className={`hover:bg-gray-50/60 transition-colors ${r._esCuotaSubsecuente ? "bg-amber-50/20" : ""}`}
+                  >
+                    <td className="px-3 py-2.5 text-center font-bold text-[#1447e6]">
+                      {i + 1}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap">
+                      {r.forma_pago || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-bold text-emerald-700 bg-emerald-50/20">
+                      {$(r.efectivo)}
+                    </td>
                     <td className="px-3 py-2.5 text-center text-gray-500 bg-emerald-50/20">
                       {n(r.cheque) > 0 ? $(r.cheque) : "—"}
                       {r.comprobante_cheque_url && (
-                        <button type="button" onClick={() => verComprobante(r.comprobante_cheque_url)} title="Ver comprobante" className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            verComprobante(r.comprobante_cheque_url)
+                          }
+                          title="Ver comprobante"
+                          className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"
+                        >
+                          <Paperclip className="w-3.5 h-3.5" />
+                        </button>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-center text-gray-500 bg-emerald-50/20">
                       {n(r.tdc) > 0 ? $(r.tdc) : "—"}
                       {r.comprobante_tdc_url && (
-                        <button type="button" onClick={() => verComprobante(r.comprobante_tdc_url)} title="Ver comprobante" className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                        <button
+                          type="button"
+                          onClick={() => verComprobante(r.comprobante_tdc_url)}
+                          title="Ver comprobante"
+                          className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"
+                        >
+                          <Paperclip className="w-3.5 h-3.5" />
+                        </button>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-center text-gray-500 bg-emerald-50/20">{r.autorizacion || "—"}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-400">{n(r.pol_pend_pago) > 0 ? $(r.pol_pend_pago) : "—"}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap">{r.telefono || "—"}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-400 max-w-[120px] truncate">{r.observaciones || "—"}</td>
-                    {[r.fotos_url, r.factura_url, r.t_circ_url, r.identif_url, r.pol_ant_url, r.otro_url].map((path, j) => (
-                      <td key={j} className="px-3 py-2.5 text-center bg-amber-50/20">
+                    <td className="px-3 py-2.5 text-center text-gray-500 bg-emerald-50/20">
+                      {r.autorizacion || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-400">
+                      {n(r.pol_pend_pago) > 0 ? $(r.pol_pend_pago) : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-600 whitespace-nowrap">
+                      {r.telefono || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-400 max-w-[120px] truncate">
+                      {r.observaciones || "—"}
+                    </td>
+                    {[
+                      r.fotos_url,
+                      r.factura_url,
+                      r.t_circ_url,
+                      r.identif_url,
+                      r.pol_ant_url,
+                      r.otro_url,
+                    ].map((path, j) => (
+                      <td
+                        key={j}
+                        className="px-3 py-2.5 text-center bg-amber-50/20"
+                      >
                         {path ? (
-                          <button type="button" onClick={() => verDoc(path)} title="Ver documento" className="text-amber-600 hover:text-amber-700 font-bold inline-flex">
+                          <button
+                            type="button"
+                            onClick={() => verDoc(path)}
+                            title="Ver documento"
+                            className="text-amber-600 hover:text-amber-700 font-bold inline-flex"
+                          >
                             <Paperclip className="w-3.5 h-3.5" />
                           </button>
-                        ) : <span className="text-gray-300">—</span>}
+                        ) : j === 0 && r.fotos_verificado ? (
+                          <span
+                            title={r.fotos_verificado_nota ? `Verificado: ${r.fotos_verificado_nota}` : "Verificado"}
+                            className="text-emerald-600 inline-flex"
+                          >
+                            <BadgeCheck className="w-3.5 h-3.5" />
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
                       </td>
                     ))}
                     <td className="px-3 py-2.5 text-center">
@@ -760,7 +997,9 @@ export default function CorteOperador({ usuario }) {
                         r._cuotaEstatus === "PENDIENTE" ? (
                           <button
                             type="button"
-                            onClick={() => !corteCerrado && setModalCuota(r._cuotaRaw)}
+                            onClick={() =>
+                              !corteCerrado && setModalCuota(r._cuotaRaw)
+                            }
                             disabled={corteCerrado}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 text-white text-[11px] font-bold hover:bg-amber-600 disabled:opacity-50 transition-colors"
                           >
@@ -772,7 +1011,10 @@ export default function CorteOperador({ usuario }) {
                           </span>
                         )
                       ) : (
-                        <CompletarBadge completado={r.completado} onClick={() => !corteCerrado && setModalRow(r)} />
+                        <CompletarBadge
+                          completado={r.completado}
+                          onClick={() => !corteCerrado && setModalRow(r)}
+                        />
                       )}
                     </td>
                   </tr>
@@ -780,8 +1022,15 @@ export default function CorteOperador({ usuario }) {
 
                 {filasTabla.length > 0 && (
                   <tr className="bg-[#1447e6]/5 font-bold border-t-2 border-[#1447e6]/20">
-                    <td colSpan={2} className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">TOTAL</td>
-                    <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(totalEfectivo)}</td>
+                    <td
+                      colSpan={2}
+                      className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]"
+                    >
+                      TOTAL
+                    </td>
+                    <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">
+                      {$(totalEfectivo)}
+                    </td>
                     <td colSpan={13} />
                   </tr>
                 )}
@@ -798,47 +1047,84 @@ export default function CorteOperador({ usuario }) {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="bg-[#1447e6] px-5 py-3.5">
               <p className="text-sm font-bold text-white">Resumen de cobro</p>
-              <p className="text-white/40 text-xs mt-0.5">Calculado automáticamente del registro del día</p>
+              <p className="text-white/40 text-xs mt-0.5">
+                Calculado automáticamente del registro del día
+              </p>
             </div>
             <div className="p-5 space-y-1">
               {[
-                { label: "Efectivo",              value: totalEfectivo },
-                { label: "Vales",                 value: totalVales    },
-                { label: "T. Crédito / Débito",   value: totalTDC      },
-                { label: "Fichas Cheques/Trans",  value: totalCheque   },
+                { label: "Efectivo", value: totalEfectivo },
+                { label: "Vales", value: totalVales },
+                { label: "T. Crédito / Débito", value: totalTDC },
+                { label: "Fichas Cheques/Trans", value: totalCheque },
               ].map((f) => (
                 <div key={f.label} className="flex items-center gap-3">
-                  <label className="text-xs font-bold text-gray-500 w-44 shrink-0">{f.label}</label>
+                  <label className="text-xs font-bold text-gray-500 w-44 shrink-0">
+                    {f.label}
+                  </label>
                   <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                    <input readOnly value={f.value.toFixed(2)} className={iResumen + " pl-7 bg-gray-50 cursor-default select-all"} />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                      $
+                    </span>
+                    <input
+                      readOnly
+                      value={f.value.toFixed(2)}
+                      className={
+                        iResumen + " pl-7 bg-gray-50 cursor-default select-all"
+                      }
+                    />
                   </div>
                 </div>
               ))}
               <div className="flex items-center gap-3">
-                <label className="text-xs font-bold text-gray-500 w-44 shrink-0">Gastos</label>
+                <label className="text-xs font-bold text-gray-500 w-44 shrink-0">
+                  Gastos
+                </label>
                 <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                    $
+                  </span>
                   <input
-                    type="number" min="0" step="0.01"
+                    type="number"
+                    min="0"
+                    step="0.01"
                     value={gastos || ""}
                     disabled={corteCerrado}
                     onChange={(e) => setGastos(parseFloat(e.target.value) || 0)}
-                    className={iResumen + " pl-7 disabled:opacity-50 disabled:cursor-not-allowed"}
+                    className={
+                      iResumen +
+                      " pl-7 disabled:opacity-50 disabled:cursor-not-allowed"
+                    }
                   />
                 </div>
               </div>
               <div className="border-t border-gray-100 pt-3 space-y-2">
                 {[
-                  { label: "Subtotal efectivo",   value: subEfectivo,  bold: false             },
-                  { label: "Total",               value: totalCobro,   bold: true              },
-                  { label: "Pólizas pend. pago",  value: polPendPago,  bold: false, warn: true },
+                  {
+                    label: "Subtotal efectivo",
+                    value: subEfectivo,
+                    bold: false,
+                  },
+                  { label: "Total", value: totalCobro, bold: true },
+                  {
+                    label: "Pólizas pend. pago",
+                    value: polPendPago,
+                    bold: false,
+                    warn: true,
+                  },
                 ].map((row) => (
-                  <div key={row.label} className="flex items-center justify-between">
-                    <p className={`text-xs ${row.warn ? "text-amber-600" : "text-gray-600"} ${row.bold ? "font-bold" : "font-medium"}`}>
+                  <div
+                    key={row.label}
+                    className="flex items-center justify-between"
+                  >
+                    <p
+                      className={`text-xs ${row.warn ? "text-amber-600" : "text-gray-600"} ${row.bold ? "font-bold" : "font-medium"}`}
+                    >
                       {row.label}
                     </p>
-                    <p className={`text-sm tabular-nums ${row.warn ? "text-amber-700" : row.bold ? "font-bold text-[#1447e6]" : "text-gray-700"}`}>
+                    <p
+                      className={`text-sm tabular-nums ${row.warn ? "text-amber-700" : row.bold ? "font-bold text-[#1447e6]" : "text-gray-700"}`}
+                    >
                       ${row.value.toFixed(2)}
                     </p>
                   </div>
@@ -863,11 +1149,20 @@ export default function CorteOperador({ usuario }) {
         <div className="flex flex-col gap-5">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
             <div className="min-w-0">
-              <p className="text-xs font-bold text-[#1447e6]">Entrega de efectivo</p>
+              <p className="text-xs font-bold text-[#1447e6]">
+                Entrega de efectivo
+              </p>
               <p className="text-[11px] text-gray-400 mt-0.5">
-                {efectivoBloqueado
-                  ? "Sin efectivo que declarar todavía"
-                  : <>Total: <strong className="text-gray-600">{$(totalEfectivo)}</strong></>}
+                {efectivoBloqueado ? (
+                  "Sin efectivo que declarar todavía"
+                ) : (
+                  <>
+                    Total:{" "}
+                    <strong className="text-gray-600">
+                      {$(totalEfectivo)}
+                    </strong>
+                  </>
+                )}
               </p>
             </div>
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 shrink-0">
@@ -878,7 +1173,9 @@ export default function CorteOperador({ usuario }) {
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                   efectivoBloqueado || corteCerrado ? "cursor-not-allowed" : ""
                 } ${
-                  tabEntregaMostrada === "PERSONAL" ? "bg-[#1447e6] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  tabEntregaMostrada === "PERSONAL"
+                    ? "bg-[#1447e6] text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Efectivo
@@ -888,7 +1185,11 @@ export default function CorteOperador({ usuario }) {
                 disabled={efectivoBloqueado || corteCerrado}
                 onClick={() => handleTabEntrega("DEPOSITO")}
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  efectivoBloqueado || corteCerrado ? "text-gray-300 cursor-not-allowed" : tabEntregaMostrada === "DEPOSITO" ? "bg-[#1447e6] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  efectivoBloqueado || corteCerrado
+                    ? "text-gray-300 cursor-not-allowed"
+                    : tabEntregaMostrada === "DEPOSITO"
+                      ? "bg-[#1447e6] text-white shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Depósito
@@ -900,7 +1201,9 @@ export default function CorteOperador({ usuario }) {
             <div className="bg-[#1447e6] px-5 py-3.5">
               <p className="text-sm font-bold text-white">Corte de efectivo</p>
               <p className="text-white/50 text-xs mt-0.5">
-                {tabEntregaMostrada === "DEPOSITO" ? "Comprobante del depósito" : "Ingresa la cantidad de cada denominación"}
+                {tabEntregaMostrada === "DEPOSITO"
+                  ? "Comprobante del depósito"
+                  : "Ingresa la cantidad de cada denominación"}
               </p>
             </div>
             <div className="p-5">
@@ -909,9 +1212,17 @@ export default function CorteOperador({ usuario }) {
                   {previewEfectivo ? (
                     <div className="relative h-full rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
                       {previewEfectivo.isPdf ? (
-                        <iframe src={previewEfectivo.url} title="Comprobante del depósito" className="w-full h-full" />
+                        <iframe
+                          src={previewEfectivo.url}
+                          title="Comprobante del depósito"
+                          className="w-full h-full"
+                        />
                       ) : (
-                        <img src={previewEfectivo.url} alt="Comprobante del depósito" className="w-full h-full object-contain" />
+                        <img
+                          src={previewEfectivo.url}
+                          alt="Comprobante del depósito"
+                          className="w-full h-full object-contain"
+                        />
                       )}
                       {subiendoEfectivo && (
                         <div className="absolute inset-0 bg-white/70 flex items-center justify-center text-xs font-semibold text-gray-500">
@@ -937,11 +1248,19 @@ export default function CorteOperador({ usuario }) {
                       )}
                     </div>
                   ) : (
-                    <label className={`h-full flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed transition-colors ${
-                      subiendoEfectivo ? "border-gray-200 bg-gray-50 cursor-wait" : corteCerrado ? "border-amber-300 hover:border-amber-400 bg-amber-50/60 cursor-pointer" : "border-gray-300 hover:border-gray-400 bg-gray-50/60 cursor-pointer"
-                    }`}>
+                    <label
+                      className={`h-full flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed transition-colors ${
+                        subiendoEfectivo
+                          ? "border-gray-200 bg-gray-50 cursor-wait"
+                          : corteCerrado
+                            ? "border-amber-300 hover:border-amber-400 bg-amber-50/60 cursor-pointer"
+                            : "border-gray-300 hover:border-gray-400 bg-gray-50/60 cursor-pointer"
+                      }`}
+                    >
                       {corteCerrado && !subiendoEfectivo && (
-                        <p className="text-[11px] font-bold text-amber-600 mb-1">Corte cerrado — falta el comprobante</p>
+                        <p className="text-[11px] font-bold text-amber-600 mb-1">
+                          Corte cerrado — falta el comprobante
+                        </p>
                       )}
                       <p className="text-xs font-bold text-gray-500">
                         {subiendoEfectivo ? "Subiendo…" : "Subir comprobante"}
@@ -965,10 +1284,14 @@ export default function CorteOperador({ usuario }) {
               ) : (
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mb-3">
                   <div className="space-y-1.5">
-                    {DENOMINACIONES.slice(0, 5).map((d) => <FilaBillete key={d} d={d} />)}
+                    {DENOMINACIONES.slice(0, 5).map((d) => (
+                      <FilaBillete key={d} d={d} />
+                    ))}
                   </div>
                   <div className="space-y-1.5">
-                    {DENOMINACIONES.slice(5).map((d) => <FilaBillete key={d} d={d} />)}
+                    {DENOMINACIONES.slice(5).map((d) => (
+                      <FilaBillete key={d} d={d} />
+                    ))}
                   </div>
                 </div>
               )}
@@ -976,28 +1299,48 @@ export default function CorteOperador({ usuario }) {
               <div className="border-t border-gray-200 pt-4 space-y-2">
                 {tabEntregaMostrada === "PERSONAL" && (
                   <div className="flex justify-between">
-                    <p className="text-xs font-semibold text-gray-500">Total billetes</p>
-                    <p className="text-sm font-bold text-[#1447e6] tabular-nums">${totalBilletes.toFixed(2)}</p>
+                    <p className="text-xs font-semibold text-gray-500">
+                      Total billetes
+                    </p>
+                    <p className="text-sm font-bold text-[#1447e6] tabular-nums">
+                      ${totalBilletes.toFixed(2)}
+                    </p>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <p className="text-xs font-semibold text-gray-500">Total cobrado</p>
-                  <p className="text-sm font-bold text-[#1447e6] tabular-nums">${totalCobro.toFixed(2)}</p>
+                  <p className="text-xs font-semibold text-gray-500">
+                    Total cobrado
+                  </p>
+                  <p className="text-sm font-bold text-[#1447e6] tabular-nums">
+                    ${totalCobro.toFixed(2)}
+                  </p>
                 </div>
                 {tabEntregaMostrada === "PERSONAL" && (
-                  <div className={`flex justify-between items-center p-3 rounded-xl border-2 ${
-                    diferencia === 0
-                      ? "bg-emerald-50 border-emerald-200"
-                      : diferencia > 0
-                        ? "bg-blue-50 border-blue-200"
-                        : "bg-red-50 border-red-200"
-                  }`}>
+                  <div
+                    className={`flex justify-between items-center p-3 rounded-xl border-2 ${
+                      diferencia === 0
+                        ? "bg-emerald-50 border-emerald-200"
+                        : diferencia > 0
+                          ? "bg-blue-50 border-blue-200"
+                          : "bg-red-50 border-red-200"
+                    }`}
+                  >
                     <p className="text-xs font-bold">
-                      {diferencia === 0 ? "✓ Sin diferencia" : diferencia > 0 ? "Sobrante" : "Faltante"}
+                      {diferencia === 0
+                        ? "✓ Sin diferencia"
+                        : diferencia > 0
+                          ? "Sobrante"
+                          : "Faltante"}
                     </p>
-                    <p className={`text-lg font-bold tabular-nums ${
-                      diferencia === 0 ? "text-emerald-700" : diferencia > 0 ? "text-blue-700" : "text-red-700"
-                    }`}>
+                    <p
+                      className={`text-lg font-bold tabular-nums ${
+                        diferencia === 0
+                          ? "text-emerald-700"
+                          : diferencia > 0
+                            ? "text-blue-700"
+                            : "text-red-700"
+                      }`}
+                    >
                       {diferencia >= 0 ? "+" : ""}${diferencia.toFixed(2)}
                     </p>
                   </div>
@@ -1027,9 +1370,12 @@ export default function CorteOperador({ usuario }) {
       {confirmandoCierre && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <p className="text-sm font-bold text-[#1447e6] mb-2">¿Cerrar el corte del día?</p>
+            <p className="text-sm font-bold text-[#1447e6] mb-2">
+              ¿Cerrar el corte del día?
+            </p>
             <p className="text-sm text-gray-500">
-              Ya no podrás agregar, editar ni eliminar pólizas de hoy — solo consultarlas. Esta acción no se puede deshacer.
+              Ya no podrás agregar, editar ni eliminar pólizas de hoy — solo
+              consultarlas. Esta acción no se puede deshacer.
             </p>
             <div className="flex items-center justify-end gap-3 mt-6">
               <button
@@ -1056,7 +1402,9 @@ export default function CorteOperador({ usuario }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="p-6 pb-4">
-              <p className="text-sm font-bold text-[#1447e6] mb-1">No puedes cerrar el corte todavía</p>
+              <p className="text-sm font-bold text-[#1447e6] mb-1">
+                No puedes cerrar el corte todavía
+              </p>
               <p className="text-sm text-gray-500">
                 {alertaIncompletas.length === 1
                   ? "Esta póliza sigue sin completarse:"
@@ -1075,10 +1423,16 @@ export default function CorteOperador({ usuario }) {
                   className="w-full flex items-center justify-between gap-3 px-6 py-3 text-left hover:bg-gray-50 transition-colors"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-mono font-bold text-[#1447e6] truncate">{r.numero_poliza || "—"}</p>
-                    <p className="text-xs text-gray-500 truncate">{r.asegurado_nombre || "—"}</p>
+                    <p className="text-sm font-mono font-bold text-[#1447e6] truncate">
+                      {r.numero_poliza || "—"}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {r.asegurado_nombre || "—"}
+                    </p>
                   </div>
-                  <span className="text-[11px] font-bold text-amber-600 shrink-0">Completar →</span>
+                  <span className="text-[11px] font-bold text-amber-600 shrink-0">
+                    Completar →
+                  </span>
                 </button>
               ))}
             </div>
@@ -1093,7 +1447,7 @@ export default function CorteOperador({ usuario }) {
                 className="w-full h-20 px-3 py-2 rounded-xl border border-gray-200 text-xs text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-300 resize-none"
               />
             </div>
-            <div className="flex items-center justify-end gap-3 p-6 pt-3">
+            <div className="flex items-center justify-between gap-3 p-6 pt-3">
               <button
                 type="button"
                 onClick={() => setAlertaIncompletas(null)}
@@ -1107,7 +1461,7 @@ export default function CorteOperador({ usuario }) {
                 disabled={!notaIncompleto.trim() || cerrando}
                 className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
-                Solicitar cerrar corte incompleto
+                Solicitar cierre incompleto
               </button>
             </div>
           </div>
