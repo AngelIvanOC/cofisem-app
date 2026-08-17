@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "../../supabaseClient";
+import { createClient } from "@supabase/supabase-js";
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "../../supabaseClient";
+import { logout } from "../../auth.js";
 import Swal from "sweetalert2";
 import {
   Sliders, X, Plus, DollarSign, Percent, ChevronDown,
   ChevronRight, Loader2, Settings, Building2, Pencil,
+  KeyRound, Eye, EyeOff, User,
 } from "lucide-react";
 import { fetchPermitirFechasPasadas, setPermitirFechasPasadas, fetchPermitirNumeroManual, setPermitirNumeroManual } from "../../services/configuracion";
 import { hoyISO } from "../../utils/fecha";
@@ -338,6 +341,254 @@ function ModalOficina({ oficina, onClose, onGuardado }) {
   );
 }
 
+// ── Sección: Cambiar mi contraseña ───────────────────────────
+function SeccionMiPassword() {
+  const [passActual, setPassActual] = useState("");
+  const [passNueva, setPassNueva] = useState("");
+  const [passConfirmar, setPassConfirmar] = useState("");
+  const [verActual, setVerActual] = useState(false);
+  const [verNueva, setVerNueva] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+
+  const valido = passActual && passNueva.length >= 6 && passNueva === passConfirmar;
+
+  const handleGuardar = async () => {
+    setGuardando(true);
+    try {
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr || !userData?.user?.email) throw new Error("No se pudo obtener tu sesión actual.");
+
+      // Verifica la contraseña actual con un cliente temporal — no toca tu sesión real.
+      const tempClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { error: verifyError } = await tempClient.auth.signInWithPassword({
+        email: userData.user.email,
+        password: passActual,
+      });
+      if (verifyError) throw new Error("La contraseña actual no es correcta.");
+
+      const { error } = await supabase.auth.updateUser({ password: passNueva });
+      if (error) throw error;
+
+      await Swal.fire({
+        icon: "success",
+        title: "Contraseña actualizada",
+        text: "Tu sesión se cerrará para que inicies con tu nueva contraseña.",
+        confirmButtonColor: "#13193a",
+      });
+      await logout();
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Error", text: e.message, confirmButtonColor: "#13193a" });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const inp = "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <KeyRound className="w-4 h-4 text-[#13193a]" />
+        <p className="text-sm font-bold text-[#13193a]">Cambiar mi contraseña</p>
+      </div>
+      <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+        Al guardar, se cerrará tu sesión y deberás iniciar de nuevo con la nueva contraseña.
+      </p>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Contraseña actual</label>
+          <div className="relative">
+            <input
+              type={verActual ? "text" : "password"}
+              value={passActual}
+              onChange={(e) => setPassActual(e.target.value)}
+              className={`${inp} pr-10`}
+              autoComplete="current-password"
+            />
+            <button type="button" onClick={() => setVerActual((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              {verActual ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Nueva contraseña</label>
+          <div className="relative">
+            <input
+              type={verNueva ? "text" : "password"}
+              value={passNueva}
+              onChange={(e) => setPassNueva(e.target.value)}
+              className={`${inp} pr-10`}
+              placeholder="Mínimo 6 caracteres"
+              autoComplete="new-password"
+            />
+            <button type="button" onClick={() => setVerNueva((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              {verNueva ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Confirmar nueva contraseña</label>
+          <input
+            type={verNueva ? "text" : "password"}
+            value={passConfirmar}
+            onChange={(e) => setPassConfirmar(e.target.value)}
+            className={inp}
+            autoComplete="new-password"
+          />
+          {passConfirmar && passNueva !== passConfirmar && (
+            <p className="text-xs text-red-500 mt-1">Las contraseñas no coinciden.</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={handleGuardar}
+        disabled={!valido || guardando}
+        className="mt-4 w-full py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-lg shadow-[#13193a]/15 flex items-center justify-center gap-2"
+      >
+        {guardando ? <><Loader2 className="w-4 h-4 animate-spin" />Guardando…</> : "Cambiar contraseña"}
+      </button>
+    </div>
+  );
+}
+
+// ── Sección: Cambiar contraseña de otro usuario ──────────────
+function SeccionPasswordUsuario() {
+  const [usuarios, setUsuarios] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [usuarioId, setUsuarioId] = useState("");
+  const [passNueva, setPassNueva] = useState("");
+  const [passConfirmar, setPassConfirmar] = useState("");
+  const [verPass, setVerPass] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const { data } = await supabase
+        .from("usuarios")
+        .select("id, nombre, apellido, roles(nombre)")
+        .order("nombre");
+      setUsuarios((data ?? []).filter((u) => u.id !== userData?.user?.id));
+      setCargando(false);
+    })();
+  }, []);
+
+  const usuarioSel = usuarios.find((u) => u.id === usuarioId) ?? null;
+  const valido = usuarioId && passNueva.length >= 6 && passNueva === passConfirmar;
+
+  const handleGuardar = async () => {
+    if (!usuarioSel) return;
+    const { isConfirmed } = await Swal.fire({
+      icon: "question",
+      title: "Cambiar contraseña",
+      text: `¿Confirmas cambiar la contraseña de ${usuarioSel.nombre} ${usuarioSel.apellido || ""}?`,
+      showCancelButton: true,
+      confirmButtonColor: "#13193a",
+      confirmButtonText: "Sí, cambiar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!isConfirmed) return;
+
+    setGuardando(true);
+    try {
+      const { error } = await supabase.functions.invoke("actualizar-password", {
+        body: { user_id: usuarioId, password: passNueva },
+      });
+      if (error) throw new Error(error.message || "No se pudo cambiar la contraseña.");
+      Swal.fire({
+        icon: "success",
+        title: "Contraseña actualizada",
+        text: `La contraseña de ${usuarioSel.nombre} se cambió correctamente.`,
+        confirmButtonColor: "#13193a",
+        timer: 4000,
+        timerProgressBar: true,
+      });
+      setPassNueva("");
+      setPassConfirmar("");
+      setUsuarioId("");
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Error", text: e.message, confirmButtonColor: "#13193a" });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const inp = "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <User className="w-4 h-4 text-[#13193a]" />
+        <p className="text-sm font-bold text-[#13193a]">Cambiar contraseña de otro usuario</p>
+      </div>
+      <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+        Se actualiza de inmediato; el usuario deberá usar la nueva contraseña en su próximo inicio de sesión.
+      </p>
+
+      {cargando ? (
+        <div className="py-6 flex items-center justify-center gap-2 text-gray-400 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin" /> Cargando usuarios…
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Usuario</label>
+            <select value={usuarioId} onChange={(e) => setUsuarioId(e.target.value)} className={inp}>
+              <option value="">Selecciona un usuario…</option>
+              {usuarios.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nombre} {u.apellido || ""} — {u.roles?.nombre ?? ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Nueva contraseña</label>
+            <div className="relative">
+              <input
+                type={verPass ? "text" : "password"}
+                value={passNueva}
+                onChange={(e) => setPassNueva(e.target.value)}
+                className={`${inp} pr-10`}
+                placeholder="Mínimo 6 caracteres"
+                autoComplete="new-password"
+              />
+              <button type="button" onClick={() => setVerPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                {verPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Confirmar nueva contraseña</label>
+            <input
+              type={verPass ? "text" : "password"}
+              value={passConfirmar}
+              onChange={(e) => setPassConfirmar(e.target.value)}
+              className={inp}
+              autoComplete="new-password"
+            />
+            {passConfirmar && passNueva !== passConfirmar && (
+              <p className="text-xs text-red-500 mt-1">Las contraseñas no coinciden.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={handleGuardar}
+        disabled={!valido || guardando}
+        className="mt-4 w-full py-2.5 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold disabled:opacity-40 transition-all shadow-lg shadow-[#13193a]/15 flex items-center justify-center gap-2"
+      >
+        {guardando ? <><Loader2 className="w-4 h-4 animate-spin" />Cambiando…</> : "Cambiar contraseña"}
+      </button>
+    </div>
+  );
+}
+
 // ── Página principal ──────────────────────────────────────────
 export default function AdminConfiguracion({ usuario }) {
   const [tab,            setTab]            = useState("costos");
@@ -416,7 +667,7 @@ export default function AdminConfiguracion({ usuario }) {
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-center border-b border-gray-100 px-2">
-          {[{ k: "costos", l: "Costos de emisión" }, { k: "coberturas", l: "Coberturas" }, { k: "oficinas", l: "Oficinas" }, { k: "sistema", l: "Sistema" }].map((t) => (
+          {[{ k: "costos", l: "Costos de emisión" }, { k: "coberturas", l: "Coberturas" }, { k: "oficinas", l: "Oficinas" }, { k: "sistema", l: "Sistema" }, { k: "seguridad", l: "Seguridad" }].map((t) => (
             <button key={t.k} onClick={() => setTab(t.k)}
               className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all ${tab === t.k ? "border-[#13193a] text-[#13193a]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
               {t.l}
@@ -792,6 +1043,16 @@ export default function AdminConfiguracion({ usuario }) {
                   }
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: Seguridad ─────────────────────────────────────── */}
+        {tab === "seguridad" && (
+          <div className="p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <SeccionMiPassword />
+              <SeccionPasswordUsuario />
             </div>
           </div>
         )}
