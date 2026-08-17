@@ -27,7 +27,7 @@ const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT;
 // Mismo mapeo que usa el trigger de BD — para no dejar elegir una forma de
 // pago cuya cantidad de parcialidades sea menor a la cuota que ya se
 // registró (ej. no tiene sentido pasar a SEMESTRAL si esto es la cuota 5).
-const DIVISOR_PAGO = { CONTADO: 1, MENSUAL: 12, SEMESTRAL: 2, TRIMESTRAL: 3, CUATRIMESTRAL: 4, "4 PARCIALES": 4 };
+const DIVISOR_PAGO = { CONTADO: 1, MENSUAL: 12, SEMESTRAL: 2, TRIMESTRAL: 4, CUATRIMESTRAL: 3, "4 PARCIALES": 4 };
 
 // Coberturas "amplia"/"limitada" exigen foto del vehículo además de la
 // identificación.

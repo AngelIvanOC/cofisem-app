@@ -66,8 +66,8 @@ const DIVISOR_PAGO = {
   CONTADO: 1,
   MENSUAL: 12,
   SEMESTRAL: 2,
-  TRIMESTRAL: 3,
-  CUATRIMESTRAL: 4,
+  TRIMESTRAL: 4,
+  CUATRIMESTRAL: 3,
   "4 PARCIALES": 4,
 };
 function calcularPrimerPago(primaAnual, formaPago) {
