@@ -36,6 +36,7 @@ import {
   Table,
   Ticket,
   Truck,
+  Settings,
 } from "lucide-react";
 
 // ── Iconos (Lucide React) ────────────────────────────────────
@@ -56,7 +57,7 @@ const ICONS = {
   x: X,
   "plus-circle": PlusCircle,
   "trending-up": TrendingUp,
-  tools: Settings2,
+  tools: Settings,
   "edit-square": ClipboardList,
   briefcase: Briefcase,
   table: Table,
