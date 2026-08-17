@@ -715,6 +715,7 @@ export default function OperadorPagos({ usuario }) {
         fecha_pago: fecha,
         monto: parseFloat(monto),
         recibido_por: usuario?.id ?? null,
+        recibido_en: new Date().toISOString(),
       })
       .eq("id", cuotaId);
     if (error) throw error;

@@ -101,6 +101,7 @@ export default function AnalistaPagos({ usuario }) {
       const { error } = await supabase.from('pagos').update({
         estatus:      'PAGADO',
         aplicado_por: usuario?.id ?? null,
+        aplicado_en:  new Date().toISOString(),
       }).eq('id', id);
       if (error) throw error;
       await cargar();

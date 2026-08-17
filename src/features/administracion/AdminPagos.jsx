@@ -551,6 +551,7 @@ export default function AdminPagos({ usuario }) {
         fecha_pago: fecha,
         monto: parseFloat(monto),
         recibido_por: usuario?.id ?? null,
+        recibido_en: new Date().toISOString(),
       })
       .eq("id", cuotaId);
     if (error) throw error;
@@ -563,7 +564,7 @@ export default function AdminPagos({ usuario }) {
     try {
       const { error } = await supabase
         .from("pagos")
-        .update({ estatus: "PAGADO", aplicado_por: usuario?.id ?? null })
+        .update({ estatus: "PAGADO", aplicado_por: usuario?.id ?? null, aplicado_en: new Date().toISOString() })
         .eq("id", cuotaId);
       if (error) throw error;
       if (polizaSel) await refrescarCuotas(polizaSel.polizaId);
