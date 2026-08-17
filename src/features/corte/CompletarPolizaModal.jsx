@@ -8,7 +8,7 @@
 // ============================================================
 import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
-import { Paperclip, Lock } from "lucide-react";
+import { Paperclip, Lock, FileSignature } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import { subirComprobante, verComprobante, MAX_COMPROBANTE_BYTES } from "../../services/comprobantesPago";
 import { subirDocumento, verDocumento, MAX_DOCUMENTO_BYTES } from "../../services/documentacionPoliza";
@@ -44,6 +44,7 @@ const VACIO = {
   fotos_verificado: false, fotos_verificado_nota: "",
   observaciones: "",
   comprobante_tdc_path: null, comprobante_cheque_path: null,
+  endoso_path: null, endoso_nota: "",
 };
 
 // El vehículo se puede "verificar" sin necesidad de subir la foto (ej. ya
@@ -303,6 +304,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
   const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | 't_circ' | 'identif' | 'pol_ant' | 'otro' | null
   const [gaman, setGaman] = useState(null); // primas reales de GAMAN cuando row.poliza_id existe
   const [gamanLoading, setGamanLoading] = useState(false);
+  const [endosoAbierto, setEndosoAbierto] = useState(false);
 
   // Póliza real de GAMAN (no capturada a mano en COFISEM): las primas se
   // leen de GAMAN y ya no se pueden editar aquí — ver services/primaGaman.js.
@@ -361,9 +363,12 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
       observaciones: row.observaciones ?? "",
       comprobante_tdc_path:    row.comprobante_tdc_url    ?? null,
       comprobante_cheque_path: row.comprobante_cheque_url ?? null,
+      endoso_path: row.endoso_url ?? null,
+      endoso_nota: row.endoso_nota ?? "",
     });
     setModalError(null);
     setIntentoCompletar(false);
+    setEndosoAbierto(!!row.endoso_url || !!row.endoso_nota);
   }, [row]);
 
   if (!row) return null;
@@ -427,6 +432,24 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
       setModalError("No se pudo subir el documento: " + e.message);
     } finally {
       setSubiendoDocumento(null);
+    }
+  }
+
+  async function handleEndosoChange(file) {
+    if (file.size > MAX_COMPROBANTE_BYTES) {
+      setModalError("El archivo es muy grande (máx. 8 MB).");
+      return;
+    }
+    setModalError(null);
+    setSubiendoComprobante("endoso");
+    try {
+      const basePath = `${usuario?.oficina_id ?? "sin-oficina"}/${hoyIso}/${row.id}/endoso`;
+      const path = await subirComprobante(basePath, file);
+      setF("endoso_path", path);
+    } catch (e) {
+      setModalError("No se pudo subir el endoso: " + e.message);
+    } finally {
+      setSubiendoComprobante(null);
     }
   }
 
@@ -504,6 +527,8 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
         observaciones: datos.observaciones || null,
         comprobante_tdc_url:    datos.comprobante_tdc_path,
         comprobante_cheque_url: datos.comprobante_cheque_path,
+        endoso_url:  datos.endoso_path,
+        endoso_nota: datos.endoso_nota || null,
         completado:    chk.completo,
       };
       const { data, error } = await supabase
@@ -712,6 +737,54 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
                     onVer={() => handleVer(form.comprobante_tdc_path)}
                   />
                 )}
+              </div>
+            )}
+          </div>
+
+          <div>
+            {!endosoAbierto ? (
+              <button
+                type="button"
+                onClick={() => setEndosoAbierto(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-[#1447e6] hover:text-[#0f36b3]"
+              >
+                <FileSignature className="w-3.5 h-3.5" />
+                Adjuntar endoso
+              </button>
+            ) : (
+              <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+                    <FileSignature className="w-3.5 h-3.5" />
+                    Endoso
+                  </p>
+                  {!form.endoso_path && !form.endoso_nota && (
+                    <button
+                      type="button"
+                      onClick={() => setEndosoAbierto(false)}
+                      className="text-[11px] font-semibold text-gray-400 hover:text-gray-600"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                </div>
+                <ComprobanteField
+                  label="Archivo del endoso"
+                  path={form.endoso_path}
+                  subiendo={subiendoComprobante === "endoso"}
+                  onFile={handleEndosoChange}
+                  onVer={() => handleVer(form.endoso_path)}
+                  obligatorio={false}
+                />
+                <div>
+                  <label className={lblModal}>Nota (opcional)</label>
+                  <textarea
+                    value={form.endoso_nota}
+                    onChange={(e) => setF("endoso_nota", e.target.value)}
+                    placeholder="Detalle del endoso…"
+                    className={inpModal + " h-16 resize-none"}
+                  />
+                </div>
               </div>
             )}
           </div>
