@@ -40,6 +40,7 @@ export const NAV_POR_ROL = {
     { label: "Inicio",             path: "/gaman/dashboard",        icon: "home"       },
     { label: "Reportar siniestro", path: "/gaman/siniestros/nuevo", icon: "plus-circle"},
     { label: "Siniestros",         path: "/gaman/siniestros",       icon: "clipboard"  },
+    { label: "Pólizas",            path: "/gaman/polizas",          icon: "file-text"  },
   ],
 
   // ── AJUSTADOR ─────────────────────────────────────────────

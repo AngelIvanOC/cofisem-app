@@ -95,6 +95,9 @@ const Siniestros = lazy(() => import("./pages/cabinero/Siniestros.jsx"));
 const SiniestroNuevo = lazy(
   () => import("./pages/cabinero/SiniestroNuevo.jsx"),
 );
+const CabineroPolizas = lazy(
+  () => import("./pages/cabinero/CabineroPolizas.jsx"),
+);
 
 // ── AJUSTADOR ─────────────────────────────────────────────────
 const AjustadorSiniestros = lazy(
@@ -164,6 +167,7 @@ const RUTAS_POR_ROL = {
     "/gaman/dashboard",
     "/gaman/siniestros",
     "/gaman/siniestros/nuevo",
+    "/gaman/polizas",
   ],
   AJUSTADOR: ["/gaman/dashboard", "/gaman/siniestros"],
   SUPERVISOR_SINIESTROS: [
@@ -294,6 +298,8 @@ function PolizasRoute({ rolNombre, usuario }) {
       return <AnalistaPolizas />;
     case "ADMINISTRACION":
       return <AdminPolizas />;
+    case "CABINERO_SINIESTROS":
+      return <CabineroPolizas />;
     default:
       return <PaginaEnConstruccion titulo="Pólizas" />;
   }
@@ -410,11 +416,26 @@ export default function App() {
               path="/corte"
               element={<CorteOperador usuario={usuario} />}
             />
-            <Route path="/corte/analista" element={<CorteAnalista usuario={usuario} />} />
-            <Route path="/corte/historial" element={<CorteHistorial usuario={usuario} />} />
-            <Route path="/pagos" element={<PagosOperador usuario={usuario} />} />
-            <Route path="/pagos/analista" element={<PagosAnalista usuario={usuario} />} />
-            <Route path="/comisiones" element={<Comisiones usuario={usuario} />} />
+            <Route
+              path="/corte/analista"
+              element={<CorteAnalista usuario={usuario} />}
+            />
+            <Route
+              path="/corte/historial"
+              element={<CorteHistorial usuario={usuario} />}
+            />
+            <Route
+              path="/pagos"
+              element={<PagosOperador usuario={usuario} />}
+            />
+            <Route
+              path="/pagos/analista"
+              element={<PagosAnalista usuario={usuario} />}
+            />
+            <Route
+              path="/comisiones"
+              element={<Comisiones usuario={usuario} />}
+            />
           </Route>
 
           {/* ── Login unificado ── */}
