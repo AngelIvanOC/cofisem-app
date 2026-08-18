@@ -8,11 +8,12 @@ import {
 } from "../../../services/polizas";
 import { fetchConfigCostos } from "../../../services/configuracion";
 import { actualizarNombreCliente } from "../../../services/clientes";
-import { actualizarNombreConcesionario } from "../../../services/concesionarios";
+import { actualizarNombreConcesionario, vincularConcesionario, fetchConcesionariosByCliente } from "../../../services/concesionarios";
 import { pdf } from "@react-pdf/renderer";
 import EndosoCancelacionPDF from "../../../components/pdf/EndosoCancelacionPDF";
+import ModalNuevoConcesionario from "./ModalNuevoConcesionario";
 import Swal from "sweetalert2";
-import { Loader2, Pencil, X } from "lucide-react";
+import { Loader2, Pencil, Plus, X } from "lucide-react";
 
 const inpCls =
   "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#13193a]/15 focus:border-[#13193a] transition-all";
@@ -31,6 +32,8 @@ function buildDescripcionEndoso(tipo, oldValue, newValue) {
       return `SE HACE CAMBIO DE ASEGURADO DE ${ov} A QUEDAR COMO ${nv}`;
     case "Cambio de concesionario":
       return `SE HACE CAMBIO DE CONCESIONARIO DE ${ov} A QUEDAR COMO ${nv}`;
+    case "Agregar concesionario":
+      return `SE AGREGA CONCESIONARIO QUEDANDO COMO ${nv}`;
     default:
       return nv;
   }
@@ -68,10 +71,13 @@ const FORM_VACIO = {
 export default function ModalEndoso({ poliza, usuario, onClose, onDone }) {
   const [cargando, setCargando]     = useState(true);
   const [full, setFull]             = useState(null);
-  const [perms, setPerms]           = useState({ asegurado: false, concesionario: false });
+  const [perms, setPerms]           = useState({ asegurado: false, concesionario: false, agregarConcesionario: false });
   const [tipo, setTipo]             = useState("");
   const [form, setForm]             = useState(FORM_VACIO);
   const [procesando, setProcesando] = useState(false);
+  const [concesionariosCliente, setConcesionariosCliente] = useState([]);
+  const [concesionarioSelId, setConcesionarioSelId]       = useState(null);
+  const [modalNuevoConc, setModalNuevoConc]               = useState(false);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -79,18 +85,21 @@ export default function ModalEndoso({ poliza, usuario, onClose, onDone }) {
     (async () => {
       try {
         const fullData = await fetchPolizaById(poliza.id);
-        const [cntCliente, cntConc] = await Promise.all([
+        const [cntCliente, cntConc, concDisponibles] = await Promise.all([
           contarPolizasCliente(fullData.cliente_id),
           fullData.concesionario_id
             ? contarPolizasConcesionario(fullData.concesionario_id)
             : Promise.resolve(999),
+          fetchConcesionariosByCliente(fullData.cliente_id),
         ]);
         const cliente = fullData.clientes ?? {};
         const conc    = fullData.concesionarios ?? null;
         setFull(fullData);
+        setConcesionariosCliente(concDisponibles);
         setPerms({
           asegurado:    cntCliente <= 1,
           concesionario: conc != null && cntConc <= 1,
+          agregarConcesionario: conc == null,
         });
         setForm({
           placas:        fullData.placas || "",
@@ -118,6 +127,7 @@ export default function ModalEndoso({ poliza, usuario, onClose, onDone }) {
     "Cambio de No. Motor",
     ...(perms.asegurado      ? ["Cambio de asegurado"]      : []),
     ...(perms.concesionario  ? ["Cambio de concesionario"]  : []),
+    ...(perms.agregarConcesionario ? ["Agregar concesionario"] : []),
   ];
 
   const difsSerie = full ? difsCampo(full.num_serie || "", form.numSerie) : 0;
@@ -130,6 +140,7 @@ export default function ModalEndoso({ poliza, usuario, onClose, onDone }) {
       case "Cambio de No. Motor":     return form.numMotor.trim().length > 0 && difsMotor <= 2 && difsMotor > 0;
       case "Cambio de asegurado":     return form.asegNombre.trim() && form.asegApellido1.trim();
       case "Cambio de concesionario": return form.concNombre.trim() && form.concApellido1.trim();
+      case "Agregar concesionario":   return !!concesionarioSelId;
       default: return false;
     }
   })();
@@ -154,6 +165,10 @@ export default function ModalEndoso({ poliza, usuario, onClose, onDone }) {
         const oldConc = [conc?.nombre, conc?.apellido1, conc?.apellido2].filter(Boolean).join(" ") || "—";
         const newConc = [form.concNombre, form.concApellido1, form.concApellido2].filter(Boolean).join(" ");
         return buildDescripcionEndoso(tipo, oldConc, newConc);
+      }
+      case "Agregar concesionario": {
+        const nuevoConc = concesionariosCliente.find((c) => c.id === concesionarioSelId);
+        return nuevoConc ? buildDescripcionEndoso(tipo, null, nuevoConc.label) : "";
       }
       default: return "";
     }
@@ -206,6 +221,9 @@ export default function ModalEndoso({ poliza, usuario, onClose, onDone }) {
             form.concApellido2.toUpperCase(),
           );
           break;
+        case "Agregar concesionario":
+          await vincularConcesionario(poliza.id, concesionarioSelId);
+          break;
         default:
           break;
       }
@@ -241,6 +259,7 @@ export default function ModalEndoso({ poliza, usuario, onClose, onDone }) {
   };
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.55)" }}
@@ -307,6 +326,40 @@ export default function ModalEndoso({ poliza, usuario, onClose, onDone }) {
                 </p>
               )}
             </div>
+
+            {/* Agregar concesionario — la póliza no tiene ninguno vinculado.
+                Mismo patrón que al cotizar: si el asegurado ya tiene concesionarios
+                registrados se listan en el select; el botón "+" siempre permite
+                registrar uno nuevo. */}
+            {tipo === "Agregar concesionario" && (
+              <div>
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                  Concesionario <span className="text-red-400">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={concesionarioSelId ?? ""}
+                    onChange={(e) => setConcesionarioSelId(e.target.value ? Number(e.target.value) : null)}
+                    disabled={concesionariosCliente.length === 0}
+                    className={`${inpCls} flex-1 ${concesionariosCliente.length === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <option value="">
+                      {concesionariosCliente.length === 0 ? "Sin concesionarios registrados" : "Selecciona concesionario"}
+                    </option>
+                    {concesionariosCliente.map((c) => (
+                      <option key={c.id} value={c.id}>{c.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setModalNuevoConc(true)}
+                    className="shrink-0 w-10 h-10 rounded-xl bg-[#13193a] hover:bg-[#1e2a50] text-white flex items-center justify-center transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Cambio de placas */}
             {tipo === "Cambio de placas" && (
@@ -466,5 +519,19 @@ export default function ModalEndoso({ poliza, usuario, onClose, onDone }) {
         )}
       </div>
     </div>
+
+    {modalNuevoConc && (
+      <ModalNuevoConcesionario
+        clienteId={full?.cliente_id}
+        usuarioId={usuario?.id}
+        onClose={() => setModalNuevoConc(false)}
+        onGuardar={(concObj) => {
+          setConcesionariosCliente((prev) => [...prev, concObj]);
+          setConcesionarioSelId(concObj.id);
+          setModalNuevoConc(false);
+        }}
+      />
+    )}
+    </>
   );
 }

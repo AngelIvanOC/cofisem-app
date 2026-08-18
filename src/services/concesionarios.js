@@ -41,3 +41,13 @@ export async function crearConcesionario({ clienteId, nombre, apellido1, apellid
   if (error) throw error;
   return { id: data.id, label: buildLabel(data) };
 }
+
+// Vincula un concesionario (ya existente o recién creado) a una póliza que
+// aún no tenía ninguno (endoso "Agregar concesionario").
+export async function vincularConcesionario(polizaId, concesionarioId) {
+  const { error } = await supabase
+    .from("polizas")
+    .update({ concesionario_id: concesionarioId })
+    .eq("id", polizaId);
+  if (error) throw error;
+}
