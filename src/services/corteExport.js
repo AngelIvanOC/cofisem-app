@@ -42,7 +42,7 @@ function valorCelda(r, key) {
     return n(v);
   }
   if (["fotos_url", "factura_url", "t_circ_url", "identif_url", "pol_ant_url", "otro_url"].includes(key)) {
-    return v ? "Sí" : "No";
+    return v ? "XXX" : "-";
   }
   if (key === "completado") {
     return v ? "Sí" : "No";
