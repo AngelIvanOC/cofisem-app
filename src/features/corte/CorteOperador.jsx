@@ -1,6 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { Paperclip, FileSpreadsheet, Printer, History, BadgeCheck } from "lucide-react";
+import {
+  Paperclip,
+  FileSpreadsheet,
+  Printer,
+  History,
+  BadgeCheck,
+} from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import {
   subirComprobante,
@@ -728,13 +734,15 @@ export default function CorteOperador({ usuario }) {
                   <TH rowSpan={2}>Cuota</TH>
                   <TH rowSpan={2}>Pago</TH>
                   <TH rowSpan={2}>Cobertura</TH>
-                  <TH colSpan={2}>Uso / Vehículo</TH>
+                  <TH colSpan={4}>Uso / Vehículo</TH>
                 </tr>
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <TH blue>Inicio</TH>
                   <TH blue>Fin</TH>
                   <TH blue>Placas</TH>
                   <TH blue>Tipo</TH>
+                  <TH blue>Uso</TH>
+                  <TH blue>Servicio</TH>
                 </tr>
               </thead>
 
@@ -828,6 +836,12 @@ export default function CorteOperador({ usuario }) {
                     <td className="px-3 py-2.5 text-center text-gray-600 bg-blue-50/20">
                       {r.tipo || "—"}
                     </td>
+                    <td className="px-3 py-2.5 text-center text-gray-600 bg-blue-50/20">
+                      {r.uso || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-600 bg-blue-50/20">
+                      {r.servicio || "—"}
+                    </td>
                   </tr>
                 ))}
 
@@ -852,7 +866,7 @@ export default function CorteOperador({ usuario }) {
                     <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">
                       {$(sumaPrimerPago)}
                     </td>
-                    <td colSpan={3} />
+                    <td colSpan={5} />
                   </tr>
                 )}
               </tbody>
@@ -890,7 +904,7 @@ export default function CorteOperador({ usuario }) {
                 {filasTabla.length === 0 && (
                   <tr>
                     <td
-                      colSpan={16}
+                      colSpan={18}
                       className="px-5 py-12 text-center text-sm text-gray-400"
                     >
                       {esHoy ? (
@@ -982,7 +996,11 @@ export default function CorteOperador({ usuario }) {
                           </button>
                         ) : j === 0 && r.fotos_verificado ? (
                           <span
-                            title={r.fotos_verificado_nota ? `Verificado: ${r.fotos_verificado_nota}` : "Verificado"}
+                            title={
+                              r.fotos_verificado_nota
+                                ? `Verificado: ${r.fotos_verificado_nota}`
+                                : "Verificado"
+                            }
                             className="text-emerald-600 inline-flex"
                           >
                             <BadgeCheck className="w-3.5 h-3.5" />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Plus } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import CompletarPolizaModal, {
@@ -58,6 +58,33 @@ const FORMA_PAGO_OPT = [
 const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT;
 const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
 
+// Catálogo Aseguradora → Uso → Servicio. El Uso se filtra por aseguradora
+// y el Servicio se filtra por aseguradora + uso. Ajusta aquí si algún
+// combo no coincide exacto — el texto se guarda tal cual en
+// polizas_cofisem.uso / polizas_cofisem.servicio.
+const USO_SERVICIO_CATALOGO = [
+  { aseguradora: "QUALITAS", uso: "NORMAL", servicio: "PARTICULAR" },
+  { aseguradora: "QUALITAS", uso: "CARGA", servicio: "PUB. FEDERAL (CARGA)" },
+  { aseguradora: "QUALITAS", uso: "PERSONAL", servicio: "PARTICULAR" },
+  { aseguradora: "QUALITAS", uso: "TAXI/VAN TURISMO", servicio: "PUBLICO" },
+  { aseguradora: "QUALITAS", uso: "TAXI", servicio: "PUBLICO" },
+  { aseguradora: "QUALITAS", uso: "AUTO REGULARIZADO", servicio: "PARTICULAR" },
+  {
+    aseguradora: "QUALITAS",
+    uso: "PKP PER REGULARIZADO",
+    servicio: "PARTICULAR",
+  },
+  { aseguradora: "QUALITAS", uso: "COL.URB/FORA", servicio: "PUBLICO" },
+  { aseguradora: "QUALITAS", uso: "CARGA", servicio: "PARTICULAR" },
+  { aseguradora: "ANA", uso: "PARICULAR", servicio: "PARTICULAR" },
+  { aseguradora: "ANA", uso: "CARGA", servicio: "COMERCIAL" },
+  { aseguradora: "BANORTE", uso: "TAXI", servicio: "PUBLICO LOCAL" },
+  { aseguradora: "BANORTE", uso: "CONDUCTOR APP", servicio: "PARTICULAR" },
+  { aseguradora: "BANORTE", uso: "PARICULAR", servicio: "PARTICULAR" },
+  { aseguradora: "GAMAN", uso: "SERVICIO", servicio: "PUBLICO" },
+  { aseguradora: "HDI", uso: "CARGA COMERCIAL", servicio: "PARTICULAR" },
+];
+
 // Entre cuántos pagos se reparte la Prima T. Anual según la forma de pago —
 // solo se usa para SUGERIR la Prima 1er Pago; el campo se queda libre para
 // que el operador lo corrija a mano si el primer pago es distinto (p.ej.
@@ -79,9 +106,9 @@ function calcularPrimerPago(primaAnual, formaPago) {
 
 const TIPO_OPT = [
   "AUTO",
-  "SP TAXI",
-  "SP COLECTIVO",
-  "SP APP",
+  "TAXI",
+  "COLECTIVO",
+  "APP",
   "PICKUP",
   "CAMION",
   "EQUIPO PESADO",
@@ -95,6 +122,8 @@ const FORM_VACIO = {
   numero_poliza: "",
   folio: "",
   cobertura: "",
+  uso: "",
+  servicio: "",
   forma_pago: "CONTADO",
   fecha_emision: HOY_ISO,
   vigencia_inicio: HOY_ISO,
@@ -246,6 +275,32 @@ export default function PoliciasDia({ usuario }) {
 
   const setF = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
 
+  const usosDisponibles = useMemo(
+    () => [
+      ...new Set(
+        USO_SERVICIO_CATALOGO.filter(
+          (c) => c.aseguradora === form.aseguradora,
+        ).map((c) => c.uso),
+      ),
+    ],
+    [form.aseguradora],
+  );
+  const serviciosDisponibles = useMemo(
+    () => [
+      ...new Set(
+        USO_SERVICIO_CATALOGO.filter(
+          (c) => c.aseguradora === form.aseguradora && c.uso === form.uso,
+        ).map((c) => c.servicio),
+      ),
+    ],
+    [form.aseguradora, form.uso],
+  );
+  // Solo son obligatorios si la aseguradora elegida (o el uso elegido)
+  // tiene opciones en el catálogo — si no hay match, el campo se deja
+  // libre y no bloquea el guardado.
+  const usoObligatorio = usosDisponibles.length > 0;
+  const servicioObligatorio = serviciosDisponibles.length > 0;
+
   function handleNueva() {
     setForm({ ...FORM_VACIO });
     setConVendedor(false);
@@ -258,7 +313,9 @@ export default function PoliciasDia({ usuario }) {
 
   function cambiarModo(nuevo) {
     setModo(nuevo);
-    setNumCuotaParcial(nuevo === "PARCIAL" && form.forma_pago === "CONTADO" ? "1" : "");
+    setNumCuotaParcial(
+      nuevo === "PARCIAL" && form.forma_pago === "CONTADO" ? "1" : "",
+    );
   }
 
   function getCompUuid(tipo) {
@@ -360,6 +417,8 @@ export default function PoliciasDia({ usuario }) {
             numero_poliza: form.numero_poliza,
             folio: form.folio || null,
             cobertura: form.cobertura || null,
+            uso: form.uso || null,
+            servicio: form.servicio || null,
             forma_pago: form.forma_pago,
             fecha_emision: HOY_ISO,
             vigencia_inicio: null,
@@ -406,6 +465,8 @@ export default function PoliciasDia({ usuario }) {
             numero_poliza: form.numero_poliza,
             folio: form.folio || null,
             cobertura: form.cobertura || null,
+            uso: form.uso || null,
+            servicio: form.servicio || null,
             forma_pago: form.forma_pago,
             fecha_emision: form.fecha_emision,
             vigencia_inicio: form.vigencia_inicio,
@@ -443,7 +504,9 @@ export default function PoliciasDia({ usuario }) {
             pol_ant_url: form.pol_ant_path,
             otro_url: form.otro_path,
             fotos_verificado: form.fotos_verificado,
-            fotos_verificado_nota: form.fotos_verificado ? (form.fotos_verificado_nota || null) : null,
+            fotos_verificado_nota: form.fotos_verificado
+              ? form.fotos_verificado_nota || null
+              : null,
           };
 
       // Las cuotas 2..N (para COMPLETA y PARCIAL) las genera solo el
@@ -585,7 +648,14 @@ export default function PoliciasDia({ usuario }) {
                 </label>
                 <select
                   value={form.aseguradora}
-                  onChange={(e) => setF("aseguradora", e.target.value)}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      aseguradora: e.target.value,
+                      uso: "",
+                      servicio: "",
+                    }))
+                  }
                   required
                   className={inpCls}
                 >
@@ -678,7 +748,12 @@ export default function PoliciasDia({ usuario }) {
                     Cuota a registrar <span className="text-red-400">*</span>
                   </label>
                   {form.forma_pago === "CONTADO" ? (
-                    <div className={inpCls + " bg-gray-50 text-gray-500 font-semibold cursor-default"}>
+                    <div
+                      className={
+                        inpCls +
+                        " bg-gray-50 text-gray-500 font-semibold cursor-default"
+                      }
+                    >
                       Pago de contado — 1 de 1
                     </div>
                   ) : (
@@ -876,48 +951,110 @@ export default function PoliciasDia({ usuario }) {
             </div>
           </div>
 
-          {/* ── S4: Vehículo (solo si tienes la póliza) ── */}
-          {modo === "COMPLETA" && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <SeccionHeader>Vehículo</SeccionHeader>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className={lblCls}>Placas</label>
-                  <input
-                    value={form.placas}
-                    onChange={(e) =>
-                      setF("placas", e.target.value.toUpperCase())
-                    }
-                    placeholder="Ej. ABC-123 o TRÁMITE"
-                    className={inpCls}
-                  />
-                </div>
-                <div>
-                  <label className={lblCls}>Número de serie</label>
-                  <input
-                    value={form.num_serie}
-                    onChange={(e) =>
-                      setF("num_serie", e.target.value.toUpperCase())
-                    }
-                    placeholder="Opcional — VIN del vehículo"
-                    className={inpCls}
-                  />
-                </div>
-                <div>
-                  <label className={lblCls}>Tipo de vehículo</label>
-                  <select
-                    value={form.tipo}
-                    onChange={(e) => setF("tipo", e.target.value)}
-                    className={inpCls}
-                  >
-                    {TIPO_OPT.map((o) => (
-                      <option key={o}>{o}</option>
-                    ))}
-                  </select>
-                </div>
+          {/* ── S4: Vehículo — Placas/Serie/Tipo solo si tienes la póliza;
+              Uso y Servicio son obligatorios en ambos modos. ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <SeccionHeader>Vehículo</SeccionHeader>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {modo === "COMPLETA" && (
+                <>
+                  <div>
+                    <label className={lblCls}>Placas</label>
+                    <input
+                      value={form.placas}
+                      onChange={(e) =>
+                        setF("placas", e.target.value.toUpperCase())
+                      }
+                      placeholder="Ej. ABC-123 o TRÁMITE"
+                      className={inpCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={lblCls}>Número de serie</label>
+                    <input
+                      value={form.num_serie}
+                      onChange={(e) =>
+                        setF("num_serie", e.target.value.toUpperCase())
+                      }
+                      placeholder="Opcional — VIN del vehículo"
+                      className={inpCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={lblCls}>
+                      Tipo de vehículo <span className="text-red-400">*</span>
+                    </label>
+                    <select
+                      value={form.tipo}
+                      required
+                      onChange={(e) => setF("tipo", e.target.value)}
+                      className={inpCls}
+                    >
+                      {TIPO_OPT.map((o) => (
+                        <option key={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+              <div>
+                <label className={lblCls}>
+                  Uso{" "}
+                  {usoObligatorio && <span className="text-red-400">*</span>}
+                </label>
+                <select
+                  value={form.uso}
+                  required={usoObligatorio}
+                  disabled={!form.aseguradora}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      uso: e.target.value,
+                      servicio: "",
+                    }))
+                  }
+                  className={inpCls}
+                >
+                  <option value="">
+                    {!form.aseguradora
+                      ? "Elige aseguradora primero"
+                      : usosDisponibles.length === 0
+                        ? "Sin uso definido para esta aseguradora"
+                        : "Selecciona..."}
+                  </option>
+                  {usosDisponibles.map((o) => (
+                    <option key={o}>{o}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={lblCls}>
+                  Servicio{" "}
+                  {servicioObligatorio && (
+                    <span className="text-red-400">*</span>
+                  )}
+                </label>
+                <select
+                  value={form.servicio}
+                  required={servicioObligatorio}
+                  disabled={!form.uso}
+                  onChange={(e) => setF("servicio", e.target.value)}
+                  className={inpCls}
+                >
+                  <option value="">
+                    {!form.uso
+                      ? "Elige uso primero"
+                      : serviciosDisponibles.length === 0
+                        ? "Sin servicio definido para este uso"
+                        : "Selecciona..."}
+                  </option>
+                  {serviciosDisponibles.map((o) => (
+                    <option key={o}>{o}</option>
+                  ))}
+                </select>
               </div>
             </div>
-          )}
+          </div>
 
           {/* ── S5: Cobro ── */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -996,29 +1133,29 @@ export default function PoliciasDia({ usuario }) {
                 </div>
               ))}
               {[
-                  { k: "efectivo", label: "Efectivo" },
-                  { k: "cheque", label: "Transf / Dep." },
-                  { k: "tdc", label: "T. Crédito/Déb." },
-                  { k: "pol_pend_pago", label: "Pól. Pend. Pago" },
-                ].map((f) => (
-                  <div key={f.k}>
-                    <label className={lblCls}>{f.label}</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                        $
-                      </span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form[f.k]}
-                        onChange={(e) => setF(f.k, e.target.value)}
-                        placeholder="0.00"
-                        className={inpCls + " pl-7"}
-                      />
-                    </div>
+                { k: "efectivo", label: "Efectivo" },
+                { k: "cheque", label: "Transf / Dep." },
+                { k: "tdc", label: "T. Crédito/Déb." },
+                { k: "pol_pend_pago", label: "Pól. Pend. Pago" },
+              ].map((f) => (
+                <div key={f.k}>
+                  <label className={lblCls}>{f.label}</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form[f.k]}
+                      onChange={(e) => setF(f.k, e.target.value)}
+                      placeholder="0.00"
+                      className={inpCls + " pl-7"}
+                    />
                   </div>
-                ))}
+                </div>
+              ))}
               <div className="sm:col-span-2">
                 <label className={lblCls}>Autorización</label>
                 <input
@@ -1353,6 +1490,8 @@ export default function PoliciasDia({ usuario }) {
                     "Asegurado",
                     "Vendedor",
                     "Cobertura",
+                    "Uso",
+                    "Servicio",
                     "Forma Pago",
                     "Cuota",
                     "Pago",
@@ -1396,6 +1535,12 @@ export default function PoliciasDia({ usuario }) {
                     </td>
                     <td className="px-4 py-3 text-gray-500 max-w-[130px] truncate">
                       {p.cobertura || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 max-w-[110px] truncate">
+                      {p.uso || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 max-w-[130px] truncate">
+                      {p.servicio || "—"}
                     </td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                       {p.forma_pago || "—"}
@@ -1447,7 +1592,7 @@ export default function PoliciasDia({ usuario }) {
               <tfoot>
                 <tr className="bg-[#1447e6]/5 border-t-2 border-[#1447e6]/20">
                   <td
-                    colSpan={8}
+                    colSpan={10}
                     className="px-4 py-3 text-right text-xs font-bold text-[#1447e6]"
                   >
                     TOTALES
