@@ -39,7 +39,7 @@ export const NAV_POR_ROL = {
   CABINERO_SINIESTROS: [
     { label: "Inicio",             path: "/gaman/dashboard",        icon: "home"       },
     { label: "Reportar siniestro", path: "/gaman/siniestros/nuevo", icon: "plus-circle"},
-    { label: "Siniestros",         path: "/gaman/siniestros",       icon: "clipboard"  },
+    { label: "Siniestros",         path: "/gaman/siniestros",       icon: "siren"  },
     { label: "Pólizas",            path: "/gaman/polizas",          icon: "file-text"  },
   ],
 

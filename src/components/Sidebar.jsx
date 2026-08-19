@@ -37,6 +37,7 @@ import {
   Ticket,
   Truck,
   Settings,
+  Siren,
 } from "lucide-react";
 
 // ── Iconos (Lucide React) ────────────────────────────────────
@@ -63,6 +64,7 @@ const ICONS = {
   table: Table,
   ticket: Ticket,
   truck: Truck,
+  siren: Siren,
 };
 
 // Renderiza el ícono Lucide correspondiente
