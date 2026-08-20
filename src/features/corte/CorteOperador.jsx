@@ -371,6 +371,7 @@ export default function CorteOperador({ usuario }) {
       oficina,
       fechaLabel,
       fechaIso: fechaCorte,
+      generadoPor: usuario?.nombre ?? "—",
       totales: {
         efectivo: totalEfectivo,
         vale: totalVales,
