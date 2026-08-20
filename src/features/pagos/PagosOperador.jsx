@@ -10,15 +10,31 @@ import { hoyISO } from "../../utils/fecha";
 import RegistrarCobroModal from "./RegistrarCobroModal";
 
 const n = (v) => parseFloat(v) || 0;
-const $ = (v) => `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const $ = (v) =>
+  `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmt = (d) =>
-  d ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+  d
+    ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    : "—";
 const HOY_ISO = hoyISO();
 
 const ESTATUS_META = {
-  PENDIENTE: { label: "Pendiente", cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  RECIBIDO:  { label: "Recibido — por aplicar", cls: "bg-blue-50 text-blue-700 border-blue-200" },
-  APLICADO:  { label: "Aplicado", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  PENDIENTE: {
+    label: "Pendiente",
+    cls: "bg-amber-50 text-amber-700 border-amber-200",
+  },
+  RECIBIDO: {
+    label: "Recibido — por aplicar",
+    cls: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  APLICADO: {
+    label: "Aplicado",
+    cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
 };
 
 // La cuota que se capturó directo en polizas_cofisem (prima_primer_pago +
@@ -28,8 +44,14 @@ const ESTATUS_META = {
 // para que "Pagos" sea el historial completo; no se duplica el dato ni
 // se puede editar desde esta vista (se edita vía Completar).
 const VIRTUAL_META = {
-  PENDIENTE: { label: "Pendiente", cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  APLICADO:  { label: "Cobrado al vender", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  PENDIENTE: {
+    label: "Pendiente",
+    cls: "bg-amber-50 text-amber-700 border-amber-200",
+  },
+  APLICADO: {
+    label: "Cobrado al vender",
+    cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
 };
 function cuotaPropiaVirtual(p) {
   const cobrado = n(p.efectivo) + n(p.cheque) + n(p.tdc);
@@ -55,11 +77,24 @@ function cuotaPropiaVirtual(p) {
 // PENDIENTE/RECIBIDO/APLICADO solo para que los filtros de esta tabla
 // funcionen igual con ambos tipos de fila, pero la ETIQUETA que se muestra
 // usa las palabras propias de GAMAN para no mezclar dos vocabularios.
-const GAMAN_BUCKET = { PENDIENTE: "PENDIENTE", ADEUDO: "RECIBIDO", PAGADO: "APLICADO" };
+const GAMAN_BUCKET = {
+  PENDIENTE: "PENDIENTE",
+  ADEUDO: "RECIBIDO",
+  PAGADO: "APLICADO",
+};
 const GAMAN_META = {
-  PENDIENTE: { label: "Pendiente (GAMAN)", cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  ADEUDO:    { label: "Adeudo (GAMAN)",    cls: "bg-blue-50 text-blue-700 border-blue-200" },
-  PAGADO:    { label: "Pagado (GAMAN)",    cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  PENDIENTE: {
+    label: "Pendiente (GAMAN)",
+    cls: "bg-amber-50 text-amber-700 border-amber-200",
+  },
+  ADEUDO: {
+    label: "Adeudo (GAMAN)",
+    cls: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  PAGADO: {
+    label: "Pagado (GAMAN)",
+    cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
 };
 
 function infoFila(c) {
@@ -102,7 +137,11 @@ function infoFila(c) {
 // propia virtual (cuota 1 de una póliza completa, o num_cuota_pago de un
 // registro parcial — ver arriba).
 function cuotasDePoliza(p) {
-  const reales = (p.pagos_cofisem ?? []).map((c) => ({ ...c, polizas_cofisem: p, _info: infoFila(c) }));
+  const reales = (p.pagos_cofisem ?? []).map((c) => ({
+    ...c,
+    polizas_cofisem: p,
+    _info: infoFila(c),
+  }));
   if (p.poliza_id) return reales;
   const numCuotaPropia = p.registro_parcial ? (p.num_cuota_pago ?? 1) : 1;
   if (reales.some((c) => c.num_cuota === numCuotaPropia)) return reales;
@@ -121,13 +160,32 @@ function agruparPorPoliza(polizas) {
     const recibidos = cuotas.filter((c) => c._info.bucket === "RECIBIDO");
     const aplicados = cuotas.filter((c) => c._info.bucket === "APLICADO");
     const porCobrar = pendientes.reduce((s, c) => s + n(c._info.primaTotal), 0);
-    const recibido = [...recibidos, ...aplicados].reduce((s, c) => s + n(c._info.primaTotal), 0);
-    const proxVence = pendientes.map((c) => c._info.vence).filter(Boolean).sort()[0] ?? null;
+    const recibido = [...recibidos, ...aplicados].reduce(
+      (s, c) => s + n(c._info.primaTotal),
+      0,
+    );
+    const proxVence =
+      pendientes
+        .map((c) => c._info.vence)
+        .filter(Boolean)
+        .sort()[0] ?? null;
     // "perdida" (el cliente no volvió a pagar, se dio de baja la póliza en
     // COFISEM) se trata igual que una cancelación en GAMAN: se sigue
     // mostrando como historial, pero ya no se puede registrar ningún cobro.
-    const cancelada = ESTATUS_GAMAN_BLOQUEADOS.includes(p.poliza_gaman_estatus) || !!p.perdida;
-    return { polizaId: p.id, poliza: p, cuotas, pendientes, recibidos, aplicados, porCobrar, recibido, proxVence, cancelada };
+    const cancelada =
+      ESTATUS_GAMAN_BLOQUEADOS.includes(p.poliza_gaman_estatus) || !!p.perdida;
+    return {
+      polizaId: p.id,
+      poliza: p,
+      cuotas,
+      pendientes,
+      recibidos,
+      aplicados,
+      porCobrar,
+      recibido,
+      proxVence,
+      cancelada,
+    };
   });
   arr.sort((a, b) => {
     if (!a.proxVence && !b.proxVence) return 0;
@@ -143,8 +201,19 @@ function CuotasDots({ cuotas }) {
     <div className="flex items-center gap-1">
       {cuotas.map((c) => {
         const b = c._info.bucket;
-        const cls = b === "APLICADO" ? "bg-emerald-500" : b === "RECIBIDO" ? "bg-blue-400" : "bg-gray-200";
-        return <div key={c.id} className={`w-2 h-2 rounded-full ${cls}`} title={`Cuota ${c.num_cuota}: ${c._info.meta.label}`} />;
+        const cls =
+          b === "APLICADO"
+            ? "bg-emerald-500"
+            : b === "RECIBIDO"
+              ? "bg-blue-400"
+              : "bg-gray-200";
+        return (
+          <div
+            key={c.id}
+            className={`w-2 h-2 rounded-full ${cls}`}
+            title={`Cuota ${c.num_cuota}: ${c._info.meta.label}`}
+          />
+        );
       })}
     </div>
   );
@@ -171,14 +240,16 @@ export default function PagosOperador({ usuario }) {
     try {
       let query = supabase
         .from("polizas_cofisem")
-        .select(`
+        .select(
+          `
           id, poliza_id, aseguradora, numero_poliza, asegurado_nombre,
           fecha_emision, prima_primer_pago, prima_primer_pago_neta,
           efectivo, cheque, tdc, pol_pend_pago, poliza_gaman_estatus,
           comprobante_cheque_url, comprobante_tdc_url,
           perdida, perdida_nota, registro_parcial,
           pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
-        `)
+        `,
+        )
         .order("fecha_emision", { ascending: true });
       if (usuario?.id) query = query.eq("creado_por", usuario.id);
       const { data, error } = await query;
@@ -192,10 +263,15 @@ export default function PagosOperador({ usuario }) {
     }
   }, [usuario?.id]);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
 
   const grupos = agruparPorPoliza(polizas);
-  const visibles = filtro === "TODAS" ? grupos : grupos.filter((g) => g.cuotas.some((c) => c._info.bucket === filtro));
+  const visibles =
+    filtro === "TODAS"
+      ? grupos
+      : grupos.filter((g) => g.cuotas.some((c) => c._info.bucket === filtro));
   const pendientesCount = grupos.reduce((s, g) => s + g.pendientes.length, 0);
   const grupoAbierto = grupos.find((g) => g.polizaId === modalPolizaId) ?? null;
 
@@ -214,15 +290,24 @@ export default function PagosOperador({ usuario }) {
       prev.map((p) =>
         p.id !== actualizado.poliza_cofisem_id
           ? p
-          : { ...p, pagos_cofisem: (p.pagos_cofisem ?? []).map((c) => (c.id === actualizado.id ? { ...c, ...actualizado } : c)) }
-      )
+          : {
+              ...p,
+              pagos_cofisem: (p.pagos_cofisem ?? []).map((c) =>
+                c.id === actualizado.id ? { ...c, ...actualizado } : c,
+              ),
+            },
+      ),
     );
   }
 
   // La póliza completa se dio por perdida — refresca el árbol para que se
   // vea bloqueada (gris) igual que una cancelada de GAMAN.
   function actualizarPolizaPerdida(polizaActualizada) {
-    setPolizas((prev) => prev.map((p) => (p.id === polizaActualizada.id ? { ...p, ...polizaActualizada } : p)));
+    setPolizas((prev) =>
+      prev.map((p) =>
+        p.id === polizaActualizada.id ? { ...p, ...polizaActualizada } : p,
+      ),
+    );
   }
 
   async function handleAdelantar(c) {
@@ -247,13 +332,21 @@ export default function PagosOperador({ usuario }) {
           <CreditCard className="w-6 h-6" />
           Pagos
         </h1>
-        <p className="text-gray-400 text-sm mt-0.5">Historial de cobros de tus pólizas — sube el comprobante cuando el cliente pague</p>
+        <p className="text-gray-400 text-sm mt-0.5">
+          Historial de cobros de tus pólizas — sube el comprobante cuando el
+          cliente pague
+        </p>
       </div>
 
       {errorMsg && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex items-center justify-between">
           {errorMsg}
-          <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-600 ml-3">✕</button>
+          <button
+            onClick={() => setErrorMsg(null)}
+            className="text-red-400 hover:text-red-600 ml-3"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -264,12 +357,16 @@ export default function PagosOperador({ usuario }) {
             type="button"
             onClick={() => setFiltro(f.k)}
             className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
-              filtro === f.k ? "bg-[#1447e6] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+              filtro === f.k
+                ? "bg-[#1447e6] text-white shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
             }`}
           >
             {f.label}
             {f.k === "PENDIENTE" && pendientesCount > 0 && (
-              <span className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filtro === f.k ? "bg-white/20" : "bg-amber-100 text-amber-700"}`}>
+              <span
+                className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filtro === f.k ? "bg-white/20" : "bg-amber-100 text-amber-700"}`}
+              >
                 {pendientesCount}
               </span>
             )}
@@ -286,15 +383,31 @@ export default function PagosOperador({ usuario }) {
         ) : visibles.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-emerald-600">
             <CheckCircle2 className="w-8 h-8" />
-            <span className="text-sm font-semibold">Sin pólizas en este filtro.</span>
+            <span className="text-sm font-semibold">
+              Sin pólizas en este filtro.
+            </span>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {["Póliza", "Aseguradora", "Asegurado", "Cuotas", "Recibido", "Por cobrar", "Próx. vence", "Acción"].map((h) => (
-                    <th key={h} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
+                  {[
+                    "Póliza",
+                    "Aseguradora",
+                    "Asegurado",
+                    "Cuotas",
+                    "Recibido",
+                    "Por cobrar",
+                    "Próx. vence",
+                    "Acción",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap"
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -303,7 +416,10 @@ export default function PagosOperador({ usuario }) {
                   const p = g.poliza;
                   const cobradas = g.aplicados.length + g.recibidos.length;
                   return (
-                    <tr key={g.polizaId} className={`transition-colors ${g.cancelada ? "opacity-60 bg-gray-50/80" : "hover:bg-gray-50/60"}`}>
+                    <tr
+                      key={g.polizaId}
+                      className={`transition-colors ${g.cancelada ? "opacity-60 bg-gray-50/80" : "hover:bg-gray-50/60"}`}
+                    >
                       <td className="px-4 py-3 font-mono font-bold text-[#1447e6] whitespace-nowrap">
                         {p.numero_poliza || "—"}
                         {g.cancelada && (
@@ -312,25 +428,41 @@ export default function PagosOperador({ usuario }) {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{p.aseguradora || "—"}</td>
-                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap max-w-[160px] truncate">{p.asegurado_nombre || "—"}</td>
+                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                        {p.aseguradora || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap max-w-[160px] truncate">
+                        {p.asegurado_nombre || "—"}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <CuotasDots cuotas={g.cuotas} />
-                          <span className="text-[11px] text-gray-500 tabular-nums">{cobradas}/{g.cuotas.length}</span>
+                          <span className="text-[11px] text-gray-500 tabular-nums">
+                            {cobradas}/{g.cuotas.length}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-emerald-700">{$(g.recibido)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-emerald-700">
+                        {$(g.recibido)}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         {g.cancelada ? (
-                          <span className="text-gray-400 font-semibold">Cancelada</span>
+                          <span className="text-gray-400 font-semibold">
+                            Cancelada
+                          </span>
                         ) : g.porCobrar > 0 ? (
-                          <span className="font-bold text-amber-700">{$(g.porCobrar)}</span>
+                          <span className="font-bold text-amber-700">
+                            {$(g.porCobrar)}
+                          </span>
                         ) : (
-                          <span className="text-emerald-600 font-semibold">Al corriente</span>
+                          <span className="text-emerald-600 font-semibold">
+                            Al corriente
+                          </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmt(g.proxVence)}</td>
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                        {fmt(g.proxVence)}
+                      </td>
                       <td className="px-4 py-3">
                         <button
                           type="button"
@@ -391,32 +523,66 @@ export default function PagosOperador({ usuario }) {
 // queda en una fila por póliza sin perder el detalle por cuota. Las filas
 // virtuales (1er pago de pólizas que no son de GAMAN) no tienen acción:
 // ese dato se edita desde "Completar", no desde aquí.
-function ModalCuotasPoliza({ grupo, onClose, onVerComprobante, onMarcarRecibido, onAdjuntarArchivo, onAdelantar }) {
+function ModalCuotasPoliza({
+  grupo,
+  onClose,
+  onVerComprobante,
+  onMarcarRecibido,
+  onAdjuntarArchivo,
+  onAdelantar,
+}) {
   const [confirmandoAdelantoId, setConfirmandoAdelantoId] = useState(null);
-  useEffect(() => { setConfirmandoAdelantoId(null); }, [grupo?.polizaId]);
+  useEffect(() => {
+    setConfirmandoAdelantoId(null);
+  }, [grupo?.polizaId]);
   if (!grupo) return null;
   const p = grupo.poliza;
   const cobradas = grupo.aplicados.length + grupo.recibidos.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
           <div>
             <p className="text-sm font-bold text-[#1447e6]">Pagos y cuotas</p>
             <p className="text-xs text-gray-400 mt-0.5">
-              Póliza <span className="font-mono font-bold">{p.numero_poliza || "—"}</span> · {p.asegurado_nombre || "—"}
+              Póliza{" "}
+              <span className="font-mono font-bold">
+                {p.numero_poliza || "—"}
+              </span>{" "}
+              · {p.asegurado_nombre || "—"}
             </p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">✕</button>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400"
+          >
+            ✕
+          </button>
         </div>
 
         <div className="p-6 space-y-5">
           {grupo.cancelada && (
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-100 border border-gray-200 text-gray-500 text-xs font-semibold">
-              🔒 {p.perdida
-                ? <>Póliza dada de baja — el cliente no acudió a pagar. No se pueden registrar más cobros aquí.{p.perdida_nota && <> Nota: {p.perdida_nota}</>}</>
-                : <>Póliza {p.poliza_gaman_estatus} en GAMAN — no se pueden registrar más cobros aquí.</>}
+              🔒{" "}
+              {p.perdida ? (
+                <>
+                  Póliza dada de baja — el cliente no acudió a pagar. No se
+                  pueden registrar más cobros aquí.
+                  {p.perdida_nota && <> Nota: {p.perdida_nota}</>}
+                </>
+              ) : (
+                <>
+                  Póliza {p.poliza_gaman_estatus} en GAMAN — no se pueden
+                  registrar más cobros aquí.
+                </>
+              )}
             </div>
           )}
           <div className="grid grid-cols-3 gap-3">
@@ -425,8 +591,13 @@ function ModalCuotasPoliza({ grupo, onClose, onVerComprobante, onMarcarRecibido,
               { label: "Por cobrar", value: $(grupo.porCobrar) },
               { label: "Cuotas", value: `${cobradas}/${grupo.cuotas.length}` },
             ].map((k) => (
-              <div key={k.label} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{k.label}</p>
+              <div
+                key={k.label}
+                className="bg-gray-50 rounded-xl p-3 border border-gray-100"
+              >
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">
+                  {k.label}
+                </p>
                 <p className="text-sm font-bold text-[#1447e6]">{k.value}</p>
               </div>
             ))}
@@ -434,9 +605,13 @@ function ModalCuotasPoliza({ grupo, onClose, onVerComprobante, onMarcarRecibido,
 
           <div className="space-y-2">
             {grupo.cuotas.map((c) => {
-              const { esGaman, meta, primaTotal, primaNeta, vence, fecha } = c._info;
+              const { esGaman, meta, primaTotal, primaNeta, vence, fecha } =
+                c._info;
               return (
-                <div key={c.id} className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-gray-200">
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-gray-200"
+                >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-bold shrink-0">
                       {c.num_cuota}
@@ -445,80 +620,110 @@ function ModalCuotasPoliza({ grupo, onClose, onVerComprobante, onMarcarRecibido,
                       <p className="text-sm font-bold text-[#13193a]">
                         {$(primaTotal)}
                         {!esGaman && n(primaNeta) > 0 && (
-                          <span className="text-xs text-gray-400 font-normal"> · neta {$(primaNeta)}</span>
+                          <span className="text-xs text-gray-400 font-normal">
+                            {" "}
+                            · neta {$(primaNeta)}
+                          </span>
                         )}
                       </p>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <p className="text-xs text-gray-400">Vence {fmt(vence)}</p>
+                        <p className="text-xs text-gray-400">
+                          Vence {fmt(vence)}
+                        </p>
                         {fecha && (
                           <>
                             <span className="text-gray-300">·</span>
-                            <p className="text-xs text-blue-600">Recibido {fmt(fecha)}</p>
+                            <p className="text-xs text-blue-600">
+                              Recibido {fmt(fecha)}
+                            </p>
                           </>
                         )}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${meta.cls}`}>
+                    <span
+                      className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${meta.cls}`}
+                    >
                       {meta.label}
                     </span>
                     {c.comprobante_url && (
-                      <button type="button" onClick={() => onVerComprobante(c.comprobante_url)} className="text-[#1447e6] hover:text-[#0f36b3]" title="Ver comprobante">
+                      <button
+                        type="button"
+                        onClick={() => onVerComprobante(c.comprobante_url)}
+                        className="text-[#1447e6] hover:text-[#0f36b3]"
+                        title="Ver comprobante"
+                      >
                         <Paperclip className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    {!c._virtual && !grupo.cancelada && (esGaman ? (
-                      <button
-                        type="button"
-                        onClick={() => onAdjuntarArchivo(c)}
-                        className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-[11px] font-bold whitespace-nowrap"
-                      >
-                        {c.comprobante_url ? "Cambiar archivo" : "Adjuntar archivo"}
-                      </button>
-                    ) : c.estatus === "PENDIENTE" && (
-                      <>
-                        {c.fecha_vencimiento > HOY_ISO && (
-                          c.fecha_adelantado === HOY_ISO ? (
-                            <span className="text-[11px] font-semibold text-blue-600 whitespace-nowrap">Se cobra hoy</span>
-                          ) : confirmandoAdelantoId === c.id ? (
-                            <span className="flex items-center gap-1.5">
-                              <span className="text-[11px] text-gray-500 whitespace-nowrap">¿Traer al corte de hoy?</span>
-                              <button
-                                type="button"
-                                onClick={() => { onAdelantar(c); setConfirmandoAdelantoId(null); }}
-                                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold whitespace-nowrap"
-                              >
-                                Sí, adelantar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirmandoAdelantoId(null)}
-                                className="px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-[11px] font-bold whitespace-nowrap"
-                              >
-                                Cancelar
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmandoAdelantoId(c.id)}
-                              className="px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold whitespace-nowrap"
-                              title="Traer esta cuota al corte de hoy para cobrarla antes de su fecha"
-                            >
-                              Adelantar
-                            </button>
-                          )
-                        )}
+                    {!c._virtual &&
+                      !grupo.cancelada &&
+                      (esGaman ? (
                         <button
                           type="button"
-                          onClick={() => onMarcarRecibido(c)}
-                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold whitespace-nowrap"
+                          onClick={() => onAdjuntarArchivo(c)}
+                          className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-[11px] font-bold whitespace-nowrap"
                         >
-                          Registrar cobro
+                          {c.comprobante_url
+                            ? "Cambiar archivo"
+                            : "Adjuntar archivo"}
                         </button>
-                      </>
-                    ))}
+                      ) : (
+                        c.estatus === "PENDIENTE" && (
+                          <>
+                            {c.fecha_vencimiento > HOY_ISO &&
+                              (c.fecha_adelantado === HOY_ISO ? (
+                                <span className="text-[11px] font-semibold text-blue-600 whitespace-nowrap">
+                                  Se cobra hoy
+                                </span>
+                              ) : confirmandoAdelantoId === c.id ? (
+                                <span className="flex items-center gap-1.5">
+                                  <span className="text-[11px] text-gray-500 whitespace-nowrap">
+                                    ¿Traer al corte de hoy?
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onAdelantar(c);
+                                      setConfirmandoAdelantoId(null);
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold whitespace-nowrap"
+                                  >
+                                    Sí, adelantar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setConfirmandoAdelantoId(null)
+                                    }
+                                    className="px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-[11px] font-bold whitespace-nowrap"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmandoAdelantoId(c.id)}
+                                  className="px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold whitespace-nowrap"
+                                  title="Traer esta cuota al corte de hoy para cobrarla antes de su fecha"
+                                >
+                                  Adelantar
+                                </button>
+                              ))}
+                            <button
+                              type="button"
+                              onClick={() => onMarcarRecibido(c)}
+                              className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold whitespace-nowrap"
+                            >
+                              {c.num_cuota === 1
+                                ? "Poner al corriente"
+                                : "Registrar cobro"}
+                            </button>
+                          </>
+                        )
+                      ))}
                   </div>
                 </div>
               );
@@ -593,7 +798,9 @@ function ModalAdjuntarArchivo({ row, usuario, onClose, onSaved }) {
         <div className="px-6 py-4 border-b border-gray-100">
           <p className="text-sm font-bold text-[#1447e6]">Adjuntar archivo</p>
           <p className="text-xs text-gray-400 mt-0.5">
-            Póliza <strong className="font-mono">{p.numero_poliza || "—"}</strong> · Cuota {row.num_cuota}
+            Póliza{" "}
+            <strong className="font-mono">{p.numero_poliza || "—"}</strong> ·
+            Cuota {row.num_cuota}
           </p>
         </div>
 
@@ -605,14 +812,23 @@ function ModalAdjuntarArchivo({ row, usuario, onClose, onSaved }) {
           )}
 
           <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 space-y-1.5">
-            <p className="text-[11px] text-gray-400">Este pago lo controla GAMAN — solo se puede adjuntar un archivo aquí.</p>
+            <p className="text-[11px] text-gray-400">
+              Este pago lo controla GAMAN — solo se puede adjuntar un archivo
+              aquí.
+            </p>
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-gray-600">Monto</span>
-              <span className="text-sm font-bold text-[#1447e6]">{$(primaTotal)}</span>
+              <span className="text-sm font-bold text-[#1447e6]">
+                {$(primaTotal)}
+              </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-600">Estatus en GAMAN</span>
-              <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${meta.cls}`}>
+              <span className="text-xs font-semibold text-gray-600">
+                Estatus en GAMAN
+              </span>
+              <span
+                className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${meta.cls}`}
+              >
                 {meta.label}
               </span>
             </div>
@@ -623,20 +839,36 @@ function ModalAdjuntarArchivo({ row, usuario, onClose, onSaved }) {
               <Paperclip className="w-4 h-4 shrink-0 text-gray-400" />
               <div className="min-w-0">
                 <p className="text-xs font-bold text-gray-600">Archivo</p>
-                <p className={`text-[11px] ${comprobantePath ? "text-emerald-600 font-semibold" : "text-gray-400"}`}>
-                  {subiendo ? "Subiendo…" : comprobantePath ? "✓ Archivo adjunto" : "Opcional — sube foto o PDF"}
+                <p
+                  className={`text-[11px] ${comprobantePath ? "text-emerald-600 font-semibold" : "text-gray-400"}`}
+                >
+                  {subiendo
+                    ? "Subiendo…"
+                    : comprobantePath
+                      ? "✓ Archivo adjunto"
+                      : "Opcional — sube foto o PDF"}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {comprobantePath && !subiendo && (
-                <button type="button" onClick={() => verComprobantePago(comprobantePath)} className="text-xs font-bold text-[#1447e6] underline underline-offset-2">
+                <button
+                  type="button"
+                  onClick={() => verComprobantePago(comprobantePath)}
+                  className="text-xs font-bold text-[#1447e6] underline underline-offset-2"
+                >
                   Ver
                 </button>
               )}
-              <label className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors whitespace-nowrap ${
-                subiendo ? "bg-gray-200 text-gray-400 cursor-wait" : comprobantePath ? "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50" : "bg-[#1447e6] text-white hover:bg-[#0f36b3]"
-              }`}>
+              <label
+                className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors whitespace-nowrap ${
+                  subiendo
+                    ? "bg-gray-200 text-gray-400 cursor-wait"
+                    : comprobantePath
+                      ? "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                      : "bg-[#1447e6] text-white hover:bg-[#0f36b3]"
+                }`}
+              >
                 {subiendo ? "..." : comprobantePath ? "Cambiar" : "Subir"}
                 <input
                   type="file"
@@ -655,11 +887,19 @@ function ModalAdjuntarArchivo({ row, usuario, onClose, onSaved }) {
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
-            <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+            >
               Cancelar
             </button>
-            <button type="button" onClick={guardar} disabled={guardando || subiendo}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50">
+            <button
+              type="button"
+              onClick={guardar}
+              disabled={guardando || subiendo}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50"
+            >
               {guardando ? "Guardando…" : "Guardar"}
             </button>
           </div>
@@ -668,4 +908,3 @@ function ModalAdjuntarArchivo({ row, usuario, onClose, onSaved }) {
     </div>
   );
 }
-

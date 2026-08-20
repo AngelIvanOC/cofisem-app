@@ -6,6 +6,9 @@ import {
   Printer,
   History,
   BadgeCheck,
+  X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import {
@@ -14,7 +17,10 @@ import {
   COMPROBANTE_BUCKET,
   MAX_COMPROBANTE_BYTES,
 } from "../../services/comprobantesPago";
-import { verDocumento } from "../../services/documentacionPoliza";
+import {
+  verDocumento,
+  getDocumentoSignedUrl,
+} from "../../services/documentacionPoliza";
 import { exportarCorteExcel } from "../../services/corteExport";
 import { hoyISO } from "../../utils/fecha";
 import CompletarPolizaModal, { CompletarBadge } from "./CompletarPolizaModal";
@@ -79,6 +85,7 @@ export default function CorteOperador({ usuario }) {
 
   const [registros, setRegistros] = useState([]);
   const [cuotasDia, setCuotasDia] = useState([]); // pagos_cofisem: cuotas subsecuentes que vencieron hoy, se adelantaron a hoy, o ya se cobraron hoy
+  const [comisionesDia, setComisionesDia] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [gastos, setGastos] = useState(0);
@@ -88,6 +95,7 @@ export default function CorteOperador({ usuario }) {
   );
   const [modalRow, setModalRow] = useState(null);
   const [modalCuota, setModalCuota] = useState(null);
+  const [carruselIdentifRow, setCarruselIdentifRow] = useState(null);
 
   const [entregaEfectivo, setEntregaEfectivo] = useState(null);
   const [subiendoEfectivo, setSubiendoEfectivo] = useState(false);
@@ -114,7 +122,7 @@ export default function CorteOperador({ usuario }) {
   const filasTabla = [...registros, ...filasCuotas];
 
   const totalEfectivo = filasTabla.reduce((s, r) => s + n(r.efectivo), 0);
-  const totalVales = filasTabla.reduce((s, r) => s + n(r.vale), 0);
+  const totalVales = comisionesDia.reduce((s, c) => s + n(c.monto), 0);
   const totalTDC = filasTabla.reduce((s, r) => s + n(r.tdc), 0);
   const totalCheque = filasTabla.reduce((s, r) => s + n(r.cheque), 0);
   const polPendPago = filasTabla.reduce((s, r) => s + n(r.pol_pend_pago), 0);
@@ -126,7 +134,10 @@ export default function CorteOperador({ usuario }) {
   const sumaPrimaNeta = registros.reduce((s, r) => s + n(r.prima_neta), 0);
   const pendientes = registros.filter((r) => !r.completado).length;
 
-  const subEfectivo = totalEfectivo - n(gastos);
+  // Los vales (comisiones) son dinero que sale del efectivo recibido,
+  // igual que los Gastos, así que también se restan aquí — el Total ya
+  // no incluye lo que se pagó en comisiones.
+  const subEfectivo = totalEfectivo - n(gastos) - totalVales;
   const totalCobro = subEfectivo + totalTDC + totalCheque;
   const totalBilletes = DENOMINACIONES.reduce(
     (s, d) => s + n(billetes[d]) * d,
@@ -142,6 +153,7 @@ export default function CorteOperador({ usuario }) {
     cargar();
     cargarEntregaEfectivo();
     cargarCuotasDia();
+    cargarComisionesDia();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fechaCorte]);
 
@@ -223,6 +235,24 @@ export default function CorteOperador({ usuario }) {
         (c) => c.polizas_cofisem && !c.polizas_cofisem.perdida,
       );
       setCuotasDia(filtradas);
+    } catch (e) {
+      setErrorMsg(e.message);
+    }
+  }
+
+  async function cargarComisionesDia() {
+    try {
+      let query = supabase
+        .from("comisiones_cofisem")
+        .select(
+          "id, monto, fecha_pago, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, folio, vendedor_nombre, asegurado_nombre, creado_por)",
+        )
+        .eq("fecha_pago", fechaCorte);
+      if (usuario?.id)
+        query = query.eq("polizas_cofisem.creado_por", usuario.id);
+      const { data, error } = await query;
+      if (error) throw error;
+      setComisionesDia(data ?? []);
     } catch (e) {
       setErrorMsg(e.message);
     }
@@ -368,6 +398,8 @@ export default function CorteOperador({ usuario }) {
   function datosCorteExport() {
     return {
       registros: filasTabla,
+      comisiones: comisionesDia,
+      billetes,
       oficina,
       fechaLabel,
       fechaIso: fechaCorte,
@@ -729,7 +761,6 @@ export default function CorteOperador({ usuario }) {
                   <TH rowSpan={2}>Folio</TH>
                   <TH rowSpan={2}>Vendedor</TH>
                   <TH rowSpan={2}>Asegurado</TH>
-                  <TH rowSpan={2}>Vale $</TH>
                   <TH rowSpan={2}>Prima T. Anual</TH>
                   <TH rowSpan={2}>Prima Neta Anual</TH>
                   <TH rowSpan={2}>Cuota</TH>
@@ -748,10 +779,10 @@ export default function CorteOperador({ usuario }) {
               </thead>
 
               <tbody className="divide-y divide-gray-50">
-                {filasTabla.length === 0 && (
+                {filasTabla.length === 0 && comisionesDia.length === 0 && (
                   <tr>
                     <td
-                      colSpan={16}
+                      colSpan={15}
                       className="px-5 py-12 text-center text-sm text-gray-400"
                     >
                       {esHoy ? (
@@ -803,19 +834,6 @@ export default function CorteOperador({ usuario }) {
                     <td className="px-3 py-2.5 text-center text-gray-700 whitespace-nowrap">
                       {r.asegurado_nombre || "—"}
                     </td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-gray-700">
-                      {n(r.vale) > 0 ? $(r.vale) : "—"}
-                      {r.comprobante_vale_url && (
-                        <button
-                          type="button"
-                          onClick={() => verComprobante(r.comprobante_vale_url)}
-                          title="Ver comprobante"
-                          className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"
-                        >
-                          <Paperclip className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </td>
                     <td className="px-3 py-2.5 text-center font-semibold text-[#1447e6]">
                       {$(r.prima_anual)}
                     </td>
@@ -846,16 +864,95 @@ export default function CorteOperador({ usuario }) {
                   </tr>
                 ))}
 
-                {filasTabla.length > 0 && (
+                {/* Comisiones (vales) pagadas hoy — vienen de
+                    comisiones_cofisem filtradas por fecha_pago, no de las
+                    pólizas del día. Salen aparte al final, en rojo
+                    pastel, con "−" en la columna No. */}
+                {comisionesDia.map((c) => {
+                  const pc = c.polizas_cofisem ?? {};
+                  return (
+                    <tr
+                      key={`comision-${c.id}`}
+                      className="bg-red-50/50 hover:bg-red-50/80 transition-colors"
+                    >
+                      <td className="px-3 py-2.5 text-center font-bold text-red-400">
+                        −
+                      </td>
+                      <td className="px-3 py-2.5 text-center font-semibold text-red-500/80">
+                        {pc.aseguradora || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-bold text-red-500/80">
+                        {pc.numero_poliza || "—"}
+                        <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-200/50 text-red-600 align-middle whitespace-nowrap">
+                          comisión
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-400/80 whitespace-nowrap">
+                        {fmt(c.fecha_pago)}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-300 whitespace-nowrap bg-red-50/40">
+                        —
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-300 whitespace-nowrap bg-red-50/40">
+                        —
+                      </td>
+                      <td className="px-3 py-2.5 text-center font-mono text-red-400/80">
+                        {pc.folio || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-500/80 whitespace-nowrap">
+                        {pc.vendedor_nombre || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-500/80 whitespace-nowrap">
+                        {pc.asegurado_nombre || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-300">
+                        —
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-300">
+                        —
+                      </td>
+                      <td className="px-3 py-2.5 text-center font-bold text-red-300">
+                        —
+                      </td>
+                      <td className="px-3 py-2.5 text-center font-bold text-red-600">
+                        -{$(c.monto)}
+                        {c.comprobante_url && (
+                          <button
+                            type="button"
+                            onClick={() => verComprobante(c.comprobante_url)}
+                            title="Ver comprobante"
+                            className="ml-1 align-middle text-red-500 hover:text-red-700 inline-flex"
+                          >
+                            <Paperclip className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-300 max-w-[110px] truncate">
+                        —
+                      </td>
+                      <td className="px-3 py-2.5 text-center font-mono text-red-300 bg-red-50/40">
+                        —
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-300 bg-red-50/40">
+                        —
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-300 bg-red-50/40">
+                        —
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-red-300 bg-red-50/40">
+                        —
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {(filasTabla.length > 0 || comisionesDia.length > 0) && (
                   <tr className="bg-[#1447e6]/5 font-bold border-t-2 border-[#1447e6]/20">
                     <td
                       colSpan={9}
                       className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]"
                     >
                       TOTAL
-                    </td>
-                    <td className="px-3 py-3 text-right text-xs text-[#1447e6]">
-                      {$(totalVales)}
                     </td>
                     <td className="px-3 py-3 text-right text-xs text-[#1447e6]">
                       {$(sumaPrimaAnual)}
@@ -989,8 +1086,12 @@ export default function CorteOperador({ usuario }) {
                         {path ? (
                           <button
                             type="button"
-                            onClick={() => verDoc(path)}
-                            title="Ver documento"
+                            onClick={() =>
+                              j === 3 ? setCarruselIdentifRow(r) : verDoc(path)
+                            }
+                            title={
+                              j === 3 ? "Ver identificación" : "Ver documento"
+                            }
                             className="text-amber-600 hover:text-amber-700 font-bold inline-flex"
                           >
                             <Paperclip className="w-3.5 h-3.5" />
@@ -1022,7 +1123,9 @@ export default function CorteOperador({ usuario }) {
                             disabled={corteCerrado}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 text-white text-[11px] font-bold hover:bg-amber-600 disabled:opacity-50 transition-colors"
                           >
-                            Registrar cobro
+                            {r.num_cuota_pago === 1
+                              ? "Poner al corriente"
+                              : "Registrar cobro"}
                           </button>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-bold">
@@ -1377,6 +1480,11 @@ export default function CorteOperador({ usuario }) {
         onSaved={handlePolizaGuardada}
       />
 
+      <IdentificacionCarrusel
+        row={carruselIdentifRow}
+        onClose={() => setCarruselIdentifRow(null)}
+      />
+
       <RegistrarCobroModal
         row={modalCuota}
         usuario={usuario}
@@ -1486,6 +1594,116 @@ export default function CorteOperador({ usuario }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Un solo botón de "Identificación" en la tabla abre esto — muestra frente y
+// reverso (máximo 2 imágenes) como carrusel en vez de dos íconos aparte,
+// porque son las dos caras del mismo documento, no dos documentos distintos.
+function IdentificacionCarrusel({ row, onClose }) {
+  const [slides, setSlides] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [indice, setIndice] = useState(0);
+
+  useEffect(() => {
+    if (!row) return;
+    let activo = true;
+    setCargando(true);
+    setIndice(0);
+    const paths = [
+      { label: "Frente", path: row.identif_url },
+      { label: "Reverso", path: row.identif_reverso_url },
+    ].filter((s) => s.path);
+    Promise.all(
+      paths.map(async (s) => ({
+        label: s.label,
+        url: await getDocumentoSignedUrl(s.path),
+      })),
+    ).then((res) => {
+      if (activo) {
+        setSlides(res);
+        setCargando(false);
+      }
+    });
+    return () => {
+      activo = false;
+    };
+  }, [row]);
+
+  if (!row) return null;
+  const actual = slides[indice];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+          <p className="text-sm font-bold text-[#1447e6]">
+            Identificación
+            {actual && slides.length > 1 ? ` — ${actual.label}` : ""}
+          </p>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="relative h-96 bg-gray-50 flex items-center justify-center">
+          {cargando ? (
+            <span className="text-xs text-gray-400">Cargando…</span>
+          ) : actual ? (
+            <img
+              src={actual.url}
+              alt={actual.label}
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <span className="text-xs text-gray-400">Sin imagen</span>
+          )}
+          {slides.length > 1 && !cargando && (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  setIndice((i) => (i === 0 ? slides.length - 1 : i - 1))
+                }
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow flex items-center justify-center text-gray-600 hover:bg-white"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setIndice((i) => (i === slides.length - 1 ? 0 : i + 1))
+                }
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow flex items-center justify-center text-gray-600 hover:bg-white"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+        {slides.length > 1 && (
+          <div className="flex items-center justify-center gap-1.5 py-3">
+            {slides.map((s, i) => (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => setIndice(i)}
+                title={s.label}
+                className={`w-2 h-2 rounded-full transition-colors ${i === indice ? "bg-[#1447e6]" : "bg-gray-300"}`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

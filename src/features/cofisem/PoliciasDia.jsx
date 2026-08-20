@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Plus } from "lucide-react";
+import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
 import CompletarPolizaModal, {
   CompletarBadge,
@@ -11,12 +12,15 @@ import {
   subirComprobante,
   verComprobante,
   MAX_COMPROBANTE_BYTES,
+  COMPROBANTE_BUCKET,
 } from "../../services/comprobantesPago";
 import {
   subirDocumento,
   verDocumento,
   MAX_DOCUMENTO_BYTES,
+  DOCUMENTACION_BUCKET,
 } from "../../services/documentacionPoliza";
+import { PAGOS_COMPROBANTE_BUCKET } from "../../services/comprobantesPagoCofisem";
 import { fetchVendedores, crearVendedor } from "../../services/vendedores";
 import SelectTypeahead from "../../components/SelectTypeahead";
 import ModalNuevoVendedor from "../operador/components/ModalNuevoVendedor";
@@ -149,6 +153,7 @@ const FORM_VACIO = {
   factura_path: null,
   t_circ_path: null,
   identif_path: null,
+  identif_reverso_path: null,
   pol_ant_path: null,
   otro_path: null,
   fotos_verificado: false,
@@ -175,6 +180,15 @@ const fmt = (d) =>
       })
     : "—";
 const $ = (v) => `$${n(v).toFixed(2)}`;
+const fmtLargo = (d) =>
+  d
+    ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    : "—";
 
 function SeccionHeader({ children }) {
   return (
@@ -204,17 +218,46 @@ export default function PoliciasDia({ usuario }) {
   const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | null
   const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | ... | null
   const [corteInfo, setCorteInfo] = useState(null);
+  const [fechaCorteSel, setFechaCorteSel] = useState(HOY_ISO);
+  const [corteDestinoInfo, setCorteDestinoInfo] = useState(null);
+  const [fechaVista, setFechaVista] = useState(HOY_ISO);
   const compUuidsRef = useRef({});
 
   const oficina = usuario?.oficinas?.nombre ?? "OFICINA";
   const corteCerrado = !!corteInfo?.cerrado;
 
   useEffect(() => {
-    cargar();
     cargarAseguradoras();
     cargarCorteInfo();
     cargarVendedores();
   }, []);
+
+  useEffect(() => {
+    cargar();
+  }, [fechaVista]);
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      let query = supabase
+        .from("corte_efectivo_entrega")
+        .select("*")
+        .eq("fecha_corte", fechaCorteSel);
+      query = usuario?.oficina_id
+        ? query.eq("oficina_id", usuario.oficina_id)
+        : query.is("oficina_id", null);
+      query = usuario?.id
+        ? query.eq("operador_id", usuario.id)
+        : query.is("operador_id", null);
+      const { data } = await query.maybeSingle();
+      if (activo) setCorteDestinoInfo(data ?? null);
+    })();
+    return () => {
+      activo = false;
+    };
+  }, [fechaCorteSel, usuario?.id, usuario?.oficina_id]);
+
+  const corteDestinoCerrado = !!corteDestinoInfo?.cerrado;
 
   async function cargarCorteInfo() {
     let query = supabase
@@ -256,11 +299,12 @@ export default function PoliciasDia({ usuario }) {
   }
 
   async function cargar() {
+    setLoading(true);
     try {
       let query = supabase
         .from("polizas_cofisem")
         .select("*")
-        .eq("fecha_corte", HOY_ISO)
+        .eq("fecha_corte", fechaVista)
         .order("created_at", { ascending: false });
       if (usuario?.id) query = query.eq("creado_por", usuario.id);
       const { data, error } = await query;
@@ -303,6 +347,7 @@ export default function PoliciasDia({ usuario }) {
 
   function handleNueva() {
     setForm({ ...FORM_VACIO });
+    setFechaCorteSel(HOY_ISO);
     setConVendedor(false);
     setErrorMsg(null);
     setModo("COMPLETA");
@@ -381,6 +426,10 @@ export default function PoliciasDia({ usuario }) {
   async function handleGuardar(e) {
     e.preventDefault();
     if (guardando) return;
+    if (corteDestinoCerrado) {
+      setErrorMsg("No puedes registrar en un corte ya cerrado.");
+      return;
+    }
     const esParcial = modo === "PARCIAL";
     if (esParcial && (!form.forma_pago || !numCuotaParcial)) {
       setErrorMsg(
@@ -435,7 +484,7 @@ export default function PoliciasDia({ usuario }) {
             tipo: null,
             autorizacion: form.autorizacion || null,
             observaciones: form.observaciones || null,
-            fecha_corte: HOY_ISO,
+            fecha_corte: fechaCorteSel,
             oficina_id: usuario?.oficina_id ?? null,
             creado_por: usuario?.id ?? null,
             completado: evaluarCompletado(form, { registroParcial: true }),
@@ -457,6 +506,7 @@ export default function PoliciasDia({ usuario }) {
             factura_url: null,
             t_circ_url: null,
             identif_url: null,
+            identif_reverso_url: null,
             pol_ant_url: null,
             otro_url: null,
           }
@@ -483,7 +533,7 @@ export default function PoliciasDia({ usuario }) {
             tipo: form.tipo,
             autorizacion: form.autorizacion || null,
             observaciones: form.observaciones || null,
-            fecha_corte: HOY_ISO,
+            fecha_corte: fechaCorteSel,
             oficina_id: usuario?.oficina_id ?? null,
             creado_por: usuario?.id ?? null,
             completado: evaluarCompletado(form),
@@ -501,6 +551,7 @@ export default function PoliciasDia({ usuario }) {
             factura_url: form.factura_path,
             t_circ_url: form.t_circ_path,
             identif_url: form.identif_path,
+            identif_reverso_url: form.identif_reverso_path,
             pol_ant_url: form.pol_ant_path,
             otro_url: form.otro_path,
             fotos_verificado: form.fotos_verificado,
@@ -521,6 +572,32 @@ export default function PoliciasDia({ usuario }) {
         .single();
       if (error) throw error;
 
+      // Si quedó saldo pendiente del primer pago (o de la cuota que se
+      // registra en modo parcial), se crea la cuota real en pagos_cofisem
+      // para poder "Poner al corriente" después — el mismo mecanismo que
+      // ya existe para cuotas 2+. No se toca polizas_cofisem.pol_pend_pago:
+      // se queda como el registro histórico de cuánto se debía al vender.
+      // El vencimiento se pone un día después de este corte para que no
+      // aparezca duplicada hoy mismo (hoy ya se ve en Pólizas del día).
+      if (n(form.pol_pend_pago) > 0) {
+        const numCuotaPendiente = esParcial ? Number(numCuotaParcial) : 1;
+        const fechaVenc = new Date(fechaCorteSel + "T00:00:00");
+        fechaVenc.setDate(fechaVenc.getDate() + 1);
+        const { error: errCuota } = await supabase
+          .from("pagos_cofisem")
+          .insert({
+            poliza_cofisem_id: data.id,
+            num_cuota: numCuotaPendiente,
+            prima_total: n(form.prima_primer_pago),
+            prima_neta: n(form.prima_primer_pago_neta),
+            fecha_vencimiento: fechaVenc.toISOString().split("T")[0],
+            estatus: "PENDIENTE",
+            oficina_id: usuario?.oficina_id ?? null,
+            operador_id: usuario?.id ?? null,
+          });
+        if (errCuota) throw errCuota;
+      }
+
       setPolizas((prev) => [data, ...prev]);
       setVista("lista");
     } catch (e) {
@@ -530,17 +607,101 @@ export default function PoliciasDia({ usuario }) {
     }
   }
 
-  async function handleEliminar(id) {
-    if (!window.confirm("¿Eliminar este registro?")) return;
+  async function handleEliminar(p) {
+    const { isConfirmed } = await Swal.fire({
+      icon: "warning",
+      title: "¿Eliminar esta póliza?",
+      html: `Se borrará por completo la póliza <strong>${p.numero_poliza || p.folio || "sin número"}</strong>: el registro, sus cuotas/pagos, su comisión (si tenía) y todos los comprobantes y documentos que se hayan subido.<br/><br/><strong>Esta acción no se puede deshacer.</strong>`,
+      showCancelButton: true,
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Sí, eliminar todo",
+      cancelButtonText: "Cancelar",
+      focusCancel: true,
+    });
+    if (!isConfirmed) return;
+
     try {
+      // Las rutas de Storage se guardan en polizas_cofisem, pagos_cofisem y
+      // comisiones_cofisem — hay que leerlas ANTES de borrar el registro,
+      // porque el DELETE en cascada se lleva las filas de pagos_cofisem y
+      // comisiones_cofisem (FK on delete cascade) junto con sus URLs.
+      const [{ data: cuotas }, { data: comisiones }] = await Promise.all([
+        supabase
+          .from("pagos_cofisem")
+          .select(
+            "comprobante_url, comprobante_vale_url, comprobante_cheque_url, comprobante_tdc_url, endoso_url",
+          )
+          .eq("poliza_cofisem_id", p.id),
+        supabase
+          .from("comisiones_cofisem")
+          .select("comprobante_url")
+          .eq("poliza_cofisem_id", p.id),
+      ]);
+
+      const docsPaths = [
+        p.fotos_url,
+        p.factura_url,
+        p.t_circ_url,
+        p.identif_url,
+        p.identif_reverso_url,
+        p.pol_ant_url,
+        p.otro_url,
+      ].filter(Boolean);
+      const comprobantesPaths = [
+        p.comprobante_tdc_url,
+        p.comprobante_cheque_url,
+        p.comprobante_vale_url,
+        p.endoso_url,
+        ...(comisiones ?? []).map((c) => c.comprobante_url),
+      ].filter(Boolean);
+      const pagosPaths = (cuotas ?? [])
+        .flatMap((c) => [
+          c.comprobante_url,
+          c.comprobante_vale_url,
+          c.comprobante_cheque_url,
+          c.comprobante_tdc_url,
+          c.endoso_url,
+        ])
+        .filter(Boolean);
+
       const { error } = await supabase
         .from("polizas_cofisem")
         .delete()
-        .eq("id", id);
+        .eq("id", p.id);
       if (error) throw error;
-      setPolizas((prev) => prev.filter((p) => p.id !== id));
+
+      const removals = [];
+      if (docsPaths.length)
+        removals.push(
+          supabase.storage.from(DOCUMENTACION_BUCKET).remove(docsPaths),
+        );
+      if (comprobantesPaths.length)
+        removals.push(
+          supabase.storage.from(COMPROBANTE_BUCKET).remove(comprobantesPaths),
+        );
+      if (pagosPaths.length)
+        removals.push(
+          supabase.storage.from(PAGOS_COMPROBANTE_BUCKET).remove(pagosPaths),
+        );
+      if (removals.length) await Promise.allSettled(removals);
+
+      setPolizas((prev) => prev.filter((row) => row.id !== p.id));
+      Swal.fire({
+        icon: "success",
+        title: "Póliza eliminada",
+        text: "Se borró el registro, sus pagos/comisión y sus archivos.",
+        confirmButtonColor: "#13193a",
+        timer: 3500,
+        timerProgressBar: true,
+      });
     } catch (e) {
-      setErrorMsg(e.message);
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo eliminar",
+        text: e.message,
+        confirmButtonColor: "#13193a",
+      });
     }
   }
 
@@ -575,6 +736,29 @@ export default function PoliciasDia({ usuario }) {
               {oficina} · {HOY_LABEL}
             </p>
           </div>
+        </div>
+
+        {/* Corte destino */}
+        <div className="mb-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <label className={lblCls}>
+            ¿A qué corte se registra esta póliza?
+          </label>
+          <input
+            type="date"
+            value={fechaCorteSel}
+            max={HOY_ISO}
+            onChange={(e) => setFechaCorteSel(e.target.value)}
+            className={inpCls + " sm:w-56"}
+          />
+          <p className="text-xs text-gray-400 mt-1.5">
+            Por defecto es hoy. Elige un día anterior si esta venta se debe
+            registrar en un corte ya pasado.
+          </p>
+          {corteDestinoCerrado && (
+            <p className="text-xs text-red-500 font-semibold mt-1.5">
+              El corte de ese día ya está cerrado — no se puede registrar ahí.
+            </p>
+          )}
         </div>
 
         {/* Tengo / No tengo la póliza */}
@@ -1212,11 +1396,19 @@ export default function PoliciasDia({ usuario }) {
               </p>
               <div className="space-y-2">
                 <ComprobanteField
-                  label="Identificación"
+                  label="Identificación (frente)"
                   path={form.identif_path}
                   subiendo={subiendoDocumento === "identif"}
                   onFile={(f) => handleDocumentoChange("identif", f)}
                   onVer={() => handleVerDocumento(form.identif_path)}
+                  obligatorio={false}
+                />
+                <ComprobanteField
+                  label="Identificación (reverso)"
+                  path={form.identif_reverso_path}
+                  subiendo={subiendoDocumento === "identif_reverso"}
+                  onFile={(f) => handleDocumentoChange("identif_reverso", f)}
+                  onVer={() => handleVerDocumento(form.identif_reverso_path)}
                   obligatorio={false}
                 />
                 <FotosVehiculoField
@@ -1359,7 +1551,9 @@ export default function PoliciasDia({ usuario }) {
             <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
               {oficina}
             </span>
-            <span className="text-xs text-gray-400">{HOY_LABEL}</span>
+            <span className="text-xs text-gray-400 capitalize">
+              {fmtLargo(fechaVista)}
+            </span>
             <span className="text-xs text-gray-400">
               {polizas.length} registros
             </span>
@@ -1370,27 +1564,45 @@ export default function PoliciasDia({ usuario }) {
             )}
           </div>
         </div>
-        {!corteCerrado && (
-          <button
-            onClick={handleNueva}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] text-white text-sm font-semibold hover:bg-[#0f36b3] transition-all shadow-sm shadow-[#1447e6]/15"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2.5"
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="date"
+            value={fechaVista}
+            max={HOY_ISO}
+            onChange={(e) => setFechaVista(e.target.value)}
+            title="Ver pólizas de otro día"
+            className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+          />
+          {fechaVista !== HOY_ISO && (
+            <button
+              onClick={() => setFechaVista(HOY_ISO)}
+              className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4.5v15m7.5-7.5h-15"
-              />
-            </svg>
-            Nueva póliza
-          </button>
-        )}
+              Hoy
+            </button>
+          )}
+          {!corteCerrado && (
+            <button
+              onClick={handleNueva}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] text-white text-sm font-semibold hover:bg-[#0f36b3] transition-all shadow-sm shadow-[#1447e6]/15"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 4.5v15m7.5-7.5h-15"
+                />
+              </svg>
+              Nueva póliza
+            </button>
+          )}
+        </div>
       </div>
 
       {corteCerrado && (
@@ -1566,7 +1778,7 @@ export default function PoliciasDia({ usuario }) {
                     <td className="px-3 py-3">
                       {!corteCerrado && (
                         <button
-                          onClick={() => handleEliminar(p.id)}
+                          onClick={() => handleEliminar(p)}
                           className="w-6 h-6 rounded-md hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors"
                         >
                           <svg

@@ -17,12 +17,24 @@ import { useState, useEffect, useCallback } from "react";
 import { HandCoins, CheckCircle2, Loader2 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import { ComprobanteField } from "../corte/CompletarPolizaModal";
-import { subirComprobante, verComprobante, MAX_COMPROBANTE_BYTES } from "../../services/comprobantesPago";
+import {
+  subirComprobante,
+  verComprobante,
+  MAX_COMPROBANTE_BYTES,
+} from "../../services/comprobantesPago";
+import { hoyISO } from "../../utils/fecha";
 
 const n = (v) => parseFloat(v) || 0;
-const $ = (v) => `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const $ = (v) =>
+  `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmt = (d) =>
-  d ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+  d
+    ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    : "—";
 
 const FILTROS = [
   { k: "PENDIENTE", label: "Pendientes" },
@@ -37,6 +49,7 @@ export default function Comisiones({ usuario }) {
   const [filtro, setFiltro] = useState("PENDIENTE");
   const [editando, setEditando] = useState(null); // id de la póliza en edición | null
   const [valorEdit, setValorEdit] = useState("");
+  const [fechaPagoEdit, setFechaPagoEdit] = useState(hoyISO());
   const [comprobanteEdit, setComprobanteEdit] = useState(null);
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -46,7 +59,9 @@ export default function Comisiones({ usuario }) {
     try {
       let query = supabase
         .from("polizas_cofisem")
-        .select("id, aseguradora, numero_poliza, fecha_emision, vendedor_id, vendedor_nombre, asegurado_nombre, vale, comprobante_vale_url")
+        .select(
+          "id, aseguradora, numero_poliza, fecha_emision, vendedor_id, vendedor_nombre, asegurado_nombre, comisiones_cofisem(id, monto, fecha_pago, comprobante_url)",
+        )
         .not("vendedor_id", "is", null)
         .neq("vendedor_id", 1)
         .order("fecha_emision", { ascending: false });
@@ -62,26 +77,38 @@ export default function Comisiones({ usuario }) {
     }
   }, [usuario?.id]);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
+
+  const comisionDe = (p) => p.comisiones_cofisem?.[0] ?? null;
 
   const visibles = polizas.filter((p) => {
     if (filtro === "TODAS") return true;
-    const capturado = n(p.vale) > 0;
+    const capturado = n(comisionDe(p)?.monto) > 0;
     return filtro === "CAPTURADO" ? capturado : !capturado;
   });
-  const pendientesCount = polizas.filter((p) => !(n(p.vale) > 0)).length;
-  const totalCapturado = polizas.reduce((s, p) => s + n(p.vale), 0);
+  const pendientesCount = polizas.filter(
+    (p) => !(n(comisionDe(p)?.monto) > 0),
+  ).length;
+  const totalCapturado = polizas.reduce(
+    (s, p) => s + n(comisionDe(p)?.monto),
+    0,
+  );
 
   function abrirEdicion(p) {
+    const c = comisionDe(p);
     setEditando(p.id);
-    setValorEdit(p.vale || "");
-    setComprobanteEdit(p.comprobante_vale_url ?? null);
+    setValorEdit(c?.monto || "");
+    setFechaPagoEdit(c?.fecha_pago || hoyISO());
+    setComprobanteEdit(c?.comprobante_url ?? null);
     setErrorMsg(null);
   }
 
   function cancelarEdicion() {
     setEditando(null);
     setValorEdit("");
+    setFechaPagoEdit(hoyISO());
     setComprobanteEdit(null);
   }
 
@@ -107,17 +134,30 @@ export default function Comisiones({ usuario }) {
     setGuardando(true);
     setErrorMsg(null);
     try {
-      const { data, error } = await supabase.rpc("actualizar_vale_poliza_cofisem", {
-        p_poliza_id: id,
-        p_vale: n(valorEdit),
-        p_comprobante_vale_url: comprobanteEdit,
-      });
+      const { data, error } = await supabase
+        .from("comisiones_cofisem")
+        .upsert(
+          {
+            poliza_cofisem_id: id,
+            monto: n(valorEdit),
+            fecha_pago: fechaPagoEdit || hoyISO(),
+            comprobante_url: comprobanteEdit,
+            capturado_por: usuario?.id ?? null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "poliza_cofisem_id" },
+        )
+        .select()
+        .single();
       if (error) throw error;
-      const actualizado = Array.isArray(data) ? data[0] : data;
-      setPolizas((prev) => prev.map((p) => (p.id === id ? { ...p, ...actualizado } : p)));
+      setPolizas((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, comisiones_cofisem: [data] } : p,
+        ),
+      );
       cancelarEdicion();
     } catch (e) {
-      setErrorMsg("No se pudo guardar el vale: " + e.message);
+      setErrorMsg("No se pudo guardar la comisión: " + e.message);
     } finally {
       setGuardando(false);
     }
@@ -131,14 +171,20 @@ export default function Comisiones({ usuario }) {
           Comisiones
         </h1>
         <p className="text-gray-400 text-sm mt-0.5">
-          Captura el vale (comisión) de cada póliza vendida con vendedor — se puede seguir editando aunque el corte de esa venta ya esté cerrado.
+          Captura el vale (comisión) de cada póliza vendida con vendedor — se
+          puede seguir editando aunque el corte de esa venta ya esté cerrado.
         </p>
       </div>
 
       {errorMsg && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex items-center justify-between">
           {errorMsg}
-          <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-600 ml-3">✕</button>
+          <button
+            onClick={() => setErrorMsg(null)}
+            className="text-red-400 hover:text-red-600 ml-3"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -150,12 +196,16 @@ export default function Comisiones({ usuario }) {
               type="button"
               onClick={() => setFiltro(f.k)}
               className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                filtro === f.k ? "bg-[#1447e6] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+                filtro === f.k
+                  ? "bg-[#1447e6] text-white shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
               }`}
             >
               {f.label}
               {f.k === "PENDIENTE" && pendientesCount > 0 && (
-                <span className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filtro === f.k ? "bg-white/20" : "bg-amber-100 text-amber-700"}`}>
+                <span
+                  className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filtro === f.k ? "bg-white/20" : "bg-amber-100 text-amber-700"}`}
+                >
                   {pendientesCount}
                 </span>
               )}
@@ -163,7 +213,8 @@ export default function Comisiones({ usuario }) {
           ))}
         </div>
         <p className="text-xs text-gray-400">
-          Total capturado: <strong className="text-[#1447e6]">{$(totalCapturado)}</strong>
+          Total capturado:{" "}
+          <strong className="text-[#1447e6]">{$(totalCapturado)}</strong>
         </p>
       </div>
 
@@ -176,39 +227,84 @@ export default function Comisiones({ usuario }) {
         ) : visibles.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-emerald-600">
             <CheckCircle2 className="w-8 h-8" />
-            <span className="text-sm font-semibold">Sin pólizas en este filtro.</span>
+            <span className="text-sm font-semibold">
+              Sin pólizas en este filtro.
+            </span>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {["Aseguradora", "Póliza", "F. Emisión", "Vendedor", "Asegurado", "Vale", "Acción"].map((h) => (
-                    <th key={h} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
+                  {[
+                    "Aseguradora",
+                    "Póliza",
+                    "F. Emisión",
+                    "Vendedor",
+                    "Asegurado",
+                    "Vale",
+                    "Fecha de pago",
+                    "Acción",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap"
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {visibles.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50/60 transition-colors align-top">
-                    <td className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{p.aseguradora || "—"}</td>
-                    <td className="px-4 py-3 font-mono font-bold text-[#1447e6] whitespace-nowrap">{p.numero_poliza || "—"}</td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmt(p.fecha_emision)}</td>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{p.vendedor_nombre || "—"}</td>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap max-w-[160px] truncate">{p.asegurado_nombre || "—"}</td>
+                  <tr
+                    key={p.id}
+                    className="hover:bg-gray-50/60 transition-colors align-top"
+                  >
+                    <td className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">
+                      {p.aseguradora || "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono font-bold text-[#1447e6] whitespace-nowrap">
+                      {p.numero_poliza || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                      {fmt(p.fecha_emision)}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                      {p.vendedor_nombre || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap max-w-[160px] truncate">
+                      {p.asegurado_nombre || "—"}
+                    </td>
                     {editando === p.id ? (
                       <>
                         <td className="px-4 py-3">
                           <div className="relative w-28">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+                              $
+                            </span>
                             <input
-                              type="number" min="0" step="0.01" autoFocus
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              autoFocus
                               value={valorEdit}
                               onChange={(e) => setValorEdit(e.target.value)}
                               placeholder="0.00"
                               className="w-full pl-6 pr-2 py-1.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
                             />
                           </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="date"
+                            value={fechaPagoEdit}
+                            onChange={(e) => setFechaPagoEdit(e.target.value)}
+                            className="px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            Día en que se pagó.
+                          </p>
                         </td>
                         <td className="px-4 py-3 min-w-[260px]">
                           <div className="space-y-2">
@@ -246,19 +342,32 @@ export default function Comisiones({ usuario }) {
                     ) : (
                       <>
                         <td className="px-4 py-3 text-right font-bold text-emerald-700 whitespace-nowrap">
-                          {n(p.vale) > 0 ? $(p.vale) : <span className="text-gray-300 font-normal">Sin capturar</span>}
+                          {n(comisionDe(p)?.monto) > 0 ? (
+                            $(comisionDe(p).monto)
+                          ) : (
+                            <span className="text-gray-300 font-normal">
+                              Sin capturar
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                          {comisionDe(p)?.fecha_pago
+                            ? fmt(comisionDe(p).fecha_pago)
+                            : "—"}
                         </td>
                         <td className="px-4 py-3">
                           <button
                             type="button"
                             onClick={() => abrirEdicion(p)}
                             className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap ${
-                              n(p.vale) > 0
+                              n(comisionDe(p)?.monto) > 0
                                 ? "border border-gray-200 bg-white hover:bg-gray-50 text-gray-600"
                                 : "bg-amber-500 hover:bg-amber-600 text-white"
                             }`}
                           >
-                            {n(p.vale) > 0 ? "Editar vale" : "Capturar vale"}
+                            {n(comisionDe(p)?.monto) > 0
+                              ? "Editar vale"
+                              : "Capturar vale"}{" "}
                           </button>
                         </td>
                       </>

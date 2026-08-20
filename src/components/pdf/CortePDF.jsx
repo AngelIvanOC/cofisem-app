@@ -28,7 +28,6 @@ const COLS_POLIZA = [
   { key: "folio", label: "Folio", w: 34, align: "left" },
   { key: "vendedor", label: "Vendedor", w: 56, align: "left" },
   { key: "asegurado", label: "Asegurado", w: 74, align: "left" },
-  { key: "vale", label: "Vale $", w: 34, align: "right" },
   { key: "primaAnual", label: "Prima T. Anual", w: 46, align: "right" },
   { key: "primaNeta", label: "Prima N. Anual", w: 46, align: "right" },
   { key: "cuota", label: "Cuota", w: 26, align: "center" },
@@ -125,7 +124,6 @@ function FilaPoliza({ r, i }) {
     folio: r.folio || "—",
     vendedor: r.vendedor_nombre || "—",
     asegurado: r.asegurado_nombre || "—",
-    vale: n(r.vale) > 0 ? $(r.vale) : "—",
     primaAnual: $(r.prima_anual),
     primaNeta: $(r.prima_neta),
     cuota: r.num_cuota_pago ?? 1,
@@ -152,6 +150,60 @@ function FilaPoliza({ r, i }) {
           textStyle={c.key === "poliza" || c.key === "pago" ? tdBold : td}
         >
           {val[c.key]}
+        </Celda>
+      ))}
+    </Fila>
+  );
+}
+
+const tdComisionBold = {
+  fontFamily: "Helvetica-Bold",
+  fontSize: 6.5,
+  color: "#b91c1c",
+};
+const tdComisionDim = { fontFamily: "Helvetica", fontSize: 6.5, color: "#e9a3a3" };
+
+// Comisión (vale) pagada — se muestra como fila aparte al final de la tabla
+// de pólizas, con "−" en "No." y el monto en negativo bajo "Pago", igual
+// que en pantalla — no es una póliza, es dinero que sale del efectivo.
+function FilaComision({ c }) {
+  const pc = c.polizas_cofisem ?? {};
+  const val = {
+    no: "−",
+    aseguradora: pc.aseguradora || "—",
+    poliza: pc.numero_poliza || "—",
+    fEmision: fmtFecha(c.fecha_pago),
+    vigInicio: "—",
+    vigFin: "—",
+    folio: pc.folio || "—",
+    vendedor: pc.vendedor_nombre || "—",
+    asegurado: pc.asegurado_nombre || "—",
+    primaAnual: "—",
+    primaNeta: "—",
+    cuota: "—",
+    pago: `-${$(c.monto)}`,
+    cobertura: "—",
+    placas: "—",
+    tipo: "—",
+    uso: "—",
+    servicio: "—",
+  };
+  return (
+    <Fila
+      style={{
+        backgroundColor: "#fef2f2",
+        borderBottomWidth: 0.5,
+        borderBottomColor: COLORS.rule,
+      }}
+      wrap={false}
+    >
+      {COLS_POLIZA.map((col) => (
+        <Celda
+          key={col.key}
+          col={col}
+          textStyle={val[col.key] === "—" ? tdComisionDim : tdComisionBold}
+        >
+          {val[col.key]}
         </Celda>
       ))}
     </Fila>
@@ -219,7 +271,6 @@ function FilaTotalesPoliza({ totales }) {
     folio: "",
     vendedor: "",
     asegurado: "TOTAL",
-    vale: $(totales.vale),
     primaAnual: $(totales.primaAnual),
     primaNeta: $(totales.primaNeta),
     cuota: "",
@@ -346,6 +397,7 @@ function CampoResumen({ label, value, bold, warn }) {
 export default function CortePDF({ datos }) {
   const d = datos ?? {};
   const registros = d.registros ?? [];
+  const comisiones = d.comisiones ?? [];
   const t = d.totales ?? {};
 
   return (
@@ -450,7 +502,7 @@ export default function CortePDF({ datos }) {
         {/* ── Tabla 1: Datos de póliza (igual que la pestaña "Datos de póliza") ── */}
         <TablaSeccion titulo="DATOS DE PÓLIZA">
           <TablaHeader cols={COLS_POLIZA} />
-          {registros.length === 0 ? (
+          {registros.length === 0 && comisiones.length === 0 ? (
             <View style={{ paddingVertical: 16, alignItems: "center" }}>
               <Text style={{ fontSize: 8, color: COLORS.dim }}>
                 Sin pólizas registradas este día.
@@ -460,6 +512,9 @@ export default function CortePDF({ datos }) {
             <>
               {registros.map((r, i) => (
                 <FilaPoliza key={r.id ?? i} r={r} i={i} />
+              ))}
+              {comisiones.map((c, i) => (
+                <FilaComision key={`comision-${c.id ?? i}`} c={c} />
               ))}
               <FilaTotalesPoliza totales={t} />
             </>

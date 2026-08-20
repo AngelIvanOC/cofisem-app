@@ -50,3 +50,9 @@ export async function verDocumento(path) {
   if (error) throw error;
   window.open(data.signedUrl, "_blank", "noopener,noreferrer");
 }
+
+export async function getDocumentoSignedUrl(path) {
+  const { data, error } = await supabase.storage.from(DOCUMENTACION_BUCKET).createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+}

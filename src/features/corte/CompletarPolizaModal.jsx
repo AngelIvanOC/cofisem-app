@@ -40,7 +40,7 @@ const VACIO = {
   pol_pend_pago: "",
   efectivo: "", cheque: "", tdc: "", autorizacion: "",
   fotos_path: null, factura_path: null, t_circ_path: null,
-  identif_path: null, pol_ant_path: null, otro_path: null,
+  identif_path: null, identif_reverso_path: null, pol_ant_path: null, otro_path: null,
   fotos_verificado: false, fotos_verificado_nota: "",
   observaciones: "",
   comprobante_tdc_path: null, comprobante_cheque_path: null,
@@ -301,7 +301,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
   const guardando = accionGuardando !== null;
   const [intentoCompletar, setIntentoCompletar] = useState(false);
   const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | null
-  const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | 't_circ' | 'identif' | 'pol_ant' | 'otro' | null
+  const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | 't_circ' | 'identif' | 'identif_reverso' | 'pol_ant' | 'otro' | null
   const [gaman, setGaman] = useState(null); // primas reales de GAMAN cuando row.poliza_id existe
   const [gamanLoading, setGamanLoading] = useState(false);
   const [endosoAbierto, setEndosoAbierto] = useState(false);
@@ -356,6 +356,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
       factura_path:  row.factura_url  ?? null,
       t_circ_path:   row.t_circ_url   ?? null,
       identif_path:  row.identif_url  ?? null,
+      identif_reverso_path: row.identif_reverso_url ?? null,
       pol_ant_path:  row.pol_ant_url  ?? null,
       otro_path:     row.otro_url     ?? null,
       fotos_verificado:      row.fotos_verificado ?? false,
@@ -520,6 +521,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
         factura_url:   datos.factura_path,
         t_circ_url:    datos.t_circ_path,
         identif_url:   datos.identif_path,
+        identif_reverso_url: datos.identif_reverso_path,
         pol_ant_url:   datos.pol_ant_path,
         otro_url:      datos.otro_path,
         fotos_verificado:      datos.fotos_verificado,
@@ -800,11 +802,19 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
             </p>
             <div className="space-y-2">
               <ComprobanteField
-                label="Identificación"
+                label="Identificación (frente)"
                 path={form.identif_path}
                 subiendo={subiendoDocumento === "identif"}
                 onFile={(f) => handleDocumentoChange("identif", f)}
                 onVer={() => handleVerDocumento(form.identif_path)}
+              />
+              <ComprobanteField
+                label="Identificación (reverso)"
+                path={form.identif_reverso_path}
+                subiendo={subiendoDocumento === "identif_reverso"}
+                onFile={(f) => handleDocumentoChange("identif_reverso", f)}
+                onVer={() => handleVerDocumento(form.identif_reverso_path)}
+                obligatorio={false}
               />
               <FotosVehiculoField
                 path={form.fotos_path}

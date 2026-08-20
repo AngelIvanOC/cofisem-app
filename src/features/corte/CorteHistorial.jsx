@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, History, Banknote } from "lucide-react";
 import { supabase } from "../../supabaseClient";
-import { hoyISO } from "../../utils/fecha";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) => `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -17,21 +16,6 @@ const REVISION_META = {
 };
 
 const PAGE_SIZE = 10;
-const HOY_ISO = hoyISO();
-
-// Todas las fechas ISO entre desde y hoy (ambas incluidas), descendente —
-// así el operador ve TODOS sus días desde que empezó a trabajar, no solo
-// los que tuvieron ventas.
-function rangoDesde(desdeIso) {
-  const out = [];
-  const desde = new Date(desdeIso + "T00:00:00");
-  const d = new Date(HOY_ISO + "T00:00:00");
-  while (d >= desde) {
-    out.push(d.toISOString().split("T")[0]);
-    d.setDate(d.getDate() - 1);
-  }
-  return out;
-}
 
 export default function CorteHistorial({ usuario }) {
   const [entregas, setEntregas] = useState([]);
@@ -41,11 +25,8 @@ export default function CorteHistorial({ usuario }) {
   const [pagina, setPagina] = useState(0);
 
   // La lista de días cubre TODO el rango desde el primer día que el
-  // operador tuvo actividad (una póliza o una entrega registrada) hasta
-  // hoy — incluidos los días sin ninguna venta, para que nunca "desaparezca"
-  // un día. corte_efectivo_entrega solo tiene fila el día que el operador
-  // toca "Entrega de efectivo" o cierra el corte, así que los días sin esa
-  // fila (o sin pólizas) se completan con un estado "en proceso" vacío.
+  // operador vendió al menos una póliza — un día sin ventas no aparece en
+  // el historial, aunque se haya tocado "Entrega de efectivo" ese día.
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
@@ -62,12 +43,9 @@ export default function CorteHistorial({ usuario }) {
       const { data: dEntregas, error: e1 } = await qe;
       if (e1) throw e1;
 
-      const fechasConActividad = [
-        ...(dPolizas ?? []).map((p) => p.fecha_corte),
-        ...(dEntregas ?? []).map((e) => e.fecha_corte),
-      ];
-      const primerDia = fechasConActividad.length ? fechasConActividad.sort()[0] : null;
-      const fechas = primerDia ? rangoDesde(primerDia).slice(0, 90) : [];
+      const fechas = [...new Set((dPolizas ?? []).map((p) => p.fecha_corte))].sort(
+        (a, b) => (a < b ? 1 : -1),
+      );
 
       const entregaPorFecha = new Map((dEntregas ?? []).map((e) => [e.fecha_corte, e]));
       const dias = fechas.map((fecha_corte) => entregaPorFecha.get(fecha_corte) ?? {
@@ -152,11 +130,6 @@ export default function CorteHistorial({ usuario }) {
                         <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${e.cerrado ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                           {e.cerrado ? "Cerrado" : "En proceso"}
                         </span>
-                        {count === 0 && (
-                          <span className="inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-gray-100 text-gray-500 border-gray-200">
-                            Sin ventas registradas
-                          </span>
-                        )}
                         {(e.cerrado || e.estatus_revision === "REGRESADO") && (
                           <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${revMeta.cls}`}>
                             {revMeta.label}
