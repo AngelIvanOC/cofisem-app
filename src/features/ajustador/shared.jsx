@@ -433,3 +433,62 @@ export function formatMonto(n) {
   if (!n) return "";
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 }
+
+// ── Tile — tarjeta clickeable del hub de secciones (NA/Tercero/
+// Evidencias/Cierre) y de los módulos dentro de cada sección.
+// `completo`: marca visual (check verde) cuando ya hay datos guardados
+// — no bloquea nada, es solo referencia para el ajustador.
+export function Tile({ titulo, subtitulo, icon, completo, onClick, accion }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left bg-white rounded-2xl border-2 border-gray-100 hover:border-[#13193a]/25 hover:shadow-md p-4 flex items-center gap-3 transition-all active:scale-[0.98]"
+    >
+      <div className="w-11 h-11 rounded-xl bg-[#13193a]/8 flex items-center justify-center shrink-0 text-lg">
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-[#13193a] truncate">{titulo}</p>
+        {subtitulo && <p className="text-xs text-gray-400 truncate mt-0.5">{subtitulo}</p>}
+      </div>
+      {accion}
+      {completo ? (
+        <span className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+          <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </span>
+      ) : (
+        <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+// ── PanelHeader — header fijo con botón "atrás" + título/subtítulo,
+// reutilizado por el Hub y por cada sección/módulo interno (mismo
+// lenguaje visual que el header de PanelDetalle en index.jsx, pero
+// para navegación dentro del hub, que ya no depende del `paso`
+// numérico de index.jsx).
+export function PanelHeader({ titulo, subtitulo, onVolver, accion }) {
+  return (
+    <div className="shrink-0 flex items-center gap-3 px-4 py-4 border-b border-gray-100 bg-white">
+      <button
+        onClick={onVolver}
+        className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 hover:text-[#13193a] transition-all shrink-0"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-[#13193a] truncate">{titulo}</p>
+        {subtitulo && <p className="text-xs text-gray-400 truncate">{subtitulo}</p>}
+      </div>
+      {accion}
+    </div>
+  );
+}

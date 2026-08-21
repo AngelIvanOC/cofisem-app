@@ -12,14 +12,9 @@
 // ============================================================
 import { useState, useCallback, useEffect } from "react";
 import { PDFDownloadLink, pdf } from "@react-pdf/renderer";
-import { StepBar } from "./shared";
 import ListaSiniestros from "./ListaSiniestros";
 import ConfirmarArribo from "./ConfirmarArribo";
-import DatosSiniestro from "./DatosSiniestro";
-import CapturaDatosEvidencia from "./CapturaEvidencia";
-import Lesionados from "./Lesionados";
-import CierreCaso from "./CierreCaso";
-import Documentos from "./Documentos";
+import SeccionesHub from "./hub/SeccionesHub";
 import DeclaracionAccidentePDF from "../../components/pdf/DeclaracionAccidentePDF";
 import { fetchDeclaracionData, buildDeclaracionPDF } from "../../services/declaracionPdf";
 import PaseTallerPDF from "../../components/pdf/PaseTallerPDF";
@@ -28,14 +23,7 @@ import PaseMedicoPDF from "../../components/pdf/PaseMedicoPDF";
 import { fetchPaseMedicoData, buildPaseMedicoPDF } from "../../services/paseMedicoPdf";
 import { fetchLesionados } from "../../services/siniestros";
 
-const NOMBRE_PASO = [
-  "Confirmar Arribo",
-  "Datos del Siniestro",
-  "Partes y Evidencia",
-  "Lesionados",
-  "Cierre del Caso",
-  "Documentos",
-];
+const NOMBRE_PASO = ["Confirmar Arribo", "Panel del Caso"];
 
 // Altura del nav mobile del AppLayout (ajustar si cambia)
 // El AppLayout en mobile tiene un nav superior + posiblemente tab bar inferior
@@ -245,71 +233,38 @@ function Exito({ siniestro, docs, onVolver }) {
   );
 }
 
-// ── Panel de detalle — contiene header fijo + contenido scrolleable + botón fijo ──
-// Este es el patrón correcto: flex-col con altura 100%, el medio hace overflow-y-auto
+// ── Panel de detalle ──────────────────────────────────────────
+// Paso 0 (Confirmar Arribo) conserva su header fijo tal cual estaba.
+// Paso 1 en adelante ya no es un wizard lineal — es el Hub de
+// secciones (NA/Tercero/Evidencias/Cierre), que maneja su propio
+// header y navegación interna (ver hub/SeccionesHub.jsx).
 function PanelDetalle({ siniestro, paso, onVolver, onNext, onFinalizar }) {
-  return (
-    <div className="flex flex-col h-full overflow-hidden bg-white">
-      {/* ① Header — siempre visible, no scrollea */}
-      <div className="shrink-0 flex items-center gap-3 px-4 py-4 border-b border-gray-100 bg-white">
-        <button
-          onClick={onVolver}
-          className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 hover:text-[#13193a] transition-all shrink-0"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2"
+  if (paso === 0) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden bg-white">
+        <div className="shrink-0 flex items-center gap-3 px-4 py-4 border-b border-gray-100 bg-white">
+          <button
+            onClick={onVolver}
+            className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 hover:text-[#13193a] transition-all shrink-0"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-        </button>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-[#13193a] truncate">
-            {NOMBRE_PASO[paso]}
-          </p>
-          <p className="text-xs text-gray-400 truncate">
-            {siniestro.id} · {siniestro.asegurado}
-          </p>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-[#13193a] truncate">{NOMBRE_PASO[paso]}</p>
+            <p className="text-xs text-gray-400 truncate">{siniestro.id} · {siniestro.asegurado}</p>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <ConfirmarArribo siniestro={siniestro} onConfirmar={onNext} />
         </div>
       </div>
+    );
+  }
 
-      {/* ② StepBar — siempre visible, no scrollea */}
-      <div className="shrink-0 px-4 py-3 border-b border-gray-100 bg-gray-50/80">
-        <StepBar paso={paso} />
-      </div>
-
-      {/* ③ Contenido — ÚNICO scroll, ocupa todo el espacio restante */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {paso === 0 && (
-          <ConfirmarArribo siniestro={siniestro} onConfirmar={onNext} />
-        )}
-        {paso === 1 && (
-          <DatosSiniestro siniestro={siniestro} onSiguiente={onNext} />
-        )}
-        {paso === 2 && (
-          <CapturaDatosEvidencia siniestro={siniestro} onSiguiente={onNext} />
-        )}
-        {paso === 3 && (
-          <Lesionados siniestro={siniestro} onSiguiente={onNext} />
-        )}
-        {paso === 4 && (
-          <CierreCaso siniestro={siniestro} onSiguiente={onNext} />
-        )}
-        {paso === 5 && (
-          <Documentos siniestro={siniestro} onFinalizar={onFinalizar} />
-        )}
-      </div>
-      {/* NOTA: el botón de acción (Confirmar / Continuar) está DENTRO de cada paso,
-          al final del contenido scrolleable. Así, cuando llegas al fondo con scroll,
-          el botón aparece naturalmente sin necesidad de sticky ni fixed. */}
-    </div>
+  return (
+    <SeccionesHub siniestro={siniestro} onFinalizarCaso={onFinalizar} onVolverALista={onVolver} />
   );
 }
 
@@ -324,13 +279,13 @@ export default function AjustadorSiniestros() {
     setVista("detalle");
   }, []);
 
+  // El Hub (paso 1) maneja su propia navegación interna — el botón
+  // "atrás" que expone hacia aquí (onVolverALista) siempre sale al
+  // listado, nunca retrocede a la pantalla de Arribo ya confirmada.
   const handleVolver = () => {
-    if (paso > 0) {
-      setPaso((p) => p - 1);
-      return;
-    }
     setVista("lista");
     setSiniestro(null);
+    setPaso(0);
   };
 
   const [docsFinal, setDocsFinal] = useState(null);

@@ -404,6 +404,21 @@ const MAPA_DATOS_SINIESTRO = {
   licenciaFechaExp:     "licencia_fecha_exp",
   licenciaLugarExp:     "licencia_lugar_exp",
   fechaNacimiento:      "conductor_fecha_nacimiento",
+  // NA-Módulo1 (rediseño por secciones): sexo del conductor/asegurado y
+  // el flujo de licencia (checkbox "presenta documento" + switch
+  // permanente/vigencia) que antes no existían en este paso.
+  sexo:                 "conductor_sexo",
+  presentaLicencia:     "presenta_licencia",
+  licenciaPermanente:   "licencia_permanente",
+  licenciaFechaVigencia:"licencia_fecha_vigencia",
+};
+// presentaLicencia/licenciaPermanente son booleanos tri-state — con el
+// fallback por defecto de payloadDesdeCambios (`v || null`) un `false`
+// real se volvería `null`, así que necesitan normalizar con `??` (mismo
+// patrón que NORMALIZAR_DATOS_AJUSTE más abajo).
+const NORMALIZAR_DATOS_SINIESTRO = {
+  presentaLicencia:   (v) => v ?? null,
+  licenciaPermanente: (v) => v ?? null,
 };
 
 // ── Datos generales del siniestro (paso "Datos del Siniestro") — fetch en
@@ -425,7 +440,8 @@ export async function fetchDatosSiniestro(siniestroId) {
       estado, municipio, colonia, cp,
       conductor_es_tercero, conductor_nombre, conductor_telefono, conductor_domicilio,
       licencia_tipo, licencia_numero, licencia_fecha_exp, licencia_lugar_exp,
-      conductor_fecha_nacimiento
+      conductor_fecha_nacimiento, conductor_sexo, presenta_licencia,
+      licencia_permanente, licencia_fecha_vigencia
     `)
     .eq("id", siniestroId)
     .maybeSingle();
@@ -455,11 +471,15 @@ export async function fetchDatosSiniestro(siniestroId) {
     licenciaFechaExp:   s.licencia_fecha_exp      ?? "",
     licenciaLugarExp:   s.licencia_lugar_exp      ?? "",
     fechaNacimiento:    s.conductor_fecha_nacimiento ?? "",
+    sexo:                   s.conductor_sexo             ?? "",
+    presentaLicencia:       s.presenta_licencia          ?? true,
+    licenciaPermanente:     s.licencia_permanente        ?? null,
+    licenciaFechaVigencia:  s.licencia_fecha_vigencia    ?? "",
   };
 }
 
 export async function actualizarDatosSiniestro(siniestroId, cambios) {
-  const payload = payloadDesdeCambios(cambios, MAPA_DATOS_SINIESTRO);
+  const payload = payloadDesdeCambios(cambios, MAPA_DATOS_SINIESTRO, NORMALIZAR_DATOS_SINIESTRO);
   if (!Object.keys(payload).length) return;
 
   const { error } = await supabase
@@ -495,6 +515,10 @@ const MAPA_NA = {
   descripcionDano: "vehiculo_descripcion_dano",
   abrirReserva:    "vehiculo_abrir_reserva",
   montoEstimado:   "vehiculo_monto_estimado_dano",
+  // NA-Módulo3: mapa visual de daños, modo solo-nota (sin monto) — se
+  // agrega al lado de la descripción/monto manual, no los reemplaza
+  // (ambos alimentan la Declaración del Accidente).
+  danosMarcadores: "danos_marcadores",
 };
 const NORMALIZAR_NA = {
   abrirReserva:  (v) => v ?? null,
@@ -533,6 +557,8 @@ function filaTercero(siniestroId, d) {
     licencia_numero:       d.licenciaNumero   || null,
     licencia_fecha_exp:    d.licenciaFechaExp || null,
     licencia_lugar_exp:    d.licenciaLugarExp || null,
+    licencia_permanente:      d.licenciaPermanente     ?? null,
+    licencia_fecha_vigencia:  d.licenciaFechaVigencia  || null,
     reporte_tercero:       d.reporteTercero   || null,
     cobertura_tercero:     d.coberturaTercero || null,
     vencimiento_tercero:   d.vencimientoTercero || null,
@@ -542,6 +568,11 @@ function filaTercero(siniestroId, d) {
     monto_estimado_dano:   d.montoEstimado ? Number(d.montoEstimado) : null,
     danos_siniestro_marcadores:    d.danosSiniestro    ?? null,
     danos_preexistente_marcadores: d.danosPreexistente ?? null,
+    // Tipo de tercero (Conductor/Propietario del bien/Lesionado) y si se
+    // solicitó grúa para este vehículo — nuevos, ver rediseño por
+    // secciones. solicito_grua es tri-state, no usar `|| null`.
+    tipo_tercero:          d.tipoTercero || null,
+    solicito_grua:         d.solicitoGrua ?? null,
   };
 }
 
@@ -648,7 +679,7 @@ export async function guardarPartesInvolucradas(siniestroId, { cambiosNA, afecta
 export async function fetchPartesInvolucradas(siniestroId) {
   const { data: sin, error: errSin } = await supabase
     .from("siniestros")
-    .select("vehiculo_descripcion_dano, vehiculo_abrir_reserva, vehiculo_monto_estimado_dano")
+    .select("vehiculo_descripcion_dano, vehiculo_abrir_reserva, vehiculo_monto_estimado_dano, danos_marcadores")
     .eq("id", siniestroId)
     .maybeSingle();
   if (errSin) throw errSin;
@@ -660,9 +691,11 @@ export async function fetchPartesInvolucradas(siniestroId) {
       vehiculo_tipo, vehiculo_motor, propietario_nombre, propietario_domicilio,
       propietario_telefono, edad, sexo, rfc, curp, email, aseguradora_nombre, poliza_tercero,
       declaracion, licencia_tipo, licencia_numero, licencia_fecha_exp, licencia_lugar_exp,
+      licencia_permanente, licencia_fecha_vigencia,
       reporte_tercero, cobertura_tercero, vencimiento_tercero, ajustador_tercero,
       descripcion_dano, abrir_reserva, monto_estimado_dano,
-      danos_siniestro_marcadores, danos_preexistente_marcadores
+      danos_siniestro_marcadores, danos_preexistente_marcadores,
+      tipo_tercero, solicito_grua
     `)
     .eq("siniestro_id", siniestroId)
     .order("id", { ascending: true });
@@ -673,6 +706,7 @@ export async function fetchPartesInvolucradas(siniestroId) {
       descripcionDano: sin.vehiculo_descripcion_dano || "",
       abrirReserva:    sin.vehiculo_abrir_reserva ?? null,
       montoEstimado:   sin.vehiculo_monto_estimado_dano != null ? String(sin.vehiculo_monto_estimado_dano) : "",
+      danosMarcadores: sin.danos_marcadores ?? {},
     } : null,
     terceros: (terceros ?? []).map((t) => ({
       _dbId: t.id,
@@ -688,10 +722,12 @@ export async function fetchPartesInvolucradas(siniestroId) {
       vencimientoTercero: t.vencimiento_tercero || "", ajustadorTercero: t.ajustador_tercero || "",
       licenciaTipo: t.licencia_tipo || "", licenciaNumero: t.licencia_numero || "",
       licenciaFechaExp: t.licencia_fecha_exp || "", licenciaLugarExp: t.licencia_lugar_exp || "",
+      licenciaPermanente: t.licencia_permanente ?? null, licenciaFechaVigencia: t.licencia_fecha_vigencia || "",
       descripcionDano: t.descripcion_dano || "", abrirReserva: t.abrir_reserva ?? null,
       montoEstimado: t.monto_estimado_dano != null ? String(t.monto_estimado_dano) : "",
       danosSiniestro: t.danos_siniestro_marcadores ?? {}, danosPreexistente: t.danos_preexistente_marcadores ?? {},
       declaracion: t.declaracion || "",
+      tipoTercero: t.tipo_tercero || "", solicitoGrua: t.solicito_grua ?? null,
     })),
   };
 }
@@ -956,6 +992,28 @@ export async function guardarDatosAjuste(siniestroId, cambios, sistema = {}) {
     .from("siniestros")
     .update(payload)
     .eq("id", siniestroId);
+  if (error) throw error;
+}
+
+const MAPA_ABOGADO = {
+  solicitoAbogado:  "solicito_abogado",
+  despachoAbogado:  "despacho_abogado",
+};
+const NORMALIZAR_ABOGADO = {
+  solicitoAbogado: (v) => v ?? null,
+};
+
+// ── Abogado (NA-Módulo4 Servicios) — a propósito NO reutiliza
+// guardarDatosAjuste: esa función siempre reescribe croquis_url/
+// croquis_data/hora_tomado/hora_pasado/ajuste_hora_llegada a partir de
+// `sistema` porque asume que solo la llama la pantalla de Cierre: si
+// se le llamara desde aquí sin pasar `sistema`, esos campos se
+// pondrían en NULL en cada guardado y se perdería el croquis ya
+// capturado. Este UPDATE solo toca las 2 columnas de abogado.
+export async function guardarAbogado(siniestroId, cambios) {
+  const payload = payloadDesdeCambios(cambios, MAPA_ABOGADO, NORMALIZAR_ABOGADO);
+  if (!Object.keys(payload).length) return;
+  const { error } = await supabase.from("siniestros").update(payload).eq("id", siniestroId);
   if (error) throw error;
 }
 
