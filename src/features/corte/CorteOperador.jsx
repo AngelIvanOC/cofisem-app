@@ -143,10 +143,11 @@ export default function CorteOperador({ usuario }) {
     (s, d) => s + n(billetes[d]) * d,
     0,
   );
-  // La comparación es contra el efectivo bruto recibido (mismo total que
-  // "Entrega de efectivo"), no contra totalCobro — este conteo de
-  // billetes es solo del efectivo físico, TDC y cheques no son billetes.
-  const diferencia = +(totalBilletes - totalEfectivo).toFixed(2);
+  // La comparación es contra subEfectivo (efectivo ya neto de gastos y
+  // vales, ambos ya salieron físicamente de la caja) — no contra
+  // totalEfectivo bruto ni contra totalCobro (que además suma TDC y
+  // cheques, que no son billetes).
+  const diferencia = +(totalBilletes - subEfectivo).toFixed(2);
   const efectivoBloqueado = totalEfectivo === 0;
   const tabEntregaMostrada = efectivoBloqueado ? "PERSONAL" : tabEntrega;
   const corteCerrado = !!entregaEfectivo?.cerrado;
@@ -1284,7 +1285,7 @@ export default function CorteOperador({ usuario }) {
                   <>
                     Total:{" "}
                     <strong className="text-gray-600">
-                      {$(totalEfectivo)}
+                      {$(subEfectivo)}
                     </strong>
                   </>
                 )}
@@ -1437,7 +1438,7 @@ export default function CorteOperador({ usuario }) {
                     Total cobrado
                   </p>
                   <p className="text-sm font-bold text-[#1447e6] tabular-nums">
-                    ${totalEfectivo.toFixed(2)}
+                    ${subEfectivo.toFixed(2)}
                   </p>
                 </div>
                 {tabEntregaMostrada === "PERSONAL" && (
