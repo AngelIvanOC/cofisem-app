@@ -7,14 +7,14 @@
 // con un vendedor real (vendedor_id distinto de NULL y distinto de
 // 1=COFISEM, que es "sin vendedor específico").
 //
-// El vale se guarda vía la función de BD actualizar_vale_poliza_cofisem
-// (SECURITY DEFINER) en vez de un UPDATE directo — esa función permite
-// seguir editando el vale de una póliza aunque el corte del día en que
-// se vendió ya esté cerrado (todo lo demás de la póliza sí se bloquea
-// al cerrar el corte, pero la comisión suele calcularse después).
+// El vale se guarda en su propia tabla (comisiones_cofisem) en vez de
+// vivir en polizas_cofisem — eso permite seguir editando el vale de una
+// póliza aunque el corte del día en que se vendió ya esté cerrado (todo
+// lo demás de la póliza sí se bloquea al cerrar el corte, pero la
+// comisión suele calcularse después).
 // ============================================================
 import { useState, useEffect, useCallback } from "react";
-import { HandCoins, CheckCircle2, Loader2 } from "lucide-react";
+import { HandCoins, CheckCircle2, Loader2, Search, X } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import { ComprobanteField } from "../corte/CompletarPolizaModal";
 import {
@@ -23,6 +23,8 @@ import {
   MAX_COMPROBANTE_BYTES,
 } from "../../services/comprobantesPago";
 import { hoyISO } from "../../utils/fecha";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) =>
@@ -42,17 +44,20 @@ const FILTROS = [
   { k: "TODAS", label: "Todas" },
 ];
 
+// PostgREST devuelve este embed como objeto (no arreglo) porque
+// comisiones_cofisem.poliza_cofisem_id tiene un UNIQUE.
+const comisionDe = (p) =>
+  (Array.isArray(p.comisiones_cofisem)
+    ? p.comisiones_cofisem[0]
+    : p.comisiones_cofisem) ?? null;
+
 export default function Comisiones({ usuario }) {
   const [polizas, setPolizas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [filtro, setFiltro] = useState("PENDIENTE");
-  const [editando, setEditando] = useState(null); // id de la póliza en edición | null
-  const [valorEdit, setValorEdit] = useState("");
-  const [fechaPagoEdit, setFechaPagoEdit] = useState(hoyISO());
-  const [comprobanteEdit, setComprobanteEdit] = useState(null);
-  const [subiendo, setSubiendo] = useState(false);
-  const [guardando, setGuardando] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const [modalPoliza, setModalPoliza] = useState(null); // póliza en edición | null
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -81,13 +86,20 @@ export default function Comisiones({ usuario }) {
     cargar();
   }, [cargar]);
 
-  const comisionDe = (p) => p.comisiones_cofisem?.[0] ?? null;
-
-  const visibles = polizas.filter((p) => {
+  const porFiltro = polizas.filter((p) => {
     if (filtro === "TODAS") return true;
     const capturado = n(comisionDe(p)?.monto) > 0;
     return filtro === "CAPTURADO" ? capturado : !capturado;
   });
+  const q = busqueda.trim().toLowerCase();
+  const visibles = q
+    ? porFiltro.filter((p) =>
+        [p.aseguradora, p.numero_poliza, p.vendedor_nombre, p.asegurado_nombre]
+          .filter(Boolean)
+          .some((v) => v.toLowerCase().includes(q)),
+      )
+    : porFiltro;
+
   const pendientesCount = polizas.filter(
     (p) => !(n(comisionDe(p)?.monto) > 0),
   ).length;
@@ -96,71 +108,21 @@ export default function Comisiones({ usuario }) {
     0,
   );
 
-  function abrirEdicion(p) {
-    const c = comisionDe(p);
-    setEditando(p.id);
-    setValorEdit(c?.monto || "");
-    setFechaPagoEdit(c?.fecha_pago || hoyISO());
-    setComprobanteEdit(c?.comprobante_url ?? null);
-    setErrorMsg(null);
-  }
+  const {
+    page,
+    setPage,
+    totalPages,
+    paginated: visiblesPag,
+    total,
+  } = usePagination(visibles, 10);
 
-  function cancelarEdicion() {
-    setEditando(null);
-    setValorEdit("");
-    setFechaPagoEdit(hoyISO());
-    setComprobanteEdit(null);
-  }
-
-  async function handleComprobante(file) {
-    if (file.size > MAX_COMPROBANTE_BYTES) {
-      setErrorMsg("El archivo es muy grande (máx. 8 MB).");
-      return;
-    }
-    setErrorMsg(null);
-    setSubiendo(true);
-    try {
-      const basePath = `${usuario?.oficina_id ?? "sin-oficina"}/comisiones/${editando}/vale`;
-      const path = await subirComprobante(basePath, file);
-      setComprobanteEdit(path);
-    } catch (e) {
-      setErrorMsg("No se pudo subir el comprobante: " + e.message);
-    } finally {
-      setSubiendo(false);
-    }
-  }
-
-  async function guardar(id) {
-    setGuardando(true);
-    setErrorMsg(null);
-    try {
-      const { data, error } = await supabase
-        .from("comisiones_cofisem")
-        .upsert(
-          {
-            poliza_cofisem_id: id,
-            monto: n(valorEdit),
-            fecha_pago: fechaPagoEdit || hoyISO(),
-            comprobante_url: comprobanteEdit,
-            capturado_por: usuario?.id ?? null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "poliza_cofisem_id" },
-        )
-        .select()
-        .single();
-      if (error) throw error;
-      setPolizas((prev) =>
-        prev.map((p) =>
-          p.id === id ? { ...p, comisiones_cofisem: [data] } : p,
-        ),
-      );
-      cancelarEdicion();
-    } catch (e) {
-      setErrorMsg("No se pudo guardar la comisión: " + e.message);
-    } finally {
-      setGuardando(false);
-    }
+  function onGuardado(polizaId, comision) {
+    setPolizas((prev) =>
+      prev.map((p) =>
+        p.id === polizaId ? { ...p, comisiones_cofisem: comision } : p,
+      ),
+    );
+    setModalPoliza(null);
   }
 
   return (
@@ -188,37 +150,48 @@ export default function Comisiones({ usuario }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-1 bg-white rounded-xl p-1 border border-gray-100 w-fit">
-          {FILTROS.map((f) => (
-            <button
-              key={f.k}
-              type="button"
-              onClick={() => setFiltro(f.k)}
-              className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                filtro === f.k
-                  ? "bg-[#1447e6] text-white shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {f.label}
-              {f.k === "PENDIENTE" && pendientesCount > 0 && (
-                <span
-                  className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filtro === f.k ? "bg-white/20" : "bg-amber-100 text-amber-700"}`}
-                >
-                  {pendientesCount}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-gray-400">
-          Total capturado:{" "}
-          <strong className="text-[#1447e6]">{$(totalCapturado)}</strong>
-        </p>
-      </div>
-
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 flex-wrap">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por aseguradora, póliza, vendedor o asegurado…"
+              className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="flex items-center gap-1 bg-gray-50 rounded-xl p-1 border border-gray-100 w-fit">
+              {FILTROS.map((f) => (
+                <button
+                  key={f.k}
+                  type="button"
+                  onClick={() => setFiltro(f.k)}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                    filtro === f.k
+                      ? "bg-[#1447e6] text-white shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {f.label}
+                  {f.k === "PENDIENTE" && pendientesCount > 0 && (
+                    <span
+                      className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filtro === f.k ? "bg-white/20" : "bg-amber-100 text-amber-700"}`}
+                    >
+                      {pendientesCount}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 whitespace-nowrap">
+              Total capturado:{" "}
+              <strong className="text-[#1447e6]">{$(totalCapturado)}</strong>
+            </p>
+          </div>
+        </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-16 gap-2 text-gray-400 text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -248,7 +221,7 @@ export default function Comisiones({ usuario }) {
                   ].map((h) => (
                     <th
                       key={h}
-                      className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap"
+                      className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-2 whitespace-nowrap"
                     >
                       {h}
                     </th>
@@ -256,128 +229,249 @@ export default function Comisiones({ usuario }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {visibles.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="hover:bg-gray-50/60 transition-colors align-top"
-                  >
-                    <td className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">
-                      {p.aseguradora || "—"}
-                    </td>
-                    <td className="px-4 py-3 font-mono font-bold text-[#1447e6] whitespace-nowrap">
-                      {p.numero_poliza || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                      {fmt(p.fecha_emision)}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                      {p.vendedor_nombre || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap max-w-[160px] truncate">
-                      {p.asegurado_nombre || "—"}
-                    </td>
-                    {editando === p.id ? (
-                      <>
-                        <td className="px-4 py-3">
-                          <div className="relative w-28">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
-                              $
-                            </span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              autoFocus
-                              value={valorEdit}
-                              onChange={(e) => setValorEdit(e.target.value)}
-                              placeholder="0.00"
-                              className="w-full pl-6 pr-2 py-1.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
-                            />
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="date"
-                            value={fechaPagoEdit}
-                            onChange={(e) => setFechaPagoEdit(e.target.value)}
-                            className="px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
-                          />
-                          <p className="text-[10px] text-gray-400 mt-1">
-                            Día en que se pagó.
-                          </p>
-                        </td>
-                        <td className="px-4 py-3 min-w-[260px]">
-                          <div className="space-y-2">
-                            {n(valorEdit) > 0 && (
-                              <ComprobanteField
-                                obligatorio={false}
-                                label="Comprobante del vale"
-                                path={comprobanteEdit}
-                                subiendo={subiendo}
-                                onFile={handleComprobante}
-                                onVer={() => verComprobante(comprobanteEdit)}
-                              />
-                            )}
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => guardar(p.id)}
-                                disabled={guardando || subiendo}
-                                className="px-3 py-1.5 rounded-lg bg-[#1447e6] hover:bg-[#0f36b3] text-white text-[11px] font-bold disabled:opacity-50"
-                              >
-                                {guardando ? "Guardando…" : "Guardar"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelarEdicion}
-                                disabled={guardando}
-                                className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-[11px] font-bold"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-4 py-3 text-right font-bold text-emerald-700 whitespace-nowrap">
-                          {n(comisionDe(p)?.monto) > 0 ? (
-                            $(comisionDe(p).monto)
-                          ) : (
-                            <span className="text-gray-300 font-normal">
-                              Sin capturar
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                          {comisionDe(p)?.fecha_pago
-                            ? fmt(comisionDe(p).fecha_pago)
-                            : "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={() => abrirEdicion(p)}
-                            className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap ${
-                              n(comisionDe(p)?.monto) > 0
-                                ? "border border-gray-200 bg-white hover:bg-gray-50 text-gray-600"
-                                : "bg-amber-500 hover:bg-amber-600 text-white"
-                            }`}
-                          >
-                            {n(comisionDe(p)?.monto) > 0
-                              ? "Editar vale"
-                              : "Capturar vale"}{" "}
-                          </button>
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                ))}
+                {visiblesPag.map((p) => {
+                  const c = comisionDe(p);
+                  return (
+                    <tr
+                      key={p.id}
+                      className="hover:bg-gray-50/60 transition-colors"
+                    >
+                      <td className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap">
+                        {p.aseguradora || "—"}
+                      </td>
+                      <td className="px-4 py-2 font-mono font-bold text-[#1447e6] whitespace-nowrap">
+                        {p.numero_poliza || "—"}
+                      </td>
+                      <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
+                        {fmt(p.fecha_emision)}
+                      </td>
+                      <td className="px-4 py-2 text-gray-700 whitespace-nowrap">
+                        {p.vendedor_nombre || "—"}
+                      </td>
+                      <td className="px-4 py-2 text-gray-700 whitespace-nowrap max-w-[160px] truncate">
+                        {p.asegurado_nombre || "—"}
+                      </td>
+                      <td className="px-4 py-2 text-right font-bold text-emerald-700 whitespace-nowrap">
+                        {n(c?.monto) > 0 ? (
+                          $(c.monto)
+                        ) : (
+                          <span className="text-gray-300 font-normal">
+                            Sin capturar
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
+                        {c?.fecha_pago ? fmt(c.fecha_pago) : "—"}
+                      </td>
+                      <td className="px-4 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setModalPoliza(p)}
+                          className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap ${
+                            n(c?.monto) > 0
+                              ? "border border-gray-200 bg-white hover:bg-gray-50 text-gray-600"
+                              : "bg-amber-500 hover:bg-amber-600 text-white"
+                          }`}
+                        >
+                          {n(c?.monto) > 0 ? "Editar vale" : "Capturar vale"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+            <Paginator
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={10}
+              onPage={setPage}
+            />
           </div>
         )}
+      </div>
+
+      <ModalVale
+        poliza={modalPoliza}
+        usuario={usuario}
+        onClose={() => setModalPoliza(null)}
+        onSaved={onGuardado}
+      />
+    </div>
+  );
+}
+
+// Modal de captura/edición del vale — reemplaza la edición en línea que
+// tenía la tabla antes: monto, fecha de pago y comprobante opcional.
+function ModalVale({ poliza, usuario, onClose, onSaved }) {
+  const [valor, setValor] = useState("");
+  const [fechaPago, setFechaPago] = useState(hoyISO());
+  const [comprobante, setComprobante] = useState(null);
+  const [subiendo, setSubiendo] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!poliza) return;
+    const c = comisionDe(poliza);
+    setValor(c?.monto || "");
+    setFechaPago(c?.fecha_pago || hoyISO());
+    setComprobante(c?.comprobante_url ?? null);
+    setError(null);
+  }, [poliza]);
+
+  if (!poliza) return null;
+
+  async function handleComprobante(file) {
+    if (file.size > MAX_COMPROBANTE_BYTES) {
+      setError("El archivo es muy grande (máx. 8 MB).");
+      return;
+    }
+    setError(null);
+    setSubiendo(true);
+    try {
+      const basePath = `${usuario?.oficina_id ?? "sin-oficina"}/comisiones/${poliza.id}/vale`;
+      const path = await subirComprobante(basePath, file);
+      setComprobante(path);
+    } catch (e) {
+      setError("No se pudo subir el comprobante: " + e.message);
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  async function guardar() {
+    setGuardando(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from("comisiones_cofisem")
+        .upsert(
+          {
+            poliza_cofisem_id: poliza.id,
+            monto: n(valor),
+            fecha_pago: fechaPago || hoyISO(),
+            comprobante_url: comprobante,
+            capturado_por: usuario?.id ?? null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "poliza_cofisem_id" },
+        )
+        .select()
+        .single();
+      if (err) throw err;
+      onSaved(poliza.id, data);
+    } catch (e) {
+      setError("No se pudo guardar la comisión: " + e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-[#1447e6]">
+              {n(comisionDe(poliza)?.monto) > 0
+                ? "Editar vale"
+                : "Capturar vale"}
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5 truncate">
+              <span className="font-mono font-bold text-gray-600">
+                {poliza.numero_poliza || "—"}
+              </span>{" "}
+              · {poliza.asegurado_nombre || "—"} · {poliza.vendedor_nombre || "—"}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400 shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Monto
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                  $
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  autoFocus
+                  value={valor}
+                  onChange={(e) => setValor(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                Fecha de pago
+              </label>
+              <input
+                type="date"
+                value={fechaPago}
+                onChange={(e) => setFechaPago(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-400 -mt-2">
+            Día en que se pagó — así sale restado en el corte de ese día.
+          </p>
+
+          <ComprobanteField
+            obligatorio={false}
+            label="Comprobante del vale"
+            path={comprobante}
+            subiendo={subiendo}
+            onFile={handleComprobante}
+            onVer={() => verComprobante(comprobante)}
+          />
+
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={guardando}
+              className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={guardar}
+              disabled={guardando || subiendo}
+              className="px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50 transition-all"
+            >
+              {guardando ? "Guardando…" : "Guardar"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

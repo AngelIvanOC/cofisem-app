@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, History, Banknote } from "lucide-react";
+import { History, Banknote, Search, Calendar } from "lucide-react";
 import { supabase } from "../../supabaseClient";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) => `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -15,14 +17,13 @@ const REVISION_META = {
   RECIBIDO:  { label: "Recibido",               cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
 };
 
-const PAGE_SIZE = 10;
-
 export default function CorteHistorial({ usuario }) {
   const [entregas, setEntregas] = useState([]);
   const [polizas, setPolizas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
-  const [pagina, setPagina] = useState(0);
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroFecha, setFiltroFecha] = useState("");
 
   // La lista de días cubre TODO el rango desde el primer día que el
   // operador vendió al menos una póliza — un día sin ventas no aparece en
@@ -72,8 +73,17 @@ export default function CorteHistorial({ usuario }) {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  const totalPaginas = Math.max(1, Math.ceil(entregas.length / PAGE_SIZE));
-  const visibles = entregas.slice(pagina * PAGE_SIZE, pagina * PAGE_SIZE + PAGE_SIZE);
+  const q = busqueda.trim().toLowerCase();
+  const entregasFiltradas = entregas
+    .filter((e) => !q || fmt(e.fecha_corte).toLowerCase().includes(q))
+    .filter((e) => !filtroFecha || e.fecha_corte === filtroFecha);
+  const {
+    page,
+    setPage,
+    totalPages,
+    paginated: visibles,
+    total,
+  } = usePagination(entregasFiltradas, 5);
 
   return (
     <div className="p-6 min-h-full bg-gray-50 space-y-5">
@@ -100,6 +110,38 @@ export default function CorteHistorial({ usuario }) {
         </div>
       )}
 
+      {entregas.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3 flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por fecha…"
+              className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] bg-white"
+            />
+          </div>
+          <div className="relative">
+            <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="date"
+              value={filtroFecha}
+              onChange={(e) => setFiltroFecha(e.target.value)}
+              className="pl-10 pr-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] bg-white"
+            />
+          </div>
+          {filtroFecha && (
+            <button
+              type="button"
+              onClick={() => setFiltroFecha("")}
+              className="text-xs font-semibold text-gray-400 hover:text-gray-600"
+            >
+              Quitar fecha
+            </button>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center h-40 text-gray-400 text-sm gap-2">
           <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
@@ -112,6 +154,10 @@ export default function CorteHistorial({ usuario }) {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 text-center text-sm text-gray-400">
           Todavía no tienes cortes registrados.
         </div>
+      ) : entregasFiltradas.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 text-center text-sm text-gray-400">
+          Ningún corte coincide con la búsqueda.
+        </div>
       ) : (
         <>
           <div className="space-y-3">
@@ -122,7 +168,7 @@ export default function CorteHistorial({ usuario }) {
               const faltaComprobante = e.entrega === "DEPOSITO" && !e.comprobante_url;
 
               return (
-                <div key={e.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div key={e.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-[#1447e6] capitalize">{fmt(e.fecha_corte)}</p>
@@ -198,27 +244,15 @@ export default function CorteHistorial({ usuario }) {
             })}
           </div>
 
-          {totalPaginas > 1 && (
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setPagina((p) => Math.max(0, p - 1))}
-                disabled={pagina === 0}
-                className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-xs font-semibold text-gray-500">Página {pagina + 1} de {totalPaginas}</span>
-              <button
-                type="button"
-                onClick={() => setPagina((p) => Math.min(totalPaginas - 1, p + 1))}
-                disabled={pagina >= totalPaginas - 1}
-                className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <Paginator
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={5}
+              onPage={setPage}
+            />
+          </div>
         </>
       )}
     </div>

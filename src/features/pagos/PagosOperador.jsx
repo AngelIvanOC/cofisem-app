@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Paperclip, CreditCard, CheckCircle2, Loader2 } from "lucide-react";
+import { Paperclip, CreditCard, CheckCircle2, Loader2, Search } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import {
   subirComprobantePago,
@@ -7,6 +7,8 @@ import {
   MAX_PAGO_COMPROBANTE_BYTES,
 } from "../../services/comprobantesPagoCofisem";
 import { hoyISO } from "../../utils/fecha";
+import { usePagination } from "../../hooks/usePagination";
+import Paginator from "../../components/Paginator";
 import RegistrarCobroModal from "./RegistrarCobroModal";
 
 const n = (v) => parseFloat(v) || 0;
@@ -231,6 +233,7 @@ export default function PagosOperador({ usuario }) {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [filtro, setFiltro] = useState("PENDIENTE");
+  const [busqueda, setBusqueda] = useState("");
   const [modalPolizaId, setModalPolizaId] = useState(null);
   const [modalRow, setModalRow] = useState(null);
   const [modalGamanRow, setModalGamanRow] = useState(null);
@@ -268,12 +271,27 @@ export default function PagosOperador({ usuario }) {
   }, [cargar]);
 
   const grupos = agruparPorPoliza(polizas);
-  const visibles =
+  const porFiltro =
     filtro === "TODAS"
       ? grupos
       : grupos.filter((g) => g.cuotas.some((c) => c._info.bucket === filtro));
+  const q = busqueda.trim().toLowerCase();
+  const visibles = q
+    ? porFiltro.filter((g) =>
+        [g.poliza.numero_poliza, g.poliza.aseguradora, g.poliza.asegurado_nombre]
+          .filter(Boolean)
+          .some((v) => v.toLowerCase().includes(q)),
+      )
+    : porFiltro;
   const pendientesCount = grupos.reduce((s, g) => s + g.pendientes.length, 0);
   const grupoAbierto = grupos.find((g) => g.polizaId === modalPolizaId) ?? null;
+  const {
+    page,
+    setPage,
+    totalPages,
+    paginated: visiblesPag,
+    total,
+  } = usePagination(visibles, 10);
 
   async function verComprobante(path) {
     try {
@@ -350,31 +368,42 @@ export default function PagosOperador({ usuario }) {
         </div>
       )}
 
-      <div className="flex items-center gap-1 bg-white rounded-xl p-1 border border-gray-100 w-fit">
-        {FILTROS.map((f) => (
-          <button
-            key={f.k}
-            type="button"
-            onClick={() => setFiltro(f.k)}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
-              filtro === f.k
-                ? "bg-[#1447e6] text-white shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {f.label}
-            {f.k === "PENDIENTE" && pendientesCount > 0 && (
-              <span
-                className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filtro === f.k ? "bg-white/20" : "bg-amber-100 text-amber-700"}`}
-              >
-                {pendientesCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 flex-wrap">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por póliza, aseguradora o asegurado…"
+              className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-1 bg-gray-50 rounded-xl p-1 border border-gray-100 w-fit shrink-0">
+            {FILTROS.map((f) => (
+              <button
+                key={f.k}
+                type="button"
+                onClick={() => setFiltro(f.k)}
+                className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                  filtro === f.k
+                    ? "bg-[#1447e6] text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {f.label}
+                {f.k === "PENDIENTE" && pendientesCount > 0 && (
+                  <span
+                    className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filtro === f.k ? "bg-white/20" : "bg-amber-100 text-amber-700"}`}
+                  >
+                    {pendientesCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-16 gap-2 text-gray-400 text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -404,7 +433,7 @@ export default function PagosOperador({ usuario }) {
                   ].map((h) => (
                     <th
                       key={h}
-                      className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap"
+                      className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-2 whitespace-nowrap"
                     >
                       {h}
                     </th>
@@ -412,7 +441,7 @@ export default function PagosOperador({ usuario }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {visibles.map((g) => {
+                {visiblesPag.map((g) => {
                   const p = g.poliza;
                   const cobradas = g.aplicados.length + g.recibidos.length;
                   return (
@@ -420,7 +449,7 @@ export default function PagosOperador({ usuario }) {
                       key={g.polizaId}
                       className={`transition-colors ${g.cancelada ? "opacity-60 bg-gray-50/80" : "hover:bg-gray-50/60"}`}
                     >
-                      <td className="px-4 py-3 font-mono font-bold text-[#1447e6] whitespace-nowrap">
+                      <td className="px-4 py-2 font-mono font-bold text-[#1447e6] whitespace-nowrap">
                         {p.numero_poliza || "—"}
                         {g.cancelada && (
                           <span className="ml-1.5 inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600">
@@ -428,13 +457,13 @@ export default function PagosOperador({ usuario }) {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                      <td className="px-4 py-2 text-gray-700 whitespace-nowrap">
                         {p.aseguradora || "—"}
                       </td>
-                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap max-w-[160px] truncate">
+                      <td className="px-4 py-2 text-gray-700 whitespace-nowrap max-w-[160px] truncate">
                         {p.asegurado_nombre || "—"}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2">
                         <div className="flex items-center gap-1.5">
                           <CuotasDots cuotas={g.cuotas} />
                           <span className="text-[11px] text-gray-500 tabular-nums">
@@ -442,10 +471,10 @@ export default function PagosOperador({ usuario }) {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-emerald-700">
+                      <td className="px-4 py-2 text-right font-semibold text-emerald-700">
                         {$(g.recibido)}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-2 text-right">
                         {g.cancelada ? (
                           <span className="text-gray-400 font-semibold">
                             Cancelada
@@ -460,10 +489,10 @@ export default function PagosOperador({ usuario }) {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                      <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
                         {fmt(g.proxVence)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2">
                         <button
                           type="button"
                           onClick={() => setModalPolizaId(g.polizaId)}
@@ -477,6 +506,13 @@ export default function PagosOperador({ usuario }) {
                 })}
               </tbody>
             </table>
+            <Paginator
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={10}
+              onPage={setPage}
+            />
           </div>
         )}
       </div>
