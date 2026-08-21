@@ -17,6 +17,17 @@ const REVISION_META = {
   RECIBIDO:  { label: "Recibido",               cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
 };
 
+const FILTROS = [
+  { k: "TODAS", label: "Todas", test: () => true },
+  // Un corte "regresado" vuelve a cerrado=false (se reabre para que el
+  // operador corrija — ver trigger validar_revision_corte), así que sin
+  // este segundo filtro aparecería a la vez en "En proceso" y en
+  // "Regresados". Se le trata como su propio estado.
+  { k: "EN_PROCESO", label: "En proceso", test: (e) => !e.cerrado && e.estatus_revision !== "REGRESADO" },
+  { k: "CERRADO", label: "Cerrados", test: (e) => e.cerrado },
+  { k: "REGRESADO", label: "Regresados", test: (e) => e.estatus_revision === "REGRESADO" },
+];
+
 export default function CorteHistorial({ usuario }) {
   const [entregas, setEntregas] = useState([]);
   const [polizas, setPolizas] = useState([]);
@@ -24,6 +35,7 @@ export default function CorteHistorial({ usuario }) {
   const [errorMsg, setErrorMsg] = useState(null);
   const [busqueda, setBusqueda] = useState("");
   const [filtroFecha, setFiltroFecha] = useState("");
+  const [filtro, setFiltro] = useState("TODAS");
 
   // La lista de días cubre TODO el rango desde el primer día que el
   // operador vendió al menos una póliza — un día sin ventas no aparece en
@@ -74,9 +86,14 @@ export default function CorteHistorial({ usuario }) {
   useEffect(() => { cargar(); }, [cargar]);
 
   const q = busqueda.trim().toLowerCase();
+  const filtroActivo = FILTROS.find((f) => f.k === filtro) ?? FILTROS[0];
   const entregasFiltradas = entregas
     .filter((e) => !q || fmt(e.fecha_corte).toLowerCase().includes(q))
-    .filter((e) => !filtroFecha || e.fecha_corte === filtroFecha);
+    .filter((e) => !filtroFecha || e.fecha_corte === filtroFecha)
+    .filter(filtroActivo.test);
+  const regresadosCount = entregas.filter(
+    (e) => e.estatus_revision === "REGRESADO",
+  ).length;
   const {
     page,
     setPage,
@@ -111,34 +128,59 @@ export default function CorteHistorial({ usuario }) {
       )}
 
       {entregas.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3 flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar por fecha…"
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] bg-white"
-            />
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar por fecha…"
+                className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] bg-white"
+              />
+            </div>
+            <div className="relative">
+              <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="date"
+                value={filtroFecha}
+                onChange={(e) => setFiltroFecha(e.target.value)}
+                className="pl-10 pr-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] bg-white"
+              />
+            </div>
+            {filtroFecha && (
+              <button
+                type="button"
+                onClick={() => setFiltroFecha("")}
+                className="text-xs font-semibold text-gray-400 hover:text-gray-600"
+              >
+                Quitar fecha
+              </button>
+            )}
           </div>
-          <div className="relative">
-            <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="date"
-              value={filtroFecha}
-              onChange={(e) => setFiltroFecha(e.target.value)}
-              className="pl-10 pr-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] bg-white"
-            />
+          <div className="flex items-center gap-1 bg-gray-50 rounded-xl p-1 border border-gray-100 w-fit shrink-0">
+            {FILTROS.map((f) => (
+              <button
+                key={f.k}
+                type="button"
+                onClick={() => setFiltro(f.k)}
+                className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                  filtro === f.k
+                    ? "bg-[#1447e6] text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {f.label}
+                {f.k === "REGRESADO" && regresadosCount > 0 && (
+                  <span
+                    className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${filtro === f.k ? "bg-white/20" : "bg-red-100 text-red-700"}`}
+                  >
+                    {regresadosCount}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-          {filtroFecha && (
-            <button
-              type="button"
-              onClick={() => setFiltroFecha("")}
-              className="text-xs font-semibold text-gray-400 hover:text-gray-600"
-            >
-              Quitar fecha
-            </button>
-          )}
         </div>
       )}
 
