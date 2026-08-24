@@ -71,6 +71,7 @@ export default function CorteHistorial({ usuario }) {
         comprobante_url: null,
         notas_admin: null,
         nota_operador_cierre: null,
+        observaciones: null,
       });
 
       setEntregas(dias);
@@ -253,8 +254,13 @@ export default function CorteHistorial({ usuario }) {
                     </div>
                   </div>
 
-                  {(e.notas_admin || e.nota_operador_cierre || faltaComprobante) && (
+                  {(e.notas_admin || e.observaciones || e.nota_operador_cierre || faltaComprobante) && (
                     <div className="mt-3 pt-3 border-t border-gray-50 space-y-2">
+                      {e.observaciones && (
+                        <p className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                          <strong>Motivo del regreso:</strong> {e.observaciones}
+                        </p>
+                      )}
                       {e.notas_admin && (
                         <p className="text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
                           <strong className="text-gray-700">Nota de administración:</strong> {e.notas_admin}
@@ -262,7 +268,7 @@ export default function CorteHistorial({ usuario }) {
                       )}
                       {e.nota_operador_cierre && (
                         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                          <strong>Tu nota al cerrar incompleto:</strong> {e.nota_operador_cierre}
+                          <strong>{e.cierre_incompleto ? "Tu nota al cerrar incompleto:" : "Tus observaciones del corte:"}</strong> {e.nota_operador_cierre}
                         </p>
                       )}
                       {faltaComprobante && (

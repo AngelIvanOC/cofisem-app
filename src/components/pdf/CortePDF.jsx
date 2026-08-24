@@ -666,6 +666,33 @@ export default function CortePDF({ datos }) {
           </View>
         </Fila>
 
+        {d.observaciones && (
+          <View
+            style={{
+              marginTop: 8,
+              borderWidth: 0.5,
+              borderColor: COLORS.rule,
+              borderRadius: 3,
+              padding: 8,
+            }}
+            wrap={false}
+          >
+            <Text
+              style={{
+                fontFamily: "Helvetica-Bold",
+                fontSize: 8.5,
+                color: COLORS.navy,
+                marginBottom: 3,
+              }}
+            >
+              OBSERVACIONES DEL CORTE
+            </Text>
+            <Text style={{ fontFamily: "Helvetica", fontSize: 8, color: COLORS.ink }}>
+              {d.observaciones}
+            </Text>
+          </View>
+        )}
+
         <Text
           style={{
             position: "absolute",

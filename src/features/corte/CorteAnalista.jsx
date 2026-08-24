@@ -208,7 +208,7 @@ export default function CorteAnalista({ usuario }) {
 
   function handleAbrirRegresar(entrega) {
     setEntregaActiva(entrega);
-    setTextoObservacion(entrega?.notas_admin ?? "");
+    setTextoObservacion(entrega?.observaciones ?? "");
     setModalRegresar(true);
   }
 
@@ -217,7 +217,9 @@ export default function CorteAnalista({ usuario }) {
     // Regresar reabre el corte del operador (cerrado:false) — se le devuelve
     // la pelota para que corrija y lo vuelva a cerrar; si no, se quedaba
     // "cerrado" para siempre y nunca salía de Liberaciones de corte.
-    await actualizarEntrega(entregaActiva.id, { estatus_revision: "REGRESADO", notas_admin: textoObservacion.trim(), cerrado: false });
+    // Va en "observaciones" (no "notas_admin") para no chocar con "Agregar
+    // nota", que es un campo aparte y no debe perderse al regresar el corte.
+    await actualizarEntrega(entregaActiva.id, { estatus_revision: "REGRESADO", observaciones: textoObservacion.trim(), cerrado: false });
     setModalRegresar(false);
   }
 
@@ -410,6 +412,11 @@ export default function CorteAnalista({ usuario }) {
                         {oficina?.nombre ?? "—"} · {fmt(fecha)}
                         {entrega?.cerrado_at && <> · Cerrado el {fmtDateTime(entrega.cerrado_at)}</>}
                       </p>
+                      {estatusRevision === "REGRESADO" && entrega?.observaciones && (
+                        <p className="text-xs text-red-700 mt-1 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 inline-block">
+                          <strong>Motivo del regreso:</strong> {entrega.observaciones}
+                        </p>
+                      )}
                       {entrega?.notas_admin && (
                         <p className="text-xs text-gray-500 mt-1 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1.5 inline-block">
                           <strong className="text-gray-600">Nota admin:</strong> {entrega.notas_admin}

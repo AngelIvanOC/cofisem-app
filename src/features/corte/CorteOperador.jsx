@@ -98,6 +98,7 @@ export default function CorteOperador({ usuario }) {
   const [carruselIdentifRow, setCarruselIdentifRow] = useState(null);
 
   const [entregaEfectivo, setEntregaEfectivo] = useState(null);
+  const [observaciones, setObservaciones] = useState("");
   const [subiendoEfectivo, setSubiendoEfectivo] = useState(false);
   const [tabEntrega, setTabEntrega] = useState("PERSONAL"); // "PERSONAL" | "DEPOSITO"
   const [previewEfectivo, setPreviewEfectivo] = useState(null); // { url, isPdf } | null
@@ -276,6 +277,12 @@ export default function CorteOperador({ usuario }) {
         : query.is("operador_id", null);
       const { data } = await query.maybeSingle();
       setEntregaEfectivo(data ?? null);
+      // "Observaciones del corte" (lo que escribe el operador) vive en
+      // nota_operador_cierre — ese campo ya existía justo para esto,
+      // originalmente pensado solo para el cierre incompleto, pero es el
+      // mismo texto que el operador ve en esta caja. "observaciones" es
+      // un campo aparte: la nota con la que el admin regresa el corte.
+      setObservaciones(data?.nota_operador_cierre ?? "");
     } catch {
       // No bloquea el corte si esto falla — se puede definir después.
     }
@@ -330,6 +337,7 @@ export default function CorteOperador({ usuario }) {
         entrega,
         comprobante_url,
         decidido_por: usuario?.id ?? null,
+        nota_operador_cierre: observaciones || null,
         updated_at: new Date().toISOString(),
       };
       const { data, error } = await supabase
@@ -341,6 +349,33 @@ export default function CorteOperador({ usuario }) {
       setEntregaEfectivo(data);
     } catch (e) {
       setErrorMsg("No se pudo guardar la entrega de efectivo: " + e.message);
+    }
+  }
+
+  // Se guardan al perder el foco (no hasta cerrar el corte) para que no se
+  // pierdan si el operador navega a otra pestaña antes de cerrar.
+  async function guardarObservaciones() {
+    if (corteCerrado) return;
+    try {
+      const payload = {
+        fecha_corte: fechaCorte,
+        oficina_id: usuario?.oficina_id ?? null,
+        operador_id: usuario?.id ?? null,
+        entrega: entregaEfectivo?.entrega ?? null,
+        comprobante_url: entregaEfectivo?.comprobante_url ?? null,
+        decidido_por: entregaEfectivo?.decidido_por ?? usuario?.id ?? null,
+        nota_operador_cierre: observaciones || null,
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = await supabase
+        .from("corte_efectivo_entrega")
+        .upsert(payload, { onConflict: "fecha_corte,oficina_id,operador_id" })
+        .select()
+        .single();
+      if (error) throw error;
+      setEntregaEfectivo(data);
+    } catch (e) {
+      setErrorMsg("No se pudieron guardar las observaciones: " + e.message);
     }
   }
 
@@ -369,7 +404,10 @@ export default function CorteOperador({ usuario }) {
         cerrado: true,
         cerrado_por: usuario?.id ?? null,
         cierre_incompleto: extra?.cierreIncompleto ?? false,
-        nota_operador_cierre: extra?.notaOperador ?? null,
+        // Si es cierre incompleto, la justificación de esa alerta manda;
+        // si no, se guarda lo que el operador ya tenía escrito en
+        // "Observaciones del corte".
+        nota_operador_cierre: extra?.notaOperador ?? (observaciones || null),
         // Cada (re)cierre entra fresco a revisión — si admin ya lo había
         // regresado o aprobado antes, no debe quedar pegado a ese estatus
         // viejo ahora que se vuelve a cerrar.
@@ -404,6 +442,7 @@ export default function CorteOperador({ usuario }) {
       registros: filasTabla,
       comisiones: comisionesDia,
       billetes,
+      observaciones,
       oficina,
       fechaLabel,
       fechaIso: fechaCorte,
@@ -657,6 +696,11 @@ export default function CorteOperador({ usuario }) {
                 </span>
               )}
           </div>
+          {entregaEfectivo?.observaciones && (
+            <p className="text-xs text-red-700 mt-2 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 inline-block">
+              <strong>Motivo del regreso:</strong> {entregaEfectivo.observaciones}
+            </p>
+          )}
           {entregaEfectivo?.notas_admin && (
             <p className="text-xs text-gray-500 mt-2 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1.5 inline-block">
               <strong className="text-gray-600">Nota de administración:</strong>{" "}
@@ -1264,6 +1308,9 @@ export default function CorteOperador({ usuario }) {
               Observaciones del corte
             </label>
             <textarea
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              onBlur={guardarObservaciones}
               placeholder="Observaciones generales del día, irregularidades, comentarios…"
               disabled={corteCerrado}
               className="flex-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] resize-none disabled:opacity-50 disabled:cursor-not-allowed"

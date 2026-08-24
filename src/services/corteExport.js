@@ -336,7 +336,7 @@ function construirCajaEncabezado(ws, merges, { colInicio, colFin, oficina, fecha
   }
 }
 
-function construirHojaPolizas({ registros, comisiones = [], billetes = {}, oficina, fechaLabel, generadoPor, totales }) {
+function construirHojaPolizas({ registros, comisiones = [], billetes = {}, observaciones, oficina, fechaLabel, generadoPor, totales }) {
   const ws = {};
   const numCols = COLUMNAS.length;
   const lastCol = numCols - 1;
@@ -586,8 +586,22 @@ function construirHojaPolizas({ registros, comisiones = [], billetes = {}, ofici
     );
   });
 
+  // ---- Observaciones del corte ----
+  const filaObservaciones = filaComprobacion + comprobacionFilas.length + 3;
+  escribir(ws, XLSX.utils.encode_cell({ r: filaObservaciones - 1, c: 0 }), "Observaciones:", {
+    font: FONT_LABEL_H1,
+    alignment: { horizontal: "left", vertical: "top" },
+  });
+  merges.push({ s: { r: filaObservaciones - 1, c: 1 }, e: { r: filaObservaciones - 1, c: 10 } });
+  escribir(
+    ws,
+    XLSX.utils.encode_cell({ r: filaObservaciones - 1, c: 1 }),
+    observaciones || "—",
+    { font: FONT_BODY_H1_PLAIN, alignment: { horizontal: "left", vertical: "top", wrapText: true } },
+  );
+
   // ---- Pie: Elaboró ----
-  const filaFooter = filaComprobacion + comprobacionFilas.length + 3;
+  const filaFooter = filaObservaciones + 2;
   escribir(ws, XLSX.utils.encode_cell({ r: filaFooter - 1, c: 0 }), "Elaboró:", {
     font: FONT_LABEL_H1,
     alignment: { horizontal: "left", vertical: "center" },
@@ -677,7 +691,7 @@ function agruparPorAseguradora(registros, comisiones = []) {
   return [...fijas, ...extras];
 }
 
-function construirHojaResumen({ registros, comisiones = [], oficina, fechaLabel, totales, generadoPor }) {
+function construirHojaResumen({ registros, comisiones = [], observaciones, oficina, fechaLabel, totales, generadoPor }) {
   const grupos = agruparPorAseguradora(registros, comisiones);
   const ws = {};
   const merges = [];
@@ -904,7 +918,12 @@ function construirHojaResumen({ registros, comisiones = [], oficina, fechaLabel,
   const filaComentarios = filaEfectivoFinal + 3;
   escribir(ws, XLSX.utils.encode_cell({ r: filaComentarios - 1, c: 0 }), "COMENTARIOS:", {
     font: FONT_LABEL_H2,
-    alignment: { horizontal: "left", vertical: "center" },
+    alignment: { horizontal: "left", vertical: "top" },
+  });
+  merges.push({ s: { r: filaComentarios - 1, c: 1 }, e: { r: filaComentarios - 1, c: 8 } });
+  escribir(ws, XLSX.utils.encode_cell({ r: filaComentarios - 1, c: 1 }), observaciones || "—", {
+    font: FONT_BODY_H2,
+    alignment: { horizontal: "left", vertical: "top", wrapText: true },
   });
 
   const filaElaboro = filaComentarios + 2;
@@ -947,6 +966,7 @@ export function exportarCorteExcel({
   registros = [],
   comisiones = [],
   billetes = {},
+  observaciones,
   oficina,
   fechaLabel,
   fechaIso,
@@ -955,8 +975,8 @@ export function exportarCorteExcel({
 }) {
   const wb = XLSX.utils.book_new();
 
-  const wsPolizas = construirHojaPolizas({ registros, comisiones, billetes, oficina, fechaLabel, generadoPor, totales });
-  const wsResumen = construirHojaResumen({ registros, comisiones, oficina, fechaLabel, totales, generadoPor });
+  const wsPolizas = construirHojaPolizas({ registros, comisiones, billetes, observaciones, oficina, fechaLabel, generadoPor, totales });
+  const wsResumen = construirHojaResumen({ registros, comisiones, observaciones, oficina, fechaLabel, totales, generadoPor });
 
   XLSX.utils.book_append_sheet(wb, wsPolizas, "Pólizas");
   XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
