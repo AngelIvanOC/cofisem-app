@@ -14,13 +14,15 @@
 // comisión suele calcularse después).
 // ============================================================
 import { useState, useEffect, useCallback } from "react";
-import { HandCoins, CheckCircle2, Loader2, Search, X } from "lucide-react";
+import { HandCoins, CheckCircle2, Loader2, Search, X, Trash2 } from "lucide-react";
+import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
 import { ComprobanteField } from "../corte/CompletarPolizaModal";
 import {
   subirComprobante,
   verComprobante,
   MAX_COMPROBANTE_BYTES,
+  COMPROBANTE_BUCKET,
 } from "../../services/comprobantesPago";
 import { hoyISO } from "../../utils/fecha";
 import { usePagination } from "../../hooks/usePagination";
@@ -123,6 +125,44 @@ export default function Comisiones({ usuario }) {
       ),
     );
     setModalPoliza(null);
+  }
+
+  async function eliminarComision(p) {
+    const c = comisionDe(p);
+    if (!c) return;
+    const { isConfirmed } = await Swal.fire({
+      icon: "warning",
+      title: "¿Eliminar esta comisión?",
+      html: `Se borrará el vale de <strong>${$(c.monto)}</strong> de la póliza <strong>${p.numero_poliza || "—"}</strong> y su comprobante (si tenía) — la póliza vuelve a "Sin capturar".`,
+      showCancelButton: true,
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!isConfirmed) return;
+    try {
+      const { error } = await supabase
+        .from("comisiones_cofisem")
+        .delete()
+        .eq("poliza_cofisem_id", p.id);
+      if (error) throw error;
+      if (c.comprobante_url) {
+        await supabase.storage.from(COMPROBANTE_BUCKET).remove([c.comprobante_url]);
+      }
+      setPolizas((prev) =>
+        prev.map((row) =>
+          row.id === p.id ? { ...row, comisiones_cofisem: null } : row,
+        ),
+      );
+    } catch (e) {
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo eliminar",
+        text: e.message,
+        confirmButtonColor: "#13193a",
+      });
+    }
   }
 
   return (
@@ -264,17 +304,29 @@ export default function Comisiones({ usuario }) {
                         {c?.fecha_pago ? fmt(c.fecha_pago) : "—"}
                       </td>
                       <td className="px-4 py-2">
-                        <button
-                          type="button"
-                          onClick={() => setModalPoliza(p)}
-                          className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap ${
-                            n(c?.monto) > 0
-                              ? "border border-gray-200 bg-white hover:bg-gray-50 text-gray-600"
-                              : "bg-amber-500 hover:bg-amber-600 text-white"
-                          }`}
-                        >
-                          {n(c?.monto) > 0 ? "Editar vale" : "Capturar vale"}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setModalPoliza(p)}
+                            className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap ${
+                              n(c?.monto) > 0
+                                ? "border border-gray-200 bg-white hover:bg-gray-50 text-gray-600"
+                                : "bg-amber-500 hover:bg-amber-600 text-white"
+                            }`}
+                          >
+                            {n(c?.monto) > 0 ? "Editar vale" : "Capturar vale"}
+                          </button>
+                          {n(c?.monto) > 0 && (
+                            <button
+                              type="button"
+                              title="Eliminar comisión"
+                              onClick={() => eliminarComision(p)}
+                              className="w-7 h-7 rounded-lg border border-gray-200 hover:bg-red-50 hover:border-red-200 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

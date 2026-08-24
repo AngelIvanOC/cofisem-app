@@ -28,12 +28,19 @@ const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT;
 // pago cuya cantidad de parcialidades sea menor a la cuota que ya se
 // registró (ej. no tiene sentido pasar a SEMESTRAL si esto es la cuota 5).
 const DIVISOR_PAGO = { CONTADO: 1, MENSUAL: 12, SEMESTRAL: 2, TRIMESTRAL: 4, CUATRIMESTRAL: 3, "4 PARCIALES": 4 };
+const TIPO_OPT = ["AUTO", "TAXI", "COLECTIVO", "APP", "PICKUP", "CAMION", "EQUIPO PESADO", "MOTO", "CUATRIMOTO", "OTRO"];
 
 // Coberturas "amplia"/"limitada" exigen foto del vehículo además de la
 // identificación.
 const esAmpliaOLimitada = (cobertura) => /AMPLIA|LIMITADA/i.test(cobertura || "");
 
 const VACIO = {
+  // Solo se editan cuando se abre en modo "editar" (soloEditar=true) — ver
+  // más abajo. Se cargan siempre para no perder el dato al guardar aunque
+  // el modal se haya abierto en modo "completar".
+  aseguradora: "", numero_poliza: "", fecha_emision: "", vigencia_inicio: "",
+  asegurado_nombre_pila: "", asegurado_apellido_paterno: "", asegurado_apellido_materno: "",
+  tipo: "", uso: "", servicio: "", fecha_corte: "",
   folio: "", cobertura: "", forma_pago: "", vigencia_fin: "", placas: "", num_serie: "",
   vendedor_nombre: "", telefono: "",
   prima_anual: "", prima_neta: "", prima_primer_pago: "", prima_primer_pago_neta: "",
@@ -294,7 +301,12 @@ export function FotosVehiculoField({ path, verificado, nota, subiendo, onFile, o
 // `row`: registro de polizas_cofisem a completar, o null para no mostrar el modal.
 // `onClose()`: se llama al cancelar/cerrar.
 // `onSaved(registroActualizado)`: se llama tras guardar con éxito.
-export default function CompletarPolizaModal({ row, usuario, onClose, onSaved }) {
+// `soloEditar`: abre el modal mostrando TODOS los datos de la póliza
+// (aseguradora, no. de póliza, fecha de emisión, vigencia inicio, nombre
+// del asegurado por partes, tipo/uso/servicio y el corte destino) en vez
+// de solo lo que falta por capturar — para el botón "Editar" de la tabla,
+// distinto del botón "Completar" que sigue mostrando solo lo pendiente.
+export default function CompletarPolizaModal({ row, usuario, onClose, onSaved, soloEditar = false }) {
   const [form, setForm]                 = useState({ ...VACIO });
   const [modalError, setModalError]     = useState(null);
   const [accionGuardando, setAccionGuardando] = useState(null); // 'guardar' | 'completar' | null
@@ -335,6 +347,17 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
   useEffect(() => {
     if (!row) return;
     setForm({
+      aseguradora:       row.aseguradora ?? "",
+      numero_poliza:     row.numero_poliza ?? "",
+      fecha_emision:     row.fecha_emision ?? "",
+      vigencia_inicio:   row.vigencia_inicio ?? "",
+      asegurado_nombre_pila:         row.asegurado_nombre_pila ?? "",
+      asegurado_apellido_paterno:    row.asegurado_apellido_paterno ?? "",
+      asegurado_apellido_materno:    row.asegurado_apellido_materno ?? "",
+      tipo:              row.tipo ?? "",
+      uso:               row.uso ?? "",
+      servicio:          row.servicio ?? "",
+      fecha_corte:       row.fecha_corte ?? "",
       folio:             row.folio ?? "",
       cobertura:         row.cobertura ?? "",
       forma_pago:        row.forma_pago ?? "",
@@ -499,7 +522,27 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
     }
     setAccionGuardando(completar ? "completar" : "guardar");
     try {
+      // Si las 3 partes vienen vacías (fila vieja capturada antes de que
+      // existieran estos campos separados) se conserva el nombre que ya
+      // tenía en vez de borrarlo.
+      const nombrePartes = [
+        datos.asegurado_nombre_pila,
+        datos.asegurado_apellido_paterno,
+        datos.asegurado_apellido_materno,
+      ].filter(Boolean).join(" ").trim();
       const payload = {
+        aseguradora:       datos.aseguradora || row.aseguradora,
+        numero_poliza:     datos.numero_poliza || row.numero_poliza,
+        fecha_emision:     datos.fecha_emision || null,
+        vigencia_inicio:   datos.vigencia_inicio || null,
+        asegurado_nombre:  nombrePartes || row.asegurado_nombre || null,
+        asegurado_nombre_pila:      datos.asegurado_nombre_pila || null,
+        asegurado_apellido_paterno: datos.asegurado_apellido_paterno || null,
+        asegurado_apellido_materno: datos.asegurado_apellido_materno || null,
+        tipo:              datos.tipo || null,
+        uso:               datos.uso || null,
+        servicio:          datos.servicio || null,
+        fecha_corte:       datos.fecha_corte || row.fecha_corte,
         folio:             datos.folio || null,
         cobertura:         datos.cobertura || null,
         forma_pago:        datos.forma_pago || null,
@@ -554,7 +597,7 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
           <div>
             <p className="text-sm font-bold text-[#1447e6] flex items-center gap-1.5">
-              Completar registro
+              {soloEditar ? "Editar póliza" : "Completar registro"}
               {esGaman && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
                   <Lock className="w-2.5 h-2.5" /> Vinculada a GAMAN
@@ -584,6 +627,91 @@ export default function CompletarPolizaModal({ row, usuario, onClose, onSaved })
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-xs font-semibold text-red-700 flex items-center justify-between">
               {modalError}
               <button type="button" onClick={() => setModalError(null)} className="text-red-400 hover:text-red-600 ml-3">✕</button>
+            </div>
+          )}
+
+          {soloEditar && (
+            <div>
+              <label className={lblModal}>¿A qué corte se registra esta póliza?</label>
+              <input
+                type="date"
+                value={form.fecha_corte}
+                max={hoyISO()}
+                onChange={(e) => setF("fecha_corte", e.target.value)}
+                className={inpModal + " sm:w-56"}
+              />
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                Cambiar esta fecha mueve la póliza al corte de ese día. No se puede mover a un corte ya cerrado.
+              </p>
+            </div>
+          )}
+
+          {soloEditar && (
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Identidad de la póliza</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <label className={lblModal}>Aseguradora</label>
+                  {esGaman ? (
+                    <div className={`${inpModal} bg-gray-50 text-gray-500 font-semibold cursor-not-allowed`}>{form.aseguradora || "—"}</div>
+                  ) : (
+                    <input value={form.aseguradora} onChange={(e) => setF("aseguradora", e.target.value.toUpperCase())} className={inpModal} />
+                  )}
+                </div>
+                <div>
+                  <label className={lblModal}>No. de póliza</label>
+                  {esGaman ? (
+                    <div className={`${inpModal} bg-gray-50 text-gray-500 font-semibold cursor-not-allowed font-mono`}>{form.numero_poliza || "—"}</div>
+                  ) : (
+                    <input value={form.numero_poliza} onChange={(e) => setF("numero_poliza", e.target.value)} className={inpModal + " font-mono"} />
+                  )}
+                </div>
+                {!esRegistroParcial && (
+                  <div>
+                    <label className={lblModal}>Fecha de emisión</label>
+                    <input type="date" value={form.fecha_emision} onChange={(e) => setF("fecha_emision", e.target.value)} className={inpModal} />
+                  </div>
+                )}
+                {!esRegistroParcial && (
+                  <div>
+                    <label className={lblModal}>Vigencia inicio</label>
+                    <input type="date" value={form.vigencia_inicio} onChange={(e) => setF("vigencia_inicio", e.target.value)} className={inpModal} />
+                  </div>
+                )}
+                <div>
+                  <label className={lblModal}>Nombre(s) del asegurado</label>
+                  <input value={form.asegurado_nombre_pila} onChange={(e) => setF("asegurado_nombre_pila", e.target.value.toUpperCase())} className={inpModal} />
+                </div>
+                <div>
+                  <label className={lblModal}>Apellido paterno</label>
+                  <input value={form.asegurado_apellido_paterno} onChange={(e) => setF("asegurado_apellido_paterno", e.target.value.toUpperCase())} className={inpModal} />
+                </div>
+                <div>
+                  <label className={lblModal}>Apellido materno</label>
+                  <input value={form.asegurado_apellido_materno} onChange={(e) => setF("asegurado_apellido_materno", e.target.value.toUpperCase())} className={inpModal} />
+                </div>
+                {!esRegistroParcial && (
+                  <div>
+                    <label className={lblModal}>Tipo</label>
+                    <select value={form.tipo} onChange={(e) => setF("tipo", e.target.value)} className={inpModal}>
+                      <option value="">Selecciona...</option>
+                      {TIPO_OPT.map((o) => <option key={o}>{o}</option>)}
+                    </select>
+                  </div>
+                )}
+                {!esRegistroParcial && (
+                  <div>
+                    <label className={lblModal}>Uso</label>
+                    <input value={form.uso} onChange={(e) => setF("uso", e.target.value.toUpperCase())} className={inpModal} />
+                  </div>
+                )}
+                {!esRegistroParcial && (
+                  <div>
+                    <label className={lblModal}>Servicio</label>
+                    <input value={form.servicio} onChange={(e) => setF("servicio", e.target.value.toUpperCase())} className={inpModal} />
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

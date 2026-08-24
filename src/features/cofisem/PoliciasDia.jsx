@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
 import CompletarPolizaModal, {
@@ -215,6 +215,7 @@ export default function PoliciasDia({ usuario }) {
   const [guardando, setGuardando] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [modalRow, setModalRow] = useState(null);
+  const [modalEditar, setModalEditar] = useState(false);
   const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | null
   const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | ... | null
   const [corteInfo, setCorteInfo] = useState(null);
@@ -1770,10 +1771,29 @@ export default function PoliciasDia({ usuario }) {
                       {fmt(p.fecha_emision)}
                     </td>
                     <td className="px-4 py-3">
-                      <CompletarBadge
-                        completado={p.completado}
-                        onClick={() => !corteCerrado && setModalRow(p)}
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <CompletarBadge
+                          completado={p.completado}
+                          onClick={() => {
+                            if (corteCerrado) return;
+                            setModalEditar(false);
+                            setModalRow(p);
+                          }}
+                        />
+                        {!corteCerrado && (
+                          <button
+                            type="button"
+                            title="Editar todos los datos de la póliza"
+                            onClick={() => {
+                              setModalEditar(true);
+                              setModalRow(p);
+                            }}
+                            className="w-7 h-7 rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center justify-center text-gray-400 hover:text-[#1447e6] transition-colors"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3">
                       {!corteCerrado && (
@@ -1827,10 +1847,22 @@ export default function PoliciasDia({ usuario }) {
       <CompletarPolizaModal
         row={modalRow}
         usuario={usuario}
-        onClose={() => setModalRow(null)}
-        onSaved={(data) => {
-          setPolizas((prev) => prev.map((p) => (p.id === data.id ? data : p)));
+        soloEditar={modalEditar}
+        onClose={() => {
           setModalRow(null);
+          setModalEditar(false);
+        }}
+        onSaved={(data) => {
+          // Si al editar se movió a otro corte, ya no pertenece a la
+          // lista del día que se está viendo — se quita en vez de
+          // actualizarla in situ.
+          setPolizas((prev) =>
+            data.fecha_corte === fechaVista
+              ? prev.map((p) => (p.id === data.id ? data : p))
+              : prev.filter((p) => p.id !== data.id),
+          );
+          setModalRow(null);
+          setModalEditar(false);
         }}
       />
     </div>
