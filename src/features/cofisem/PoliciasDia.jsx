@@ -22,6 +22,7 @@ import {
 } from "../../services/documentacionPoliza";
 import { PAGOS_COMPROBANTE_BUCKET } from "../../services/comprobantesPagoCofisem";
 import { fetchVendedores, crearVendedor } from "../../services/vendedores";
+import { fetchCoberturasActivas } from "../../services/coberturas";
 import SelectTypeahead from "../../components/SelectTypeahead";
 import ModalNuevoVendedor from "../operador/components/ModalNuevoVendedor";
 import { hoyISO } from "../../utils/fecha";
@@ -61,6 +62,24 @@ const FORMA_PAGO_OPT = [
 // que aquí no hay cuota 2+ que elegir (ver "Cuota a registrar" abajo).
 const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT;
 const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
+
+// Anchos fijos de la tabla "Pólizas del día" (deben sumar 100%) — se usan
+// tanto en el <colgroup> como en los <th>, para que la tabla quepa en el
+// ancho del contenedor sin necesidad de scroll horizontal.
+const COLUMNAS_TABLA = [
+  { label: "#", width: "5%" },
+  { label: "Aseguradora", width: "8%" },
+  { label: "Póliza", width: "10%" },
+  { label: "Folio", width: "5%" },
+  { label: "Asegurado", width: "10%" },
+  { label: "Vendedor", width: "10%" },
+  { label: "Cobertura", width: "8%" },
+  { label: "Forma Pago", width: "8%" },
+  { label: "Cuota", width: "5%" },
+  { label: "Pago", width: "8%" },
+  { label: "F. Emisión", width: "8%" },
+  { label: "Acción", width: "15%" },
+];
 
 // Catálogo Aseguradora → Uso → Servicio. El Uso se filtra por aseguradora
 // y el Servicio se filtra por aseguradora + uso. Ajusta aquí si algún
@@ -180,6 +199,17 @@ const fmt = (d) =>
       })
     : "—";
 const $ = (v) => `$${n(v).toFixed(2)}`;
+// Para columnas angostas (Asegurado, Vendedor): deja la primera palabra
+// completa y abrevia el resto a su inicial — "FRANCISCO GUTIERREZ GARCIA"
+// → "FRANCISCO G. G."
+const abreviarNombre = (nombre) => {
+  const partes = (nombre || "").trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return "—";
+  const [primero, ...resto] = partes;
+  return [primero, ...resto.map((p) => p.charAt(0).toUpperCase() + ".")].join(
+    " ",
+  );
+};
 const fmtLargo = (d) =>
   d
     ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", {
@@ -204,6 +234,7 @@ function SeccionHeader({ children }) {
 export default function PoliciasDia({ usuario }) {
   const [polizas, setPolizas] = useState([]);
   const [aseguradoras, setAseguradoras] = useState([]);
+  const [coberturasGaman, setCoberturasGaman] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [vista, setVista] = useState("lista"); // "lista" | "form"
@@ -231,6 +262,7 @@ export default function PoliciasDia({ usuario }) {
     cargarAseguradoras();
     cargarCorteInfo();
     cargarVendedores();
+    cargarCoberturasGaman();
   }, []);
 
   useEffect(() => {
@@ -283,6 +315,19 @@ export default function PoliciasDia({ usuario }) {
     if (data) setAseguradoras(data.map((a) => a.nombre).filter(Boolean));
   }
 
+  // Aseguradora GAMAN: la cobertura no es una categoría genérica (Amplia/
+  // Limitada/Básica) sino el nombre real del producto — se jala del mismo
+  // catálogo que usa la emisión de pólizas en GAMAN, para no perder
+  // precisión ni desincronizarse si allá cambian los nombres.
+  async function cargarCoberturasGaman() {
+    try {
+      const data = await fetchCoberturasActivas();
+      setCoberturasGaman((data ?? []).map((c) => c.nombre).filter(Boolean));
+    } catch (e) {
+      setErrorMsg(e.message);
+    }
+  }
+
   // Vendedores de GAMAN y COFISEM son la misma lista — sin filtrar por oficina.
   async function cargarVendedores() {
     try {
@@ -306,7 +351,7 @@ export default function PoliciasDia({ usuario }) {
         .from("polizas_cofisem")
         .select("*")
         .eq("fecha_corte", fechaVista)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true });
       if (usuario?.id) query = query.eq("creado_por", usuario.id);
       const { data, error } = await query;
       if (error) throw error;
@@ -345,6 +390,8 @@ export default function PoliciasDia({ usuario }) {
   // libre y no bloquea el guardado.
   const usoObligatorio = usosDisponibles.length > 0;
   const servicioObligatorio = serviciosDisponibles.length > 0;
+  const coberturaOpts =
+    form.aseguradora === "GAMAN" ? coberturasGaman : COBERTURA_OPT;
 
   function handleNueva() {
     setForm({ ...FORM_VACIO });
@@ -599,7 +646,7 @@ export default function PoliciasDia({ usuario }) {
         if (errCuota) throw errCuota;
       }
 
-      setPolizas((prev) => [data, ...prev]);
+      setPolizas((prev) => [...prev, data]);
       setVista("lista");
     } catch (e) {
       setErrorMsg(e.message);
@@ -833,14 +880,21 @@ export default function PoliciasDia({ usuario }) {
                 </label>
                 <select
                   value={form.aseguradora}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const aseguradora = e.target.value;
+                    // GAMAN solo emite pólizas de taxi de servicio público —
+                    // se precargan para no obligar al operador a elegirlas
+                    // manualmente cada vez (sigue siendo editable).
+                    const esGaman = aseguradora === "GAMAN";
                     setForm((prev) => ({
                       ...prev,
-                      aseguradora: e.target.value,
-                      uso: "",
-                      servicio: "",
-                    }))
-                  }
+                      aseguradora,
+                      uso: esGaman ? "SERVICIO" : "",
+                      servicio: esGaman ? "PUBLICO" : "",
+                      tipo: esGaman ? "TAXI" : prev.tipo,
+                      cobertura: "",
+                    }));
+                  }}
                   required
                   className={inpCls}
                 >
@@ -878,10 +932,15 @@ export default function PoliciasDia({ usuario }) {
                 <select
                   value={form.cobertura}
                   onChange={(e) => setF("cobertura", e.target.value)}
+                  disabled={!form.aseguradora}
                   className={inpCls}
                 >
-                  <option value="">Selecciona...</option>
-                  {COBERTURA_OPT.map((o) => (
+                  <option value="">
+                    {!form.aseguradora
+                      ? "Elige aseguradora primero"
+                      : "Selecciona..."}
+                  </option>
+                  {coberturaOpts.map((o) => (
                     <option key={o}>{o}</option>
                   ))}
                 </select>
@@ -1691,35 +1750,26 @@ export default function PoliciasDia({ usuario }) {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto max-w-[100vw]">
+            <table className="w-full text-xs table-fixed">
+              <colgroup>
+                {COLUMNAS_TABLA.map(({ label, width }) => (
+                  <col key={label} style={{ width }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {[
-                    "#",
-                    "Aseguradora",
-                    "Póliza",
-                    "Folio",
-                    "Asegurado",
-                    "Vendedor",
-                    "Cobertura",
-                    "Uso",
-                    "Servicio",
-                    "Forma Pago",
-                    "Cuota",
-                    "Pago",
-                    "Efectivo",
-                    "F. Emisión",
-                    "Acción",
-                    "",
-                  ].map((h) => (
+                  {COLUMNAS_TABLA.slice(0, -1).map(({ label }) => (
                     <th
-                      key={h}
-                      className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap"
+                      key={label}
+                      className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap truncate"
                     >
-                      {h}
+                      {label}
                     </th>
                   ))}
+                  <th className="sticky right-0 z-10 bg-gray-50 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.15)]">
+                    Acción
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -1728,49 +1778,46 @@ export default function PoliciasDia({ usuario }) {
                     key={p.id}
                     className="hover:bg-gray-50/60 transition-colors"
                   >
-                    <td className="px-4 py-3 font-bold text-[#1447e6]">
+                    <td className="px-4 py-3 font-bold text-[#1447e6] truncate">
                       {i + 1}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">
+                    <td className="px-4 py-3 font-semibold text-gray-700 truncate">
                       {p.aseguradora || "—"}
                     </td>
-                    <td className="px-4 py-3 font-mono font-bold text-[#1447e6]">
+                    <td className="px-4 py-3 font-mono font-bold text-[#1447e6] truncate">
                       {p.numero_poliza || "—"}
                     </td>
-                    <td className="px-4 py-3 font-mono text-gray-500">
+                    <td className="px-4 py-3 font-mono text-gray-500 truncate">
                       {p.folio || "—"}
                     </td>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap max-w-[160px] truncate">
-                      {p.asegurado_nombre || "—"}
+                    <td
+                      className="px-4 py-3 text-gray-700 truncate"
+                      title={p.asegurado_nombre || "—"}
+                    >
+                      {abreviarNombre(p.asegurado_nombre)}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                      {p.vendedor_nombre || "—"}
+                    <td
+                      className="px-4 py-3 text-gray-600 truncate"
+                      title={p.vendedor_nombre || "—"}
+                    >
+                      {abreviarNombre(p.vendedor_nombre)}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 max-w-[130px] truncate">
+                    <td className="px-4 py-3 text-gray-500 truncate">
                       {p.cobertura || "—"}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 max-w-[110px] truncate">
-                      {p.uso || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 max-w-[130px] truncate">
-                      {p.servicio || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-600 truncate">
                       {p.forma_pago || "—"}
                     </td>
-                    <td className="px-4 py-3 text-center font-bold text-gray-500">
+                    <td className="px-4 py-3 text-center font-bold text-gray-500 truncate">
                       {p.num_cuota_pago ?? 1}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-emerald-700">
+                    <td className="px-4 py-3 text-right font-bold text-emerald-700 truncate">
                       {$(p.prima_primer_pago)}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-[#1447e6]">
-                      {$(p.efectivo)}
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-400 truncate">
                       {fmt(p.fecha_emision)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="sticky right-0 z-10 bg-white px-4 py-3 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.15)]">
                       <div className="flex items-center gap-1.5">
                         <CompletarBadge
                           completado={p.completado}
@@ -1793,29 +1840,27 @@ export default function PoliciasDia({ usuario }) {
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      {!corteCerrado && (
-                        <button
-                          onClick={() => handleEliminar(p)}
-                          className="w-6 h-6 rounded-md hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors"
-                        >
-                          <svg
-                            className="w-3.5 h-3.5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth="2"
+                        {!corteCerrado && (
+                          <button
+                            onClick={() => handleEliminar(p)}
+                            className="w-6 h-6 rounded-md hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        </button>
-                      )}
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1824,7 +1869,7 @@ export default function PoliciasDia({ usuario }) {
               <tfoot>
                 <tr className="bg-[#1447e6]/5 border-t-2 border-[#1447e6]/20">
                   <td
-                    colSpan={10}
+                    colSpan={8}
                     className="px-4 py-3 text-right text-xs font-bold text-[#1447e6]"
                   >
                     TOTALES
@@ -1833,10 +1878,8 @@ export default function PoliciasDia({ usuario }) {
                   <td className="px-4 py-3 text-right text-xs font-bold text-emerald-700">
                     {$(polizas.reduce((s, p) => s + n(p.prima_primer_pago), 0))}
                   </td>
-                  <td className="px-4 py-3 text-right text-xs font-bold text-[#1447e6]">
-                    {$(polizas.reduce((s, p) => s + n(p.efectivo), 0))}
-                  </td>
-                  <td colSpan={3} />
+                  <td />
+                  <td className="sticky right-0 z-10 bg-[#1447e6]/5" />
                 </tr>
               </tfoot>
             </table>

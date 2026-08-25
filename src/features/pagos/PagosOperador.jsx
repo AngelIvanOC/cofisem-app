@@ -696,15 +696,30 @@ function ModalCuotasPoliza({
                     {!c._virtual &&
                       !grupo.cancelada &&
                       (esGaman ? (
-                        <button
-                          type="button"
-                          onClick={() => onAdjuntarArchivo(c)}
-                          className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-[11px] font-bold whitespace-nowrap"
-                        >
-                          {c.comprobante_url
-                            ? "Cambiar archivo"
-                            : "Adjuntar archivo"}
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => onAdjuntarArchivo(c)}
+                            className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-[11px] font-bold whitespace-nowrap"
+                          >
+                            {c.comprobante_url
+                              ? "Cambiar archivo"
+                              : "Adjuntar archivo"}
+                          </button>
+                          {/* Cuota 1 de una póliza GAMAN se cobra desde
+                              "Completar" (polizas_cofisem), no aquí — solo
+                              cuotas 2+ necesitan capturar su propio
+                              efectivo/cheque/tdc para sumar al corte. */}
+                          {c.num_cuota > 1 && c.estatus === "PENDIENTE" && (
+                            <button
+                              type="button"
+                              onClick={() => onMarcarRecibido(c)}
+                              className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold whitespace-nowrap"
+                            >
+                              Registrar cobro
+                            </button>
+                          )}
+                        </>
                       ) : (
                         c.estatus === "PENDIENTE" && (
                           <>

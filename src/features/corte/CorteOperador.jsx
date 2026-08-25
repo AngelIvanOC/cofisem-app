@@ -156,9 +156,15 @@ export default function CorteOperador({ usuario }) {
   useEffect(() => {
     setLoading(true);
     cargar();
-    cargarEntregaEfectivo();
-    cargarCuotasDia();
     cargarComisionesDia();
+    // cargarCuotasDia necesita saber si el corte de este día ya está
+    // cerrado (no solo si es "hoy") — un corte de un día pasado que
+    // sigue abierto (el operador se está poniendo al corriente) debe
+    // seguir mostrando cuotas pendientes/vencidas igual que si fuera hoy.
+    (async () => {
+      const cerrado = await cargarEntregaEfectivo();
+      await cargarCuotasDia(cerrado);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fechaCorte]);
 
@@ -212,31 +218,54 @@ export default function CorteOperador({ usuario }) {
 
   // Cuotas subsecuentes que pertenecen al corte de este día:
   //  - Ya cobradas ESE día (fecha_recibido = fechaCorte) — hecho histórico,
-  //    aplica aunque se esté consultando un día pasado.
-  //  - Todavía PENDIENTE, con vencimiento hoy o antes (no se pierden de
-  //    vista mientras no se cobren) o adelantadas a hoy — solo tiene
-  //    sentido mostrarlas como "pendientes de cobrar" en el día de hoy,
-  //    no al consultar un corte pasado ya cerrado.
-  // Se excluyen las cuotas de pólizas dadas de baja (perdida). La cuota
-  // que corresponde al pago capturado al crear un registro parcial
-  // (num_cuota_pago) nunca aparece aquí — se captura directo en
-  // polizas_cofisem, igual que la cuota 1 de una póliza completa, y el
-  // trigger de BD no genera ninguna fila en pagos_cofisem para ella.
-  async function cargarCuotasDia() {
+  //    aplica siempre, aunque el corte ya esté cerrado.
+  //  - GAMAN ya la marcó como pagada/adeudo ese mismo día (pago_gaman.
+  //    fecha_pago = fechaCorte) pero COFISEM todavía no ha capturado su
+  //    efectivo/cheque/tdc — se muestra igual que una cuota 1 recién
+  //    creada, con acción pendiente de completar, en vez de quedar
+  //    invisible hasta que alguien la busque manualmente en Pagos.
+  //  - Todavía PENDIENTE, cuyo vencimiento es EXACTAMENTE este día, o que
+  //    se adelantaron a este día. Ojo: es "=", no "<=" — con el histórico
+  //    de GAMAN hay cientos de cuotas con vencimientos ya pasados, y si
+  //    se usara "<=" todas esas se amontonarían en el corte de HOY cada
+  //    vez que se abre; en vez de eso, cada una se queda en el corte del
+  //    día que realmente le corresponde (aunque ya haya pasado — ahí se
+  //    consulta con el selector de fecha) hasta que se registre su cobro.
+  // Estas últimas dos solo aplican mientras el corte de este día siga
+  // abierto — un corte ya cerrado se queda como registro histórico
+  // congelado, sin "descubrir" pendientes nuevos cada vez que se abre.
+  // Se excluyen las cuotas de pólizas dadas de baja (perdida). La cuota 1
+  // nunca aparece aquí — se captura directo en polizas_cofisem (vía
+  // "Completar"), tanto para pólizas normales como para las vinculadas a
+  // GAMAN, y el trigger de BD no genera ninguna fila en pagos_cofisem
+  // para ella salvo el link informativo de GAMAN (pago_gaman_id), que
+  // por eso se descarta aquí con num_cuota > 1 — de lo contrario esa
+  // cuota 1 de GAMAN se contaría dos veces (aquí y en `registros`).
+  async function cargarCuotasDia(corteEstaCerrado) {
     try {
       let query = supabase
         .from("pagos_cofisem")
-        .select("*, polizas_cofisem(*)")
-        .is("pago_gaman_id", null);
+        .select("*, polizas_cofisem(*), pago_gaman:pagos(fecha_pago)")
+        .gt("num_cuota", 1);
       if (usuario?.id) query = query.eq("operador_id", usuario.id);
-      query = esHoy
-        ? query.or(
-            `fecha_recibido.eq.${fechaCorte},and(estatus.eq.PENDIENTE,or(fecha_vencimiento.lte.${fechaCorte},fecha_adelantado.eq.${fechaCorte}))`,
-          )
-        : query.eq("fecha_recibido", fechaCorte);
       const { data, error } = await query;
       if (error) throw error;
-      const filtradas = (data ?? []).filter(
+      const relevantes = (data ?? []).filter((c) => {
+        if (c.fecha_recibido === fechaCorte) return true;
+        if (corteEstaCerrado) return false;
+        if (
+          c.pago_gaman_id &&
+          c.estatus === "PENDIENTE" &&
+          c.pago_gaman?.fecha_pago === fechaCorte
+        )
+          return true;
+        return (
+          c.estatus === "PENDIENTE" &&
+          (c.fecha_vencimiento === fechaCorte ||
+            c.fecha_adelantado === fechaCorte)
+        );
+      });
+      const filtradas = relevantes.filter(
         (c) => c.polizas_cofisem && !c.polizas_cofisem.perdida,
       );
       setCuotasDia(filtradas);
@@ -283,8 +312,10 @@ export default function CorteOperador({ usuario }) {
       // mismo texto que el operador ve en esta caja. "observaciones" es
       // un campo aparte: la nota con la que el admin regresa el corte.
       setObservaciones(data?.nota_operador_cierre ?? "");
+      return !!data?.cerrado;
     } catch {
       // No bloquea el corte si esto falla — se puede definir después.
+      return false;
     }
   }
 

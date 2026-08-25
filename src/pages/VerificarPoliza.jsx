@@ -313,6 +313,7 @@ export default function VerificarPoliza() {
                 <Row label="No. Constancia" value={poliza.constancia} mono />
                 <Row label="Oficina Emisora" value={oficinaNombre} />
                 <Row label="Asegurado" value={nombre} />
+                <Row label="Vendedor" value={poliza.vendedor_nombre} />
               </div>
 
               {/* ── Coberturas ──────────────────────────────────── */}
