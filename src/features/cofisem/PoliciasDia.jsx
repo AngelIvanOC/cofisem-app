@@ -106,6 +106,7 @@ const USO_SERVICIO_CATALOGO = [
   { aseguradora: "BANORTE", uso: "PARICULAR", servicio: "PARTICULAR" },
   { aseguradora: "GAMAN", uso: "SERVICIO", servicio: "PUBLICO" },
   { aseguradora: "HDI", uso: "CARGA COMERCIAL", servicio: "PARTICULAR" },
+  { aseguradora: "SURA", uso: "PARTICULAR", servicio: "SERVICIO PARTICULAR" },
 ];
 
 // Entre cuántos pagos se reparte la Prima T. Anual según la forma de pago —
