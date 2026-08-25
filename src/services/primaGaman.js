@@ -57,3 +57,36 @@ export async function obtenerPrimaGaman(polizaId) {
     cuota1Pagada: cuota.estatus !== "PENDIENTE",
   };
 }
+
+// Igual que obtenerPrimaGaman, pero para CUALQUIER cuota (2, 3, 4...) de una
+// póliza real de GAMAN — se usa al registrar el cobro de una cuota
+// subsecuente (RegistrarCobroModal) para que "Prima Neta de la cuota" salga
+// calculada con la misma fórmula del recibo oficial, en vez de quedar en
+// blanco esperando que el operador la saque a mano del recibo físico.
+export async function obtenerImportesCuotaGaman(polizaId, numCuota) {
+  const { data: pol, error } = await supabase
+    .from("polizas")
+    .select(`
+      id, forma_pago, fecha_inicio,
+      coberturas(nombre, prima_neta, prima_total, regla_pago, prima_base)
+    `)
+    .eq("id", polizaId)
+    .single();
+  if (error) throw error;
+
+  const cfg = await fetchConfigCostos(pol.fecha_inicio);
+  const polizaObj = construirPolizaRecibo(pol, cfg);
+
+  const { data: pago, error: errPago } = await supabase
+    .from("pagos")
+    .select("id, num_cuota, monto, estatus, fecha_pago, fecha_vencimiento")
+    .eq("poliza_id", polizaId)
+    .eq("num_cuota", numCuota)
+    .maybeSingle();
+  if (errPago) throw errPago;
+  if (!pago) return null;
+
+  const cuota = mapCuota(pago, numCuota - 1);
+  const importes = calcularImportesRecibo(polizaObj, cuota);
+  return { primaTotal: importes.total, primaNeta: importes.primaNeta };
+}

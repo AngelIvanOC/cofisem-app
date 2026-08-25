@@ -26,6 +26,7 @@ import {
   MAX_PAGO_COMPROBANTE_BYTES,
 } from "../../services/comprobantesPagoCofisem";
 import { ComprobanteField } from "../corte/CompletarPolizaModal";
+import { obtenerImportesCuotaGaman } from "../../services/primaGaman";
 import { hoyISO } from "../../utils/fecha";
 
 const n = (v) => parseFloat(v) || 0;
@@ -118,8 +119,34 @@ export default function RegistrarCobroModal({
     setEndosoAbierto(!!row.endoso_url || !!row.endoso_nota);
   }, [row]);
 
+  // Cuota ligada a un pago real de GAMAN: la prima total/neta no se
+  // captura a mano — se calcula con la misma fórmula del recibo oficial
+  // (ver utils/recibo.js), igual que ya se hace para la cuota 1 en
+  // CompletarPolizaModal, para que nunca se desincronice del recibo real.
+  useEffect(() => {
+    const polizaId = row?.polizas_cofisem?.poliza_id;
+    if (!row?.pago_gaman_id || !polizaId) return;
+    let vivo = true;
+    obtenerImportesCuotaGaman(polizaId, row.num_cuota)
+      .then((importes) => {
+        if (!vivo || !importes) return;
+        setForm((f) => ({
+          ...f,
+          prima_total: importes.primaTotal,
+          prima_neta: importes.primaNeta,
+        }));
+      })
+      .catch((e) => {
+        if (vivo) setError("No se pudo leer la prima de GAMAN: " + e.message);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [row]);
+
   if (!row) return null;
   const p = row.polizas_cofisem ?? {};
+  const esGaman = !!row.pago_gaman_id;
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const chk = faltantes(form);
   const falta = (k) => intento && chk.detalle[k];
@@ -276,8 +303,11 @@ export default function RegistrarCobroModal({
                 min="0"
                 step="0.01"
                 value={form.prima_total}
+                disabled={esGaman}
                 onChange={(e) => setF("prima_total", e.target.value)}
-                className={inp}
+                className={
+                  inp + (esGaman ? " bg-gray-100 text-gray-400" : "")
+                }
               />
             </div>
             <div>
@@ -287,8 +317,11 @@ export default function RegistrarCobroModal({
                 min="0"
                 step="0.01"
                 value={form.prima_neta}
+                disabled={esGaman}
                 onChange={(e) => setF("prima_neta", e.target.value)}
-                className={inp}
+                className={
+                  inp + (esGaman ? " bg-gray-100 text-gray-400" : "")
+                }
               />
             </div>
           </div>

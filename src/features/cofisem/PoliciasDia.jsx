@@ -488,6 +488,31 @@ export default function PoliciasDia({ usuario }) {
     setGuardando(true);
     setErrorMsg(null);
     try {
+      // Candado anti-duplicados: "Nueva póliza" solo sirve para el
+      // PRIMER registro de una aseguradora + no. de póliza (completo o
+      // parcial) — en cuanto existe cualquiera de los dos, la póliza ya
+      // quedó creada en el sistema y sus siguientes cuotas se marcan
+      // desde Pagos (ya aparecen ahí solas, generadas por el trigger),
+      // nunca volviendo a "Nueva póliza". Revisa en todo el sistema, no
+      // solo lo del operador actual.
+      const numeroPolizaNorm = form.numero_poliza.trim().toUpperCase();
+      const { data: existentes, error: errDup } = await supabase
+        .from("polizas_cofisem")
+        .select("id")
+        .eq("aseguradora", form.aseguradora)
+        .eq("numero_poliza", numeroPolizaNorm)
+        .limit(1);
+      if (errDup) throw errDup;
+      if ((existentes ?? []).length > 0) {
+        setGuardando(false);
+        await Swal.fire({
+          icon: "warning",
+          title: "Esa póliza ya existe",
+          html: `La póliza <strong>${numeroPolizaNorm}</strong> de <strong>${form.aseguradora}</strong> ya está registrada en el sistema.<br/><br/>Si vienes a cobrar una cuota siguiente, regístrala desde <strong>Pagos</strong>, no aquí.`,
+          confirmButtonColor: "#1447e6",
+        });
+        return;
+      }
       const vendedorSel = conVendedor
         ? vendedores.find((v) => v.id === form.vendedor_id)
         : null;
