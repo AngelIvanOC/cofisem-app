@@ -53,6 +53,7 @@ export default function CorteAnalista({ usuario }) {
 
   const [registrosDia, setRegistrosDia] = useState([]);       // todas las oficinas, esa fecha
   const [entregasDia, setEntregasDia] = useState([]);          // corte_efectivo_entrega, todas las oficinas, esa fecha
+  const [notasEndosoDia, setNotasEndosoDia] = useState([]);    // polizas_historial: endosos tipo A/C, esa fecha
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [guardandoId, setGuardandoId] = useState(null); // id de corte_efectivo_entrega que se está guardando
@@ -147,14 +148,27 @@ export default function CorteAnalista({ usuario }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: polizas, error: e1 }, { data: entregas, error: e2 }] = await Promise.all([
+      const [{ data: polizas, error: e1 }, { data: entregas, error: e2 }, { data: notas, error: e3 }] = await Promise.all([
         supabase.from("polizas_cofisem").select("*").eq("fecha_corte", fecha).order("created_at", { ascending: true }),
         supabase.from("corte_efectivo_entrega").select("*").eq("fecha_corte", fecha),
+        // Endosos tipo A (edición) y C (cancelación total) — no tocan primas.
+        // El tipo B (cancelación a prorrata) se excluye porque ya se refleja
+        // aparte en su propio flujo.
+        supabase
+          .from("polizas_historial")
+          .select("id, poliza_id, notas, cambiado_at, cambiado_por, polizas(numero_poliza, constancia)")
+          .in("tipo_endoso", ["A", "C"]),
       ]);
       if (e1) throw e1;
       if (e2) throw e2;
+      if (e3) throw e3;
       setRegistrosDia(polizas ?? []);
       setEntregasDia(entregas ?? []);
+      setNotasEndosoDia(
+        (notas ?? []).filter(
+          (n) => n.cambiado_at && new Date(n.cambiado_at).toLocaleDateString("en-CA") === fecha,
+        ),
+      );
       setErrorMsg(null);
     } catch (e) {
       setErrorMsg(e.message);
@@ -179,7 +193,8 @@ export default function CorteAnalista({ usuario }) {
   const cortesOperador = operadorIds.map((opId) => {
     const entrega = entregasOficina.find((e) => e.operador_id === opId) ?? null;
     const registros = registrosOficina.filter((r) => r.creado_por === opId);
-    return { operadorId: opId, entrega, registros, totales: totalesDe(registros) };
+    const notas = notasEndosoDia.filter((n) => n.cambiado_por === opId);
+    return { operadorId: opId, entrega, registros, notas, totales: totalesDe(registros) };
   });
 
   async function actualizarEntrega(entregaId, cambios) {
@@ -382,7 +397,7 @@ export default function CorteAnalista({ usuario }) {
               Sin actividad de ningún operador en {oficina?.nombre ?? "esta oficina"} el {fmt(fecha)}.
             </div>
           ) : (
-            cortesOperador.map(({ operadorId, entrega, registros, totales: t }) => {
+            cortesOperador.map(({ operadorId, entrega, registros, notas, totales: t }) => {
               const cerrado = !!entrega?.cerrado;
               const estatusRevision = entrega?.estatus_revision ?? "PENDIENTE";
               const revMeta = REVISION_META[estatusRevision] ?? REVISION_META.PENDIENTE;
@@ -461,7 +476,7 @@ export default function CorteAnalista({ usuario }) {
                       <span className="text-white/50 text-xs">{registros.length} registros</span>
                     </div>
 
-                    {registros.length === 0 ? (
+                    {registros.length === 0 && notas.length === 0 ? (
                       <div className="text-center py-10 text-sm text-gray-400">Sin pólizas registradas en este corte.</div>
                     ) : (
                       <div className="overflow-x-auto">
@@ -523,6 +538,25 @@ export default function CorteAnalista({ usuario }) {
                                 </tr>
                               );
                             })}
+
+                            {/* Notas de endoso (tipo A/C) — informativas, en
+                                gris, no suman a ningún total. */}
+                            {notas.map((nt) => (
+                              <tr key={`nota-${nt.id}`} className="bg-gray-100/60">
+                                <td className="px-3 py-2.5 text-center font-bold text-gray-400">•</td>
+                                <td className="px-3 py-2.5 text-gray-400">—</td>
+                                <td className="px-3 py-2.5 font-mono font-bold text-gray-500 whitespace-nowrap">
+                                  {nt.polizas?.constancia || nt.polizas?.numero_poliza || "—"}
+                                  <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500 align-middle whitespace-nowrap">
+                                    endoso
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">
+                                  {fmt(new Date(nt.cambiado_at).toLocaleDateString("en-CA"))}
+                                </td>
+                                <td colSpan={14} className="px-3 py-2.5 text-gray-500 italic">{nt.notas}</td>
+                              </tr>
+                            ))}
 
                             <tr className="bg-[#1447e6]/5 font-bold border-t-2 border-[#1447e6]/20">
                               <td colSpan={8} className="px-3 py-3 text-right text-xs font-bold text-[#1447e6]">TOTALES</td>

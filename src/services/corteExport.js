@@ -59,6 +59,7 @@ const FILL_HEADER_H2 = { fgColor: { rgb: "FFC0C0C0" } }; // gris — encabezados
 const FILL_TOTAL = { fgColor: { rgb: "FFFFFFCC" } }; // amarillo — total efectivo final destacado
 const FILL_CUOTA = { fgColor: { rgb: "FFFFF3E0" } }; // ámbar claro — pagos subsecuentes (propio del sistema)
 const FILL_COMISION = { fgColor: { rgb: "FFFCE4E4" } }; // rojo pastel — filas de comisión (propio del sistema)
+const FILL_NOTA = { fgColor: { rgb: "FFEDEDED" } }; // gris — notas de endoso tipo A/C (propio del sistema)
 
 const FONT_LABEL_H1 = { name: "Arial", sz: 10, color: { rgb: "FF000000" } };
 const FONT_VALUE_H1 = { name: "Arial", sz: 12, bold: true, color: { rgb: "FF000000" } };
@@ -67,6 +68,7 @@ const FONT_TABLE_HEADER_H1 = { name: "Arial", sz: 9, bold: true, color: { rgb: "
 const FONT_BODY_H1 = { name: "Arial", sz: 8, bold: true, color: { rgb: "FF000000" } };
 const FONT_BODY_H1_PLAIN = { name: "Arial", sz: 8, color: { rgb: "FF000000" } };
 const FONT_COMISION = { name: "Arial", sz: 8, bold: true, color: { rgb: "FFB91C1C" } };
+const FONT_NOTA = { name: "Arial", sz: 8, italic: true, color: { rgb: "FF6B7280" } };
 const FONT_TOTAL_H1 = { name: "Arial", sz: 10, bold: true, color: { rgb: "FF000000" } };
 const FONT_RESUMEN_LABEL = { name: "Arial", sz: 6, color: { rgb: "FF000000" } };
 const FONT_RESUMEN_VALUE = { name: "Arial", sz: 7, bold: true, color: { rgb: "FF000000" } };
@@ -196,9 +198,28 @@ function comisionAFila(c) {
   };
 }
 
+// Columnas que sí aplican a una fila de nota de endoso (tipo A/C) — el resto
+// se deja en blanco porque una nota no es una póliza ni un cobro, solo
+// informa qué póliza tuvo un endoso, cuándo y por qué (sin tocar primas).
+const CLAVES_NOTA = new Set(["no", "no2", "numero_poliza", "fecha_emision", "observaciones"]);
+
+function notaAFila(nt) {
+  return {
+    _esNota: true,
+    numero_poliza: nt?.polizas?.constancia || nt?.polizas?.numero_poliza,
+    fecha_emision: nt?.cambiado_at,
+    observaciones: nt?.notas,
+  };
+}
+
 function valorColumna(r, col, index) {
-  if (col.key === "no" || col.key === "no2") return r?._esComision ? "−" : index + 1;
+  if (col.key === "no" || col.key === "no2") {
+    if (r?._esComision) return "−";
+    if (r?._esNota) return "•";
+    return index + 1;
+  }
   if (r?._esComision && !CLAVES_COMISION.has(col.key)) return "";
+  if (r?._esNota && !CLAVES_NOTA.has(col.key)) return "";
   const raw = r?.[col.key];
   switch (col.tipo) {
     case "dinero":
@@ -336,7 +357,7 @@ function construirCajaEncabezado(ws, merges, { colInicio, colFin, oficina, fecha
   }
 }
 
-function construirHojaPolizas({ registros, comisiones = [], billetes = {}, observaciones, oficina, fechaLabel, generadoPor, totales }) {
+function construirHojaPolizas({ registros, comisiones = [], notasEndoso = [], billetes = {}, observaciones, oficina, fechaLabel, generadoPor, totales }) {
   const ws = {};
   const numCols = COLUMNAS.length;
   const lastCol = numCols - 1;
@@ -367,10 +388,11 @@ function construirHojaPolizas({ registros, comisiones = [], billetes = {}, obser
   const filaDatosInicio = 7;
   merges.push(...construirEncabezadoTabla(ws, filaGrupo, filaSub));
 
-  // ---- Filas de datos — pólizas y, al final, las comisiones (vale) del
-  //      día como filas aparte en rojo, con "−" en "No." y el monto en
-  //      negativo bajo "Prima T. Pago" (igual que en pantalla). ----
-  const filasDatos = [...registros, ...comisiones.map(comisionAFila)];
+  // ---- Filas de datos — pólizas, luego las comisiones (vale) del día en
+  //      rojo, y al final las notas de endoso (tipo A/C) en gris, con "−"/"•"
+  //      en "No." (igual que en pantalla). Ni comisiones ni notas suman a
+  //      ningún total. ----
+  const filasDatos = [...registros, ...comisiones.map(comisionAFila), ...notasEndoso.map(notaAFila)];
   filasDatos.forEach((r, i) => {
     const fila = filaDatosInicio + i;
     const esUltima = i === filasDatos.length - 1;
@@ -379,14 +401,14 @@ function construirHojaPolizas({ registros, comisiones = [], billetes = {}, obser
       const valor = valorColumna(r, col, i);
       const esIndice = col.key === "no" || col.key === "no2";
       const style = {
-        font: r._esComision ? FONT_COMISION : esIndice ? FONT_BODY_H1_PLAIN : FONT_BODY_H1,
+        font: r._esNota ? FONT_NOTA : r._esComision ? FONT_COMISION : esIndice ? FONT_BODY_H1_PLAIN : FONT_BODY_H1,
         alignment: {
           horizontal: alineacionColumna(col.tipo),
           vertical: "center",
           wrapText: col.tipo === "texto",
         },
         border: bordeTabla(c, { esBottom: esUltima }),
-        fill: r._esComision ? FILL_COMISION : r._esCuotaSubsecuente ? FILL_CUOTA : undefined,
+        fill: r._esNota ? FILL_NOTA : r._esComision ? FILL_COMISION : r._esCuotaSubsecuente ? FILL_CUOTA : undefined,
       };
       escribir(
         ws,
@@ -965,6 +987,7 @@ function construirHojaResumen({ registros, comisiones = [], observaciones, ofici
 export function exportarCorteExcel({
   registros = [],
   comisiones = [],
+  notasEndoso = [],
   billetes = {},
   observaciones,
   oficina,
@@ -975,7 +998,7 @@ export function exportarCorteExcel({
 }) {
   const wb = XLSX.utils.book_new();
 
-  const wsPolizas = construirHojaPolizas({ registros, comisiones, billetes, observaciones, oficina, fechaLabel, generadoPor, totales });
+  const wsPolizas = construirHojaPolizas({ registros, comisiones, notasEndoso, billetes, observaciones, oficina, fechaLabel, generadoPor, totales });
   const wsResumen = construirHojaResumen({ registros, comisiones, observaciones, oficina, fechaLabel, totales, generadoPor });
 
   XLSX.utils.book_append_sheet(wb, wsPolizas, "Pólizas");

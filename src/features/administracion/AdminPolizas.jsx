@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
+import { getState, subscribe } from "../../auth";
 import {
   fetchPolizaById,
   buildPolizaPDF,
@@ -92,6 +93,16 @@ function fmtFecha(str) {
   });
 }
 
+// Usuario logueado — se lee del store de auth.js (fuera de React) en vez
+// de recibirlo por props, porque esta página se monta sin props desde
+// App.jsx. Necesario para que endosos/cancelaciones queden atribuidos a
+// quien realmente los hizo (antes se guardaban con cambiado_por: null).
+function useUsuarioActual() {
+  const [usuario, setUsuario] = useState(() => getState().usuario);
+  useEffect(() => subscribe(() => setUsuario(getState().usuario)), []);
+  return usuario;
+}
+
 // ── Modal Endoso ──────────────────────────────────────────────
 const FORM_VACIO = {
   placas: "",
@@ -105,7 +116,7 @@ const FORM_VACIO = {
   concApellido2: "",
 };
 
-function ModalEndoso({ poliza, onClose, onDone }) {
+function ModalEndoso({ poliza, usuario, onClose, onDone }) {
   const [cargando, setCargando] = useState(true);
   const [full, setFull] = useState(null);
   const [perms, setPerms] = useState({
@@ -327,8 +338,9 @@ function ModalEndoso({ poliza, onClose, onDone }) {
       await supabase.from("polizas_historial").insert({
         poliza_id: poliza.id,
         estatus_nuevo: "EDITADA",
+        tipo_endoso: "A",
         notas: descripcion,
-        cambiado_por: null,
+        cambiado_por: usuario?.id ?? null,
       });
 
       onDone();
@@ -665,7 +677,7 @@ function ModalEndoso({ poliza, onClose, onDone }) {
 }
 
 // ── Modal Cancelar ────────────────────────────────────────────
-function ModalCancelar({ poliza, onClose, onDone }) {
+function ModalCancelar({ poliza, usuario, onClose, onDone }) {
   const [motivo, setMotivo] = useState("");
   const [motivoCustom, setMotivoCustom] = useState("");
   const [procesando, setProcesando] = useState(false);
@@ -706,7 +718,7 @@ function ModalCancelar({ poliza, onClose, onDone }) {
       ).toBlob();
       descargarBlob(blob, `ENDOSO_CANCELACION-${constanciaLabel}.pdf`);
 
-      await cancelarPoliza(poliza.id, descripcion, null);
+      await cancelarPoliza(poliza.id, descripcion, usuario?.id ?? null, "C");
 
       onDone();
       Swal.fire({
@@ -886,7 +898,7 @@ function calcularProrrata(poliza, config) {
 }
 
 // ── Modal Cancelar y Devengar (Tipo B) ────────────────────────
-function ModalCancelarProrrata({ poliza, onClose, onDone }) {
+function ModalCancelarProrrata({ poliza, usuario, onClose, onDone }) {
   const [cargando, setCargando] = useState(true);
   const [prorrata, setProrrata] = useState(null);
   const [polizaPDF, setPolizaPDF] = useState(null);
@@ -994,7 +1006,7 @@ function ModalCancelarProrrata({ poliza, onClose, onDone }) {
         <CancelacionProrrataPDF {...propsConConstancia} />,
       ).toBlob();
       descargarBlob(blob, `CANCELACION_PRORRATA-${constanciaLabel}.pdf`);
-      await cancelarPoliza(poliza.id, "CANCELACION POR BAJA DE UNIDAD", null);
+      await cancelarPoliza(poliza.id, "CANCELACION POR BAJA DE UNIDAD", usuario?.id ?? null, "B");
       onDone();
       Swal.fire({
         icon: "success",
@@ -1958,6 +1970,7 @@ function ModalPonerAlCorriente({ poliza, onClose, onDone }) {
 
 // ── Página principal ──────────────────────────────────────────
 export default function AdminPolizas() {
+  const usuario = useUsuarioActual();
   const [polizas, setPolizas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
@@ -2469,6 +2482,7 @@ export default function AdminPolizas() {
       {modal === "endoso" && polSel && (
         <ModalEndoso
           poliza={polSel}
+          usuario={usuario}
           onClose={cerrarModal}
           onDone={() => {
             cerrarModal();
@@ -2479,6 +2493,7 @@ export default function AdminPolizas() {
       {modal === "cancelar" && polSel && (
         <ModalCancelar
           poliza={polSel}
+          usuario={usuario}
           onClose={cerrarModal}
           onDone={() => {
             cerrarModal();
@@ -2489,6 +2504,7 @@ export default function AdminPolizas() {
       {modal === "devengar" && polSel && (
         <ModalCancelarProrrata
           poliza={polSel}
+          usuario={usuario}
           onClose={cerrarModal}
           onDone={() => {
             cerrarModal();

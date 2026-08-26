@@ -260,6 +260,42 @@ function FilaPago({ r, i }) {
   );
 }
 
+const tdNota = { fontFamily: "Helvetica-Oblique", fontSize: 6.5, color: "#6b7280" };
+const tdNotaBold = { fontFamily: "Helvetica-Bold", fontSize: 6.5, color: "#6b7280" };
+
+// Nota de endoso (tipo A/C) — informativa, en gris, no aporta a ningún
+// total. No usa las columnas de COLS_POLIZA una a una: la póliza/fecha van
+// en las primeras celdas y el resto del ancho se dedica al texto de la nota.
+function FilaNota({ nt }) {
+  const anchoPoliza = COLS_POLIZA[0].w + COLS_POLIZA[1].w + COLS_POLIZA[2].w;
+  const anchoFecha = COLS_POLIZA[3].w;
+  const anchoNota = COLS_POLIZA.slice(4).reduce((s, c) => s + c.w, 0);
+  return (
+    <Fila
+      style={{
+        backgroundColor: "#f3f4f6",
+        borderBottomWidth: 0.5,
+        borderBottomColor: COLORS.rule,
+      }}
+      wrap={false}
+    >
+      <View style={{ width: anchoPoliza, paddingHorizontal: 3, paddingVertical: 3, justifyContent: "center" }}>
+        <Text style={tdNotaBold} wrap={false}>
+          {`ENDOSO · ${nt.polizas?.constancia || nt.polizas?.numero_poliza || "—"}`}
+        </Text>
+      </View>
+      <View style={{ width: anchoFecha, paddingHorizontal: 3, paddingVertical: 3, justifyContent: "center" }}>
+        <Text style={[tdNota, { textAlign: "center" }]} wrap={false}>
+          {nt.cambiado_at ? fmtFecha(nt.cambiado_at.slice(0, 10)) : "—"}
+        </Text>
+      </View>
+      <View style={{ width: anchoNota, paddingHorizontal: 3, paddingVertical: 3, justifyContent: "center" }}>
+        <Text style={tdNota}>{nt.notas}</Text>
+      </View>
+    </Fila>
+  );
+}
+
 function FilaTotalesPoliza({ totales }) {
   const v = {
     no: "",
@@ -398,6 +434,7 @@ export default function CortePDF({ datos }) {
   const d = datos ?? {};
   const registros = d.registros ?? [];
   const comisiones = d.comisiones ?? [];
+  const notasEndoso = d.notasEndoso ?? [];
   const t = d.totales ?? {};
 
   return (
@@ -515,6 +552,9 @@ export default function CortePDF({ datos }) {
               ))}
               {comisiones.map((c, i) => (
                 <FilaComision key={`comision-${c.id ?? i}`} c={c} />
+              ))}
+              {notasEndoso.map((nt, i) => (
+                <FilaNota key={`nota-${nt.id ?? i}`} nt={nt} />
               ))}
               <FilaTotalesPoliza totales={t} />
             </>

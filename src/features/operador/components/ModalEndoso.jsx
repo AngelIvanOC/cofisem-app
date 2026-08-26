@@ -232,6 +232,7 @@ export default function ModalEndoso({ poliza, usuario, onClose, onDone }) {
       await supabase.from("polizas_historial").insert({
         poliza_id:     poliza.id,
         estatus_nuevo: "EDITADA",
+        tipo_endoso:   "A",
         notas:         descripcion,
         cambiado_por:  usuario?.id ?? null,
       });

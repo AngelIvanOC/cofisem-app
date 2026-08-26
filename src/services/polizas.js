@@ -733,7 +733,7 @@ export async function fetchPolizaById(id) {
 }
 
 // ── Cancelar póliza ───────────────────────────────────────────────────────
-export async function cancelarPoliza(id, motivo, canceladoPor) {
+export async function cancelarPoliza(id, motivo, canceladoPor, tipoEndoso) {
   const { error: e1 } = await supabase
     .from('polizas')
     .update({ estatus: 'CANCELADA', notas: motivo || null })
@@ -743,6 +743,7 @@ export async function cancelarPoliza(id, motivo, canceladoPor) {
   await supabase.from('polizas_historial').insert({
     poliza_id:    id,
     estatus_nuevo: 'CANCELADA',
+    tipo_endoso:   tipoEndoso || null,
     notas:         motivo || null,
     cambiado_por:  canceladoPor || null,
   });

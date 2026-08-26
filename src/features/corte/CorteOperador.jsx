@@ -86,6 +86,7 @@ export default function CorteOperador({ usuario }) {
   const [registros, setRegistros] = useState([]);
   const [cuotasDia, setCuotasDia] = useState([]); // pagos_cofisem: cuotas subsecuentes que vencieron hoy, se adelantaron a hoy, o ya se cobraron hoy
   const [comisionesDia, setComisionesDia] = useState([]);
+  const [notasEndoso, setNotasEndoso] = useState([]); // polizas_historial: endosos tipo A/C (no tocan primas) hechos este día
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [gastos, setGastos] = useState(0);
@@ -157,6 +158,7 @@ export default function CorteOperador({ usuario }) {
     setLoading(true);
     cargar();
     cargarComisionesDia();
+    cargarNotasEndoso();
     // cargarCuotasDia necesita saber si el corte de este día ya está
     // cerrado (no solo si es "hoy") — un corte de un día pasado que
     // sigue abierto (el operador se está poniendo al corriente) debe
@@ -287,6 +289,30 @@ export default function CorteOperador({ usuario }) {
       const { data, error } = await query;
       if (error) throw error;
       setComisionesDia(data ?? []);
+    } catch (e) {
+      setErrorMsg(e.message);
+    }
+  }
+
+  // Endosos tipo A (edición) y C (cancelación total) hechos este día por
+  // este operador — se muestran como notas informativas en gris, nunca
+  // suman a ningún total. El tipo B (cancelación a prorrata) se excluye
+  // porque ese sí toca primas y ya se refleja en su propio flujo.
+  async function cargarNotasEndoso() {
+    try {
+      let query = supabase
+        .from("polizas_historial")
+        .select("id, poliza_id, notas, cambiado_at, polizas(numero_poliza, constancia)")
+        .in("tipo_endoso", ["A", "C"]);
+      if (usuario?.id) query = query.eq("cambiado_por", usuario.id);
+      const { data, error } = await query;
+      if (error) throw error;
+      const delDia = (data ?? []).filter(
+        (r) =>
+          r.cambiado_at &&
+          new Date(r.cambiado_at).toLocaleDateString("en-CA") === fechaCorte,
+      );
+      setNotasEndoso(delDia);
     } catch (e) {
       setErrorMsg(e.message);
     }
@@ -472,6 +498,7 @@ export default function CorteOperador({ usuario }) {
     return {
       registros: filasTabla,
       comisiones: comisionesDia,
+      notasEndoso,
       billetes,
       observaciones,
       oficina,
@@ -800,6 +827,11 @@ export default function CorteOperador({ usuario }) {
                 {pendientes} por completar
               </span>
             )}
+            {notasEndoso.length > 0 && (
+              <span className="text-[11px] font-bold text-white/70 bg-white/10 border border-white/20 px-2.5 py-1 rounded-full">
+                {notasEndoso.length} {notasEndoso.length === 1 ? "endoso" : "endosos"}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
             <button
@@ -858,7 +890,7 @@ export default function CorteOperador({ usuario }) {
               </thead>
 
               <tbody className="divide-y divide-gray-50">
-                {filasTabla.length === 0 && comisionesDia.length === 0 && (
+                {filasTabla.length === 0 && comisionesDia.length === 0 && notasEndoso.length === 0 && (
                   <tr>
                     <td
                       colSpan={15}
@@ -1024,6 +1056,27 @@ export default function CorteOperador({ usuario }) {
                     </tr>
                   );
                 })}
+
+                {/* Notas de endoso (tipo A/C) — informativas, en gris, no
+                    suman a ningún total. */}
+                {notasEndoso.map((nt) => (
+                  <tr key={`nota-${nt.id}`} className="bg-gray-100/60 hover:bg-gray-100/80 transition-colors">
+                    <td className="px-3 py-2.5 text-center font-bold text-gray-400">•</td>
+                    <td className="px-3 py-2.5 text-center text-gray-400">—</td>
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-bold text-gray-500">
+                      {nt.polizas?.constancia || nt.polizas?.numero_poliza || "—"}
+                      <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500 align-middle whitespace-nowrap">
+                        endoso
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-400 whitespace-nowrap">
+                      {fmt(new Date(nt.cambiado_at).toLocaleDateString("en-CA"))}
+                    </td>
+                    <td colSpan={14} className="px-3 py-2.5 text-left italic text-gray-500">
+                      {nt.notas}
+                    </td>
+                  </tr>
+                ))}
 
                 {(filasTabla.length > 0 || comisionesDia.length > 0) && (
                   <tr className="bg-[#1447e6]/5 font-bold border-t-2 border-[#1447e6]/20">
