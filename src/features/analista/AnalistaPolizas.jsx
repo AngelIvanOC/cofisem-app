@@ -18,13 +18,31 @@ function fmtMXN(n) {
 }
 
 // ── Estatus de cuota ─────────────────────────────────────────
-function CuotaEstatus({ estatus }) {
+// Mismo criterio que en Pagos y cuotas: PAGADO/ADEUDO vienen de la BD,
+// VENCIDO se calcula por fecha cuando sigue PENDIENTE.
+function estatusEfectivoCuota(estatus, fechaVencimiento) {
   const e = (estatus ?? "").toUpperCase();
-  if (e === "PAGADO" || e === "PAGADA")
-    return <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">Pagado</span>;
-  if (e === "VENCIDO" || e === "VENCIDA")
-    return <span className="text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">Vencido</span>;
-  return <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">Pendiente</span>;
+  if (e === "PAGADO" || e === "PAGADA") return "PAGADO";
+  if (e === "ADEUDO") return "ADEUDO";
+  const vto = fechaVencimiento ? new Date(`${fechaVencimiento}T12:00:00`) : null;
+  if (vto && !isNaN(vto) && vto < new Date()) return "VENCIDO";
+  return "PENDIENTE";
+}
+
+function CuotaEstatus({ estatus, fechaVencimiento }) {
+  const est = estatusEfectivoCuota(estatus, fechaVencimiento);
+  const map = {
+    PAGADO:    "bg-emerald-50 text-emerald-700 border-emerald-200",
+    ADEUDO:    "bg-blue-50 text-blue-700 border-blue-200",
+    VENCIDO:   "bg-red-50 text-red-600 border-red-200",
+    PENDIENTE: "bg-amber-50 text-amber-700 border-amber-200",
+  };
+  const labels = { PAGADO: "Pagado", ADEUDO: "Adeudo", VENCIDO: "Vencido", PENDIENTE: "Pendiente" };
+  return (
+    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${map[est]}`}>
+      {labels[est]}
+    </span>
+  );
 }
 
 // ── Panel de detalle ──────────────────────────────────────────
@@ -126,7 +144,7 @@ function DetallePoliza({ poliza, pagos, onVolver }) {
                     <p className="text-[10px] text-gray-400 mb-1">Cuota {i + 1}</p>
                     <p className="text-sm font-bold text-[#13193a]">{fmtMXN(q.monto)}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5 mb-1.5">{fmtFecha(q.fecha_vencimiento)}</p>
-                    <CuotaEstatus estatus={q.estatus} />
+                    <CuotaEstatus estatus={q.estatus} fechaVencimiento={q.fecha_vencimiento} />
                   </div>
                 ))}
             </div>
