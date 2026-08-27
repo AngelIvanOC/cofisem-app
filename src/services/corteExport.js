@@ -141,6 +141,7 @@ const COLUMNAS = [
   { header: "Tipo", key: "tipo", tipo: "code", grupo: "USO" },
   { header: "Uso", key: "uso", tipo: "code", grupo: "USO" }, // [NUEVA]
   { header: "Servicio", key: "servicio", tipo: "code", grupo: "USO" }, // [NUEVA]
+  { header: "Emitió / Capturó", key: "creador_nombre", tipo: "texto" }, // [NUEVA]
   { header: "No.", key: "no2", tipo: "num" },
   { header: "Forma de Pago", key: "forma_pago", tipo: "texto" },
   { header: "Efectivo", key: "efectivo", tipo: "dinero", grupo: "PAGO" },
@@ -162,8 +163,8 @@ const COLUMNAS = [
 // ahí; para las columnas nuevas se usa un ancho similar al de sus
 // vecinas.
 const ANCHOS_POLIZAS = [
-  3, 11, 11, 9, 9, 9, 6, 11, 34, 10, 10, 6, 10, 9, 6, 9, 9, 11, 3, 9, 9, 9, 9,
-  13, 10, 9, 20, 6, 7, 7, 7, 8, 7,
+  3, 11, 11, 9, 9, 9, 6, 11, 34, 10, 10, 6, 10, 9, 6, 9, 9, 11, 16, 3, 9, 9, 9,
+  9, 13, 10, 9, 20, 6, 7, 7, 7, 8, 7,
 ];
 
 const IDX_NO = 0;

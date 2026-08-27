@@ -269,6 +269,16 @@ function SinPerfil({ error }) {
 
 // ── Route Wrappers por rol ────────────────────────────────────
 
+// Pantallas COFISEM (pólizas del día, corte, pagos, comisiones) reservadas
+// al operador ENCARGADO de la oficina. El resto de operadores solo conserva
+// "Accesos"; los demás roles (analista/admin) pasan como antes.
+function SoloEncargadoCofisem({ rolNombre, usuario, children }) {
+  if (rolNombre === "OPERADOR" && !usuario?.encargado_oficina) {
+    return <Navigate to="/accesos" replace />;
+  }
+  return children;
+}
+
 function DashboardRoute({ rolNombre, usuario }) {
   switch (rolNombre) {
     case "OPERADOR":
@@ -410,11 +420,19 @@ export default function App() {
             />
             <Route
               path="/polizas"
-              element={<PoliciasDia usuario={usuario} />}
+              element={
+                <SoloEncargadoCofisem rolNombre={rolNombre} usuario={usuario}>
+                  <PoliciasDia usuario={usuario} />
+                </SoloEncargadoCofisem>
+              }
             />
             <Route
               path="/corte"
-              element={<CorteOperador usuario={usuario} />}
+              element={
+                <SoloEncargadoCofisem rolNombre={rolNombre} usuario={usuario}>
+                  <CorteOperador usuario={usuario} />
+                </SoloEncargadoCofisem>
+              }
             />
             <Route
               path="/corte/analista"
@@ -422,11 +440,19 @@ export default function App() {
             />
             <Route
               path="/corte/historial"
-              element={<CorteHistorial usuario={usuario} />}
+              element={
+                <SoloEncargadoCofisem rolNombre={rolNombre} usuario={usuario}>
+                  <CorteHistorial usuario={usuario} />
+                </SoloEncargadoCofisem>
+              }
             />
             <Route
               path="/pagos"
-              element={<PagosOperador usuario={usuario} />}
+              element={
+                <SoloEncargadoCofisem rolNombre={rolNombre} usuario={usuario}>
+                  <PagosOperador usuario={usuario} />
+                </SoloEncargadoCofisem>
+              }
             />
             <Route
               path="/pagos/analista"
@@ -434,7 +460,11 @@ export default function App() {
             />
             <Route
               path="/comisiones"
-              element={<Comisiones usuario={usuario} />}
+              element={
+                <SoloEncargadoCofisem rolNombre={rolNombre} usuario={usuario}>
+                  <Comisiones usuario={usuario} />
+                </SoloEncargadoCofisem>
+              }
             />
           </Route>
 

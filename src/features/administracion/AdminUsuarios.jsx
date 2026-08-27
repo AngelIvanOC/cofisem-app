@@ -170,6 +170,7 @@ function ModalEditarUsuario({ usuario, onClose, onGuardar, roles, oficinas }) {
     email: usuario.email ?? "",
     rol_id: String(usuario.rol_id ?? ""),
     oficina_id: String(usuario.oficina_id ?? ""),
+    encargado_oficina: !!usuario.encargado_oficina,
     password: "",
   });
   const [procesando, setProcesando] = useState(false);
@@ -367,6 +368,26 @@ function ModalEditarUsuario({ usuario, onClose, onGuardar, roles, oficinas }) {
                   </option>
                 ))}
               </select>
+
+              {form.oficina_id && (
+                <label className="mt-3 flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.encargado_oficina}
+                    onChange={(e) => set("encargado_oficina", e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#13193a] focus:ring-[#13193a]/20"
+                  />
+                  <span className="text-[12px] text-gray-600 leading-snug">
+                    <span className="font-semibold text-gray-700">
+                      Encargado del corte de la oficina
+                    </span>
+                    <br />
+                    Lleva el corte, pólizas, pagos y comisiones de COFISEM de
+                    toda la oficina. Solo puede haber uno; al marcarlo se quita
+                    al anterior.
+                  </span>
+                </label>
+              )}
             </div>
           )}
 
@@ -747,14 +768,27 @@ export default function AdminUsuarios() {
     }
 
     // 2. Actualizar perfil en public.usuarios
+    const oficinaId = esOper && form.oficina_id ? Number(form.oficina_id) : null;
+    const esEncargado = !!(esOper && oficinaId && form.encargado_oficina);
     const payload = {
       nombre: form.nombre.trim(),
       apellido: form.apellido.trim(),
       rol_id: Number(form.rol_id),
-      oficina_id: esOper && form.oficina_id ? Number(form.oficina_id) : null,
+      oficina_id: oficinaId,
+      encargado_oficina: esEncargado,
     };
     if (form.password) payload.contrasena = form.password;
     if (emailCambiado) payload.email = form.email.trim();
+
+    // Solo puede haber un encargado por oficina (índice único parcial en BD).
+    // Si este usuario pasa a serlo, se le quita al que lo fuera antes.
+    if (esEncargado) {
+      await supabase
+        .from("usuarios")
+        .update({ encargado_oficina: false })
+        .eq("oficina_id", oficinaId)
+        .neq("id", id);
+    }
 
     const { error } = await supabase
       .from("usuarios")

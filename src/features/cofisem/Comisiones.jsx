@@ -72,7 +72,9 @@ export default function Comisiones({ usuario }) {
         .not("vendedor_id", "is", null)
         .neq("vendedor_id", 1)
         .order("fecha_emision", { ascending: false });
-      if (usuario?.id) query = query.eq("creado_por", usuario.id);
+      // Comisiones de toda la oficina (las lleva la encargada).
+      if (usuario?.oficina_id)
+        query = query.eq("oficina_id", usuario.oficina_id);
       const { data, error } = await query;
       if (error) throw error;
       setPolizas(data ?? []);
@@ -82,7 +84,7 @@ export default function Comisiones({ usuario }) {
     } finally {
       setLoading(false);
     }
-  }, [usuario?.id]);
+  }, [usuario?.oficina_id]);
 
   useEffect(() => {
     cargar();

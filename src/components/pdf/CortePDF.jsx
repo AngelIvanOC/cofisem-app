@@ -21,22 +21,23 @@ const fmtFecha = (d) =>
 const COLS_POLIZA = [
   { key: "no", label: "No.", w: 16, align: "center" },
   { key: "aseguradora", label: "Aseguradora", w: 48, align: "left" },
-  { key: "poliza", label: "Póliza", w: 82, align: "left" },
+  { key: "poliza", label: "Póliza", w: 68, align: "left" },
   { key: "fEmision", label: "F. Emisión", w: 40, align: "center" },
   { key: "vigInicio", label: "Vig. Inicio", w: 40, align: "center" },
   { key: "vigFin", label: "Vig. Fin", w: 40, align: "center" },
   { key: "folio", label: "Folio", w: 34, align: "left" },
-  { key: "vendedor", label: "Vendedor", w: 56, align: "left" },
-  { key: "asegurado", label: "Asegurado", w: 74, align: "left" },
+  { key: "vendedor", label: "Vendedor", w: 46, align: "left" },
+  { key: "asegurado", label: "Asegurado", w: 62, align: "left" },
   { key: "primaAnual", label: "Prima T. Anual", w: 46, align: "right" },
   { key: "primaNeta", label: "Prima N. Anual", w: 46, align: "right" },
   { key: "cuota", label: "Cuota", w: 26, align: "center" },
   { key: "pago", label: "Pago", w: 42, align: "right" },
-  { key: "cobertura", label: "Cobertura", w: 56, align: "left" },
+  { key: "cobertura", label: "Cobertura", w: 46, align: "left" },
   { key: "placas", label: "Placas", w: 44, align: "left" },
-  { key: "tipo", label: "Tipo", w: 48, align: "left" },
+  { key: "tipo", label: "Tipo", w: 42, align: "left" },
   { key: "uso", label: "Uso", w: 44, align: "left" },
   { key: "servicio", label: "Servicio", w: 44, align: "left" },
+  { key: "emisor", label: "Emitió / Capturó", w: 52, align: "left" },
 ];
 
 const COLS_PAGO = [
@@ -133,6 +134,7 @@ function FilaPoliza({ r, i }) {
     tipo: r.tipo || "—",
     uso: r.uso || "—",
     servicio: r.servicio || "—",
+    emisor: r.creador_nombre || "—",
   };
   return (
     <Fila
@@ -187,6 +189,7 @@ function FilaComision({ c }) {
     tipo: "—",
     uso: "—",
     servicio: "—",
+    emisor: "—",
   };
   return (
     <Fila
@@ -316,6 +319,7 @@ function FilaTotalesPoliza({ totales }) {
     tipo: "",
     uso: "",
     servicio: "",
+    emisor: "",
   };
   return (
     <Fila

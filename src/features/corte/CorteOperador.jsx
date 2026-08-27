@@ -110,6 +110,16 @@ export default function CorteOperador({ usuario }) {
 
   const oficina = usuario?.oficinas?.nombre ?? "OFICINA";
 
+  // Quién emitió / capturó la póliza. En pólizas jaladas de GAMAN es el
+  // operador que la emitió en GAMAN; en las de otras aseguradoras (captura
+  // manual en /polizas) es la encargada que la registró en el corte.
+  const nombreCreador = (r) => {
+    const c = r?.creador;
+    return c
+      ? [c.nombre, c.apellido].filter(Boolean).join(" ").trim() || "—"
+      : "—";
+  };
+
   // Cuotas subsecuentes que vencieron hoy (o se adelantaron a hoy) se
   // muestran como filas estáticas más en la misma tabla — mismos
   // campos de cobro, pero la póliza (vigencia, vehículo, etc.) es de
@@ -204,10 +214,14 @@ export default function CorteOperador({ usuario }) {
     try {
       let query = supabase
         .from("polizas_cofisem")
-        .select("*")
+        .select(
+          "*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)",
+        )
         .eq("fecha_corte", fechaCorte)
         .order("created_at", { ascending: true });
-      if (usuario?.id) query = query.eq("creado_por", usuario.id);
+      // El corte es de toda la oficina (lo lleva el operador encargado).
+      if (usuario?.oficina_id)
+        query = query.eq("oficina_id", usuario.oficina_id);
       const { data, error } = await query;
       if (error) throw error;
       setRegistros(data ?? []);
@@ -247,9 +261,12 @@ export default function CorteOperador({ usuario }) {
     try {
       let query = supabase
         .from("pagos_cofisem")
-        .select("*, polizas_cofisem(*), pago_gaman:pagos(fecha_pago)")
+        .select(
+          "*, polizas_cofisem(*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)), pago_gaman:pagos(fecha_pago)",
+        )
         .gt("num_cuota", 1);
-      if (usuario?.id) query = query.eq("operador_id", usuario.id);
+      if (usuario?.oficina_id)
+        query = query.eq("oficina_id", usuario.oficina_id);
       const { data, error } = await query;
       if (error) throw error;
       const relevantes = (data ?? []).filter((c) => {
@@ -281,11 +298,11 @@ export default function CorteOperador({ usuario }) {
       let query = supabase
         .from("comisiones_cofisem")
         .select(
-          "id, monto, fecha_pago, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, folio, vendedor_nombre, asegurado_nombre, creado_por)",
+          "id, monto, fecha_pago, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, folio, vendedor_nombre, asegurado_nombre, creado_por, oficina_id)",
         )
         .eq("fecha_pago", fechaCorte);
-      if (usuario?.id)
-        query = query.eq("polizas_cofisem.creado_por", usuario.id);
+      if (usuario?.oficina_id)
+        query = query.eq("polizas_cofisem.oficina_id", usuario.oficina_id);
       const { data, error } = await query;
       if (error) throw error;
       setComisionesDia(data ?? []);
@@ -294,17 +311,20 @@ export default function CorteOperador({ usuario }) {
     }
   }
 
-  // Endosos tipo A (edición) y C (cancelación total) hechos este día por
-  // este operador — se muestran como notas informativas en gris, nunca
+  // Endosos tipo A (edición) y C (cancelación total) hechos este día en
+  // la oficina — se muestran como notas informativas en gris, nunca
   // suman a ningún total. El tipo B (cancelación a prorrata) se excluye
   // porque ese sí toca primas y ya se refleja en su propio flujo.
   async function cargarNotasEndoso() {
     try {
       let query = supabase
         .from("polizas_historial")
-        .select("id, poliza_id, notas, cambiado_at, polizas(numero_poliza, constancia)")
+        .select(
+          "id, poliza_id, notas, cambiado_at, polizas!inner(numero_poliza, constancia, oficina_id)",
+        )
         .in("tipo_endoso", ["A", "C"]);
-      if (usuario?.id) query = query.eq("cambiado_por", usuario.id);
+      if (usuario?.oficina_id)
+        query = query.eq("polizas.oficina_id", usuario.oficina_id);
       const { data, error } = await query;
       if (error) throw error;
       const delDia = (data ?? []).filter(
@@ -324,12 +344,10 @@ export default function CorteOperador({ usuario }) {
         .from("corte_efectivo_entrega")
         .select("*")
         .eq("fecha_corte", fechaCorte);
+      // Una sola entrega por (fecha, oficina) — ya no se filtra por operador.
       query = usuario?.oficina_id
         ? query.eq("oficina_id", usuario.oficina_id)
         : query.is("oficina_id", null);
-      query = usuario?.id
-        ? query.eq("operador_id", usuario.id)
-        : query.is("operador_id", null);
       const { data } = await query.maybeSingle();
       setEntregaEfectivo(data ?? null);
       // "Observaciones del corte" (lo que escribe el operador) vive en
@@ -399,7 +417,7 @@ export default function CorteOperador({ usuario }) {
       };
       const { data, error } = await supabase
         .from("corte_efectivo_entrega")
-        .upsert(payload, { onConflict: "fecha_corte,oficina_id,operador_id" })
+        .upsert(payload, { onConflict: "fecha_corte,oficina_id" })
         .select()
         .single();
       if (error) throw error;
@@ -426,7 +444,7 @@ export default function CorteOperador({ usuario }) {
       };
       const { data, error } = await supabase
         .from("corte_efectivo_entrega")
-        .upsert(payload, { onConflict: "fecha_corte,oficina_id,operador_id" })
+        .upsert(payload, { onConflict: "fecha_corte,oficina_id" })
         .select()
         .single();
       if (error) throw error;
@@ -473,7 +491,7 @@ export default function CorteOperador({ usuario }) {
       };
       const { data, error } = await supabase
         .from("corte_efectivo_entrega")
-        .upsert(payload, { onConflict: "fecha_corte,oficina_id,operador_id" })
+        .upsert(payload, { onConflict: "fecha_corte,oficina_id" })
         .select()
         .single();
       if (error) throw error;
@@ -496,7 +514,12 @@ export default function CorteOperador({ usuario }) {
 
   function datosCorteExport() {
     return {
-      registros: filasTabla,
+      // creador_nombre aplanado para el Excel/PDF (el objeto anidado
+      // `creador` no le sirve al escritor de celdas por clave).
+      registros: filasTabla.map((r) => ({
+        ...r,
+        creador_nombre: nombreCreador(r) === "—" ? "" : nombreCreador(r),
+      })),
       comisiones: comisionesDia,
       notasEndoso,
       billetes,
@@ -878,6 +901,7 @@ export default function CorteOperador({ usuario }) {
                   <TH rowSpan={2}>Pago</TH>
                   <TH rowSpan={2}>Cobertura</TH>
                   <TH colSpan={4}>Uso / Vehículo</TH>
+                  <TH rowSpan={2}>Emitió / Capturó</TH>
                 </tr>
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <TH blue>Inicio</TH>
@@ -893,7 +917,7 @@ export default function CorteOperador({ usuario }) {
                 {filasTabla.length === 0 && comisionesDia.length === 0 && notasEndoso.length === 0 && (
                   <tr>
                     <td
-                      colSpan={15}
+                      colSpan={19}
                       className="px-5 py-12 text-center text-sm text-gray-400"
                     >
                       {esHoy ? (
@@ -971,6 +995,9 @@ export default function CorteOperador({ usuario }) {
                     </td>
                     <td className="px-3 py-2.5 text-center text-gray-600 bg-blue-50/20">
                       {r.servicio || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-700 whitespace-nowrap">
+                      {nombreCreador(r)}
                     </td>
                   </tr>
                 ))}
@@ -1053,6 +1080,7 @@ export default function CorteOperador({ usuario }) {
                       <td className="px-3 py-2.5 text-center text-red-300 bg-red-50/40">
                         —
                       </td>
+                      <td className="px-3 py-2.5 text-center text-red-300">—</td>
                     </tr>
                   );
                 })}
@@ -1072,7 +1100,7 @@ export default function CorteOperador({ usuario }) {
                     <td className="px-3 py-2.5 text-center text-gray-400 whitespace-nowrap">
                       {fmt(new Date(nt.cambiado_at).toLocaleDateString("en-CA"))}
                     </td>
-                    <td colSpan={14} className="px-3 py-2.5 text-left italic text-gray-500">
+                    <td colSpan={15} className="px-3 py-2.5 text-left italic text-gray-500">
                       {nt.notas}
                     </td>
                   </tr>
@@ -1096,7 +1124,7 @@ export default function CorteOperador({ usuario }) {
                     <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">
                       {$(sumaPrimerPago)}
                     </td>
-                    <td colSpan={5} />
+                    <td colSpan={6} />
                   </tr>
                 )}
               </tbody>

@@ -67,18 +67,19 @@ const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
 // tanto en el <colgroup> como en los <th>, para que la tabla quepa en el
 // ancho del contenedor sin necesidad de scroll horizontal.
 const COLUMNAS_TABLA = [
-  { label: "#", width: "5%" },
+  { label: "#", width: "4%" },
   { label: "Aseguradora", width: "8%" },
-  { label: "Póliza", width: "10%" },
+  { label: "Póliza", width: "9%" },
   { label: "Folio", width: "5%" },
-  { label: "Asegurado", width: "10%" },
-  { label: "Vendedor", width: "10%" },
-  { label: "Cobertura", width: "8%" },
-  { label: "Forma Pago", width: "8%" },
+  { label: "Asegurado", width: "9%" },
+  { label: "Vendedor", width: "9%" },
+  { label: "Cobertura", width: "7%" },
+  { label: "Forma Pago", width: "7%" },
   { label: "Cuota", width: "5%" },
-  { label: "Pago", width: "8%" },
-  { label: "F. Emisión", width: "8%" },
-  { label: "Acción", width: "15%" },
+  { label: "Pago", width: "7%" },
+  { label: "F. Emisión", width: "7%" },
+  { label: "Emitió / Capturó", width: "9%" },
+  { label: "Acción", width: "14%" },
 ];
 
 // Catálogo Aseguradora → Uso → Servicio. El Uso se filtra por aseguradora
@@ -280,16 +281,13 @@ export default function PoliciasDia({ usuario }) {
       query = usuario?.oficina_id
         ? query.eq("oficina_id", usuario.oficina_id)
         : query.is("oficina_id", null);
-      query = usuario?.id
-        ? query.eq("operador_id", usuario.id)
-        : query.is("operador_id", null);
       const { data } = await query.maybeSingle();
       if (activo) setCorteDestinoInfo(data ?? null);
     })();
     return () => {
       activo = false;
     };
-  }, [fechaCorteSel, usuario?.id, usuario?.oficina_id]);
+  }, [fechaCorteSel, usuario?.oficina_id]);
 
   const corteDestinoCerrado = !!corteDestinoInfo?.cerrado;
 
@@ -301,9 +299,6 @@ export default function PoliciasDia({ usuario }) {
     query = usuario?.oficina_id
       ? query.eq("oficina_id", usuario.oficina_id)
       : query.is("oficina_id", null);
-    query = usuario?.id
-      ? query.eq("operador_id", usuario.id)
-      : query.is("operador_id", null);
     const { data } = await query.maybeSingle();
     setCorteInfo(data ?? null);
   }
@@ -350,10 +345,13 @@ export default function PoliciasDia({ usuario }) {
     try {
       let query = supabase
         .from("polizas_cofisem")
-        .select("*")
+        .select(
+          "*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)",
+        )
         .eq("fecha_corte", fechaVista)
         .order("created_at", { ascending: true });
-      if (usuario?.id) query = query.eq("creado_por", usuario.id);
+      // Pólizas del día de TODA la oficina (las lleva la encargada).
+      if (usuario?.oficina_id) query = query.eq("oficina_id", usuario.oficina_id);
       const { data, error } = await query;
       if (error) throw error;
       setPolizas(data ?? []);
@@ -1843,6 +1841,24 @@ export default function PoliciasDia({ usuario }) {
                     <td className="px-4 py-3 text-gray-400 truncate">
                       {fmt(p.fecha_emision)}
                     </td>
+                    <td
+                      className="px-4 py-3 text-gray-600 truncate"
+                      title={
+                        p.creador
+                          ? [p.creador.nombre, p.creador.apellido]
+                              .filter(Boolean)
+                              .join(" ")
+                          : "—"
+                      }
+                    >
+                      {p.creador
+                        ? abreviarNombre(
+                            [p.creador.nombre, p.creador.apellido]
+                              .filter(Boolean)
+                              .join(" "),
+                          )
+                        : "—"}
+                    </td>
                     <td className="sticky right-0 z-10 bg-white px-4 py-3 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.15)]">
                       <div className="flex items-center gap-1.5">
                         <CompletarBadge
@@ -1904,6 +1920,7 @@ export default function PoliciasDia({ usuario }) {
                   <td className="px-4 py-3 text-right text-xs font-bold text-emerald-700">
                     {$(polizas.reduce((s, p) => s + n(p.prima_primer_pago), 0))}
                   </td>
+                  <td />
                   <td />
                   <td className="sticky right-0 z-10 bg-[#1447e6]/5" />
                 </tr>

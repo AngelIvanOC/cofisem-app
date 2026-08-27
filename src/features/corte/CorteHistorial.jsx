@@ -37,8 +37,8 @@ export default function CorteHistorial({ usuario }) {
   const [filtroFecha, setFiltroFecha] = useState("");
   const [filtro, setFiltro] = useState("TODAS");
 
-  // La lista de días cubre TODO el rango desde el primer día que el
-  // operador vendió al menos una póliza — un día sin ventas no aparece en
+  // La lista de días cubre TODO el rango desde el primer día que la
+  // oficina vendió al menos una póliza — un día sin ventas no aparece en
   // el historial, aunque se haya tocado "Entrega de efectivo" ese día.
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -46,13 +46,12 @@ export default function CorteHistorial({ usuario }) {
       let qp = supabase
         .from("polizas_cofisem")
         .select("fecha_corte, prima_primer_pago");
-      qp = usuario?.id ? qp.eq("creado_por", usuario.id) : qp;
+      qp = usuario?.oficina_id ? qp.eq("oficina_id", usuario.oficina_id) : qp;
       const { data: dPolizas, error: e2 } = await qp;
       if (e2) throw e2;
 
       let qe = supabase.from("corte_efectivo_entrega").select("*");
       qe = usuario?.oficina_id ? qe.eq("oficina_id", usuario.oficina_id) : qe.is("oficina_id", null);
-      qe = usuario?.id ? qe.eq("operador_id", usuario.id) : qe.is("operador_id", null);
       const { data: dEntregas, error: e1 } = await qe;
       if (e1) throw e1;
 
@@ -82,7 +81,7 @@ export default function CorteHistorial({ usuario }) {
     } finally {
       setLoading(false);
     }
-  }, [usuario?.oficina_id, usuario?.id]);
+  }, [usuario?.oficina_id]);
 
   useEffect(() => { cargar(); }, [cargar]);
 

@@ -254,7 +254,9 @@ export default function PagosOperador({ usuario }) {
         `,
         )
         .order("fecha_emision", { ascending: true });
-      if (usuario?.id) query = query.eq("creado_por", usuario.id);
+      // Pagos de toda la oficina (los lleva la encargada).
+      if (usuario?.oficina_id)
+        query = query.eq("oficina_id", usuario.oficina_id);
       const { data, error } = await query;
       if (error) throw error;
       setPolizas(data ?? []);
@@ -264,7 +266,7 @@ export default function PagosOperador({ usuario }) {
     } finally {
       setLoading(false);
     }
-  }, [usuario?.id]);
+  }, [usuario?.oficina_id]);
 
   useEffect(() => {
     cargar();

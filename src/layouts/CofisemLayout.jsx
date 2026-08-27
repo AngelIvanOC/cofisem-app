@@ -214,7 +214,14 @@ export default function CofisemLayout() {
   }, []);
 
   const { usuario, rolNombre } = auth;
-  const navItems = NAV[rolNombre] ?? NAV._default;
+  // Un operador que NO es el encargado de su oficina ya no participa en
+  // COFISEM: solo conserva "Accesos". El corte, pólizas, pagos y
+  // comisiones de la oficina los lleva el encargado.
+  const navBase = NAV[rolNombre] ?? NAV._default;
+  const navItems =
+    rolNombre === "OPERADOR" && !usuario?.encargado_oficina
+      ? navBase.filter((i) => i.path === "/accesos")
+      : navBase;
   const iniciales =
     [usuario?.nombre?.[0], usuario?.apellido?.[0]]
       .filter(Boolean)

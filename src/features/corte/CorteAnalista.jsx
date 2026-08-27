@@ -27,16 +27,53 @@ const PAGO_ADMIN_META = {
 };
 const PAGO_ADMIN_CICLO = { DESCONOCIDO: "PAGADA", PAGADA: "NO_PAGADA", NO_PAGADA: "DESCONOCIDO" };
 
-function totalesDe(regs) {
+// Totales del corte completo — igual que /corte (CorteOperador): efectivo/
+// cheque/tdc y 1er pago suman también las cuotas subsecuentes cobradas ese
+// día; prima anual/neta y el vale de emisión son solo de las emisiones del
+// día. "valesPagados" son las comisiones (vales) pagadas a vendedores ese
+// día, que salen del efectivo. No hay "gastos" aquí: ese dato lo captura el
+// operador en pantalla y no se persiste, así que el subtotal del analista es
+// efectivo − valesPagados (sin gastos).
+function totalesDeCorte(regs, cuotas = [], comis = []) {
+  const filas = [...regs, ...cuotas];
+  const efectivo = filas.reduce((s, r) => s + n(r.efectivo), 0);
+  const valesPagados = comis.reduce((s, c) => s + n(c.monto), 0);
   return {
     count: regs.length,
     vale: regs.reduce((s, r) => s + n(r.vale), 0),
     primaAnual: regs.reduce((s, r) => s + n(r.prima_anual), 0),
     primaNeta: regs.reduce((s, r) => s + n(r.prima_neta), 0),
-    primerPago: regs.reduce((s, r) => s + n(r.prima_primer_pago), 0),
-    efectivo: regs.reduce((s, r) => s + n(r.efectivo), 0),
-    cheque: regs.reduce((s, r) => s + n(r.cheque), 0),
-    tdc: regs.reduce((s, r) => s + n(r.tdc), 0),
+    primerPago: filas.reduce((s, r) => s + n(r.prima_primer_pago), 0),
+    efectivo,
+    cheque: filas.reduce((s, r) => s + n(r.cheque), 0),
+    tdc: filas.reduce((s, r) => s + n(r.tdc), 0),
+    valesPagados,
+    subEfectivo: efectivo - valesPagados,
+  };
+}
+
+// Convierte una cuota subsecuente (pagos_cofisem + su póliza padre) en una
+// fila con la misma forma que un registro de polizas_cofisem, para
+// reutilizar las columnas de la tabla. Igual que en CorteOperador.
+function cuotaARow(c) {
+  const p = c.polizas_cofisem ?? {};
+  return {
+    ...p,
+    id: `cuota-${c.id}`,
+    _esCuotaSubsecuente: true,
+    num_cuota_pago: c.num_cuota,
+    prima_primer_pago: c.prima_total,
+    prima_primer_pago_neta: c.prima_neta,
+    vale: c.vale,
+    efectivo: c.efectivo,
+    cheque: c.cheque,
+    tdc: c.tdc,
+    pol_pend_pago: c.pol_pend_pago,
+    autorizacion: c.autorizacion,
+    observaciones: c.notas,
+    comprobante_vale_url: c.comprobante_vale_url,
+    comprobante_cheque_url: c.comprobante_cheque_url,
+    comprobante_tdc_url: c.comprobante_tdc_url,
   };
 }
 
@@ -54,6 +91,8 @@ export default function CorteAnalista({ usuario }) {
   const [registrosDia, setRegistrosDia] = useState([]);       // todas las oficinas, esa fecha
   const [entregasDia, setEntregasDia] = useState([]);          // corte_efectivo_entrega, todas las oficinas, esa fecha
   const [notasEndosoDia, setNotasEndosoDia] = useState([]);    // polizas_historial: endosos tipo A/C, esa fecha
+  const [cuotasDia, setCuotasDia] = useState([]);              // pagos_cofisem: cuotas subsecuentes cobradas esa fecha
+  const [comisionesDia, setComisionesDia] = useState([]);      // comisiones_cofisem: vales pagados esa fecha
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [guardandoId, setGuardandoId] = useState(null); // id de corte_efectivo_entrega que se está guardando
@@ -75,11 +114,14 @@ export default function CorteAnalista({ usuario }) {
       setOficinas(data ?? []);
       if (data?.length && oficinaSel == null) setOficinaSel(data[0].id);
     });
-    supabase.from("usuarios").select("id, nombre, apellido").then(({ data }) => {
-      const map = {};
-      (data ?? []).forEach((u) => { map[u.id] = u; });
-      setUsuariosMap(map);
-    });
+    supabase
+      .from("usuarios")
+      .select("id, nombre, apellido, oficina_id, encargado_oficina")
+      .then(({ data }) => {
+        const map = {};
+        (data ?? []).forEach((u) => { map[u.id] = u; });
+        setUsuariosMap(map);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -148,20 +190,48 @@ export default function CorteAnalista({ usuario }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: polizas, error: e1 }, { data: entregas, error: e2 }, { data: notas, error: e3 }] = await Promise.all([
-        supabase.from("polizas_cofisem").select("*").eq("fecha_corte", fecha).order("created_at", { ascending: true }),
+      const [
+        { data: polizas, error: e1 },
+        { data: entregas, error: e2 },
+        { data: notas, error: e3 },
+        { data: cuotas, error: e4 },
+        { data: comis, error: e5 },
+      ] = await Promise.all([
+        supabase
+          .from("polizas_cofisem")
+          .select(
+            "*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)",
+          )
+          .eq("fecha_corte", fecha)
+          .order("created_at", { ascending: true }),
         supabase.from("corte_efectivo_entrega").select("*").eq("fecha_corte", fecha),
         // Endosos tipo A (edición) y C (cancelación total) — no tocan primas.
         // El tipo B (cancelación a prorrata) se excluye porque ya se refleja
         // aparte en su propio flujo.
         supabase
           .from("polizas_historial")
-          .select("id, poliza_id, notas, cambiado_at, cambiado_por, polizas(numero_poliza, constancia)")
+          .select("id, poliza_id, notas, cambiado_at, cambiado_por, polizas(numero_poliza, constancia, oficina_id)")
           .in("tipo_endoso", ["A", "C"]),
+        // Cuotas subsecuentes efectivamente cobradas ese día (mismo criterio
+        // que el corte del operador ya cerrado: fecha_recibido = fecha).
+        supabase
+          .from("pagos_cofisem")
+          .select("*, polizas_cofisem(*)")
+          .gt("num_cuota", 1)
+          .eq("fecha_recibido", fecha),
+        // Vales / comisiones pagadas a vendedores ese día.
+        supabase
+          .from("comisiones_cofisem")
+          .select(
+            "id, monto, fecha_pago, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, folio, vendedor_nombre, asegurado_nombre, oficina_id)",
+          )
+          .eq("fecha_pago", fecha),
       ]);
       if (e1) throw e1;
       if (e2) throw e2;
       if (e3) throw e3;
+      if (e4) throw e4;
+      if (e5) throw e5;
       setRegistrosDia(polizas ?? []);
       setEntregasDia(entregas ?? []);
       setNotasEndosoDia(
@@ -169,6 +239,12 @@ export default function CorteAnalista({ usuario }) {
           (n) => n.cambiado_at && new Date(n.cambiado_at).toLocaleDateString("en-CA") === fecha,
         ),
       );
+      setCuotasDia(
+        (cuotas ?? []).filter(
+          (c) => c.polizas_cofisem && !c.polizas_cofisem.perdida,
+        ),
+      );
+      setComisionesDia(comis ?? []);
       setErrorMsg(null);
     } catch (e) {
       setErrorMsg(e.message);
@@ -183,19 +259,45 @@ export default function CorteAnalista({ usuario }) {
   const registrosOficina = registrosDia.filter((r) => r.oficina_id === oficinaSel);
   const entregasOficina = entregasDia.filter((e) => e.oficina_id === oficinaSel);
 
-  // Un "corte" por cada operador que tuvo actividad ese día en esta oficina
-  // (registró pólizas y/o ya abrió su entrega de efectivo).
-  const operadorIds = Array.from(new Set([
-    ...entregasOficina.map((e) => e.operador_id).filter(Boolean),
-    ...registrosOficina.map((r) => r.creado_por).filter(Boolean),
-  ])).sort((a, b) => nombreOperador(a).localeCompare(nombreOperador(b)));
-
-  const cortesOperador = operadorIds.map((opId) => {
-    const entrega = entregasOficina.find((e) => e.operador_id === opId) ?? null;
-    const registros = registrosOficina.filter((r) => r.creado_por === opId);
-    const notas = notasEndosoDia.filter((n) => n.cambiado_por === opId);
-    return { operadorId: opId, entrega, registros, notas, totales: totalesDe(registros) };
-  });
+  // Un ÚNICO corte por oficina (lo lleva el operador encargado). La entrega
+  // de efectivo, si existe, es una sola fila (fecha_corte, oficina_id).
+  const encargadaOficina = Object.values(usuariosMap).find(
+    (u) => u.encargado_oficina && u.oficina_id === oficinaSel,
+  );
+  const notasOficina = notasEndosoDia.filter(
+    (n) => n.polizas?.oficina_id === oficinaSel,
+  );
+  const cuotasOficina = cuotasDia
+    .filter((c) => c.polizas_cofisem?.oficina_id === oficinaSel)
+    .map(cuotaARow);
+  const comisionesOficina = comisionesDia.filter(
+    (c) => c.polizas_cofisem?.oficina_id === oficinaSel,
+  );
+  const entregaOficina = entregasOficina[0] ?? null;
+  const cortesOficina =
+    registrosOficina.length > 0 ||
+    entregaOficina ||
+    cuotasOficina.length > 0 ||
+    comisionesOficina.length > 0
+      ? [
+          {
+            // El corte es de la oficina — se rotula con su encargada, no con
+            // quien capturó/emitió la primera póliza del día.
+            operadorId:
+              encargadaOficina?.id ?? entregaOficina?.operador_id ?? null,
+            entrega: entregaOficina,
+            registros: registrosOficina,
+            cuotas: cuotasOficina,
+            comisiones: comisionesOficina,
+            notas: notasOficina,
+            totales: totalesDeCorte(
+              registrosOficina,
+              cuotasOficina,
+              comisionesOficina,
+            ),
+          },
+        ]
+      : [];
 
   async function actualizarEntrega(entregaId, cambios) {
     if (!entregaId) return;
@@ -392,18 +494,18 @@ export default function CorteAnalista({ usuario }) {
         </div>
       ) : (
         <>
-          {cortesOperador.length === 0 ? (
+          {cortesOficina.length === 0 ? (
             <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center text-sm text-gray-400">
-              Sin actividad de ningún operador en {oficina?.nombre ?? "esta oficina"} el {fmt(fecha)}.
+              Sin actividad en {oficina?.nombre ?? "esta oficina"} el {fmt(fecha)}.
             </div>
           ) : (
-            cortesOperador.map(({ operadorId, entrega, registros, notas, totales: t }) => {
+            cortesOficina.map(({ operadorId, entrega, registros, cuotas, comisiones, notas, totales: t }) => {
               const cerrado = !!entrega?.cerrado;
               const estatusRevision = entrega?.estatus_revision ?? "PENDIENTE";
               const revMeta = REVISION_META[estatusRevision] ?? REVISION_META.PENDIENTE;
               const guardando = guardandoId === entrega?.id;
               return (
-                <div key={operadorId} className="space-y-0">
+                <div key={operadorId ?? `ofi-${oficinaSel}`} className="space-y-0">
                   {/* Info del corte del operador + acciones */}
                   <div className="rounded-t-2xl border border-gray-100 border-b-0 bg-white p-4 flex items-center gap-4 flex-wrap">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${cerrado ? "bg-emerald-500" : "bg-amber-500"}`}>
@@ -415,7 +517,7 @@ export default function CorteAnalista({ usuario }) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-bold text-[#1447e6]">{nombreOperador(operadorId)}</p>
+                        <p className="text-sm font-bold text-[#1447e6]">{oficina?.nombre ?? "—"}</p>
                         <span className="text-[11px] font-semibold text-gray-400">{cerrado ? "Corte cerrado" : "Corte en proceso"}</span>
                         {cerrado && (
                           <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full border ${revMeta.cls}`}>
@@ -424,7 +526,7 @@ export default function CorteAnalista({ usuario }) {
                         )}
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {oficina?.nombre ?? "—"} · {fmt(fecha)}
+                        Encargada: {nombreOperador(operadorId)} · {fmt(fecha)}
                         {entrega?.cerrado_at && <> · Cerrado el {fmtDateTime(entrega.cerrado_at)}</>}
                       </p>
                       {estatusRevision === "REGRESADO" && entrega?.observaciones && (
@@ -469,14 +571,29 @@ export default function CorteAnalista({ usuario }) {
                     </div>
                   </div>
 
-                  {/* Tabla de pólizas del operador */}
+                  {/* Tabla de pólizas de la oficina */}
                   <div className="bg-white rounded-b-2xl border border-gray-100 shadow-sm overflow-hidden mb-3">
-                    <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#1447e6]">
-                      <p className="text-sm font-bold text-white">Pólizas</p>
-                      <span className="text-white/50 text-xs">{registros.length} registros</span>
+                    <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 bg-[#1447e6] flex-wrap">
+                      <p className="text-sm font-bold text-white">Pólizas del corte</p>
+                      <span className="text-white/50 text-xs">{registros.length} emisiones</span>
+                      {cuotas.length > 0 && (
+                        <span className="text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full">
+                          {cuotas.length} pago{cuotas.length === 1 ? "" : "s"} subsecuente{cuotas.length === 1 ? "" : "s"}
+                        </span>
+                      )}
+                      {comisiones.length > 0 && (
+                        <span className="text-[11px] font-bold text-red-200 bg-red-500/10 border border-red-500/30 px-2.5 py-1 rounded-full">
+                          {comisiones.length} vale{comisiones.length === 1 ? "" : "s"} pagado{comisiones.length === 1 ? "" : "s"}
+                        </span>
+                      )}
+                      {notas.length > 0 && (
+                        <span className="text-[11px] font-bold text-white/70 bg-white/10 border border-white/20 px-2.5 py-1 rounded-full">
+                          {notas.length} {notas.length === 1 ? "endoso" : "endosos"}
+                        </span>
+                      )}
                     </div>
 
-                    {registros.length === 0 && notas.length === 0 ? (
+                    {registros.length === 0 && notas.length === 0 && cuotas.length === 0 && comisiones.length === 0 ? (
                       <div className="text-center py-10 text-sm text-gray-400">Sin pólizas registradas en este corte.</div>
                     ) : (
                       <div className="overflow-x-auto">
@@ -539,6 +656,86 @@ export default function CorteAnalista({ usuario }) {
                               );
                             })}
 
+                            {/* Cuotas subsecuentes cobradas ese día — mismas
+                                columnas, tinte ámbar. Suman a efectivo/cheque/
+                                tdc y "Pago", no a Prima Anual/Neta. */}
+                            {cuotas.map((r, ci) => (
+                              <tr key={r.id} className="bg-amber-50/30 hover:bg-amber-50/50 transition-colors">
+                                <td className="px-3 py-2.5 font-bold text-[#1447e6]">{registros.length + ci + 1}</td>
+                                <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{r.aseguradora || "—"}</td>
+                                <td className="px-3 py-2.5 font-mono font-bold text-[#1447e6] whitespace-nowrap">
+                                  {r.numero_poliza || "—"}
+                                  <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle whitespace-nowrap">pago subsecuente</span>
+                                </td>
+                                <td className="px-3 py-2.5 font-mono text-gray-600">{r.folio || "—"}</td>
+                                <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{r.asegurado_nombre || "—"}</td>
+                                <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{r.vendedor_nombre || "—"}</td>
+                                <td className="px-3 py-2.5 text-gray-600 max-w-40 truncate">{r.cobertura || "—"}</td>
+                                <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{r.forma_pago || "—"}</td>
+                                <td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{n(r.efectivo) > 0 ? $(r.efectivo) : "—"}</td>
+                                <td className="px-3 py-2.5 text-right text-gray-600">
+                                  {n(r.cheque) > 0 ? $(r.cheque) : "—"}
+                                  {r.comprobante_cheque_url && (
+                                    <button type="button" onClick={() => verComprobante(r.comprobante_cheque_url)} className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2.5 text-right text-gray-600">
+                                  {n(r.tdc) > 0 ? $(r.tdc) : "—"}
+                                  {r.comprobante_tdc_url && (
+                                    <button type="button" onClick={() => verComprobante(r.comprobante_tdc_url)} className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2.5 text-right text-gray-600">
+                                  {n(r.vale) > 0 ? $(r.vale) : "—"}
+                                  {r.comprobante_vale_url && (
+                                    <button type="button" onClick={() => verComprobante(r.comprobante_vale_url)} className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2.5 text-right text-gray-400">—</td>
+                                <td className="px-3 py-2.5 text-right text-gray-400">—</td>
+                                <td className="px-3 py-2.5 text-center font-bold text-gray-500">{r.num_cuota_pago}</td>
+                                <td className="px-3 py-2.5 text-right font-bold text-emerald-700">{$(r.prima_primer_pago)}</td>
+                                <td className="px-3 py-2.5 text-gray-400 max-w-40 truncate">{r.observaciones || "—"}</td>
+                                <td className="px-3 py-2.5 text-gray-300">—</td>
+                              </tr>
+                            ))}
+
+                            {/* Comisiones (vales) pagadas ese día — filas rojas
+                                en negativo, restan del efectivo. */}
+                            {comisiones.map((c) => {
+                              const pc = c.polizas_cofisem ?? {};
+                              return (
+                                <tr key={`comision-${c.id}`} className="bg-red-50/50 hover:bg-red-50/80 transition-colors">
+                                  <td className="px-3 py-2.5 font-bold text-red-400">−</td>
+                                  <td className="px-3 py-2.5 font-semibold text-red-500/80 whitespace-nowrap">{pc.aseguradora || "—"}</td>
+                                  <td className="px-3 py-2.5 font-mono font-bold text-red-500/80 whitespace-nowrap">
+                                    {pc.numero_poliza || "—"}
+                                    <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-200/50 text-red-600 align-middle whitespace-nowrap">comisión</span>
+                                  </td>
+                                  <td className="px-3 py-2.5 font-mono text-red-400/80">{pc.folio || "—"}</td>
+                                  <td className="px-3 py-2.5 text-red-500/80 whitespace-nowrap">{pc.asegurado_nombre || "—"}</td>
+                                  <td className="px-3 py-2.5 text-red-500/80 whitespace-nowrap">{pc.vendedor_nombre || "—"}</td>
+                                  <td className="px-3 py-2.5 text-red-300">—</td>
+                                  <td className="px-3 py-2.5 text-red-300">—</td>
+                                  <td className="px-3 py-2.5 text-right font-bold text-red-600">
+                                    -{$(c.monto)}
+                                    {c.comprobante_url && (
+                                      <button type="button" onClick={() => verComprobante(c.comprobante_url)} className="ml-1 align-middle text-red-500 hover:text-red-700 inline-flex"><Paperclip className="w-3.5 h-3.5" /></button>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right text-red-300">—</td>
+                                  <td className="px-3 py-2.5 text-right text-red-300">—</td>
+                                  <td className="px-3 py-2.5 text-right text-red-300">—</td>
+                                  <td className="px-3 py-2.5 text-right text-red-300">—</td>
+                                  <td className="px-3 py-2.5 text-right text-red-300">—</td>
+                                  <td className="px-3 py-2.5 text-center text-red-300">—</td>
+                                  <td className="px-3 py-2.5 text-right text-red-300">—</td>
+                                  <td className="px-3 py-2.5 text-red-300">—</td>
+                                  <td className="px-3 py-2.5 text-red-300">—</td>
+                                </tr>
+                              );
+                            })}
+
                             {/* Notas de endoso (tipo A/C) — informativas, en
                                 gris, no suman a ningún total. */}
                             {notas.map((nt) => (
@@ -570,6 +767,22 @@ export default function CorteAnalista({ usuario }) {
                               <td className="px-3 py-3 text-right text-xs font-bold text-emerald-700">{$(t.primerPago)}</td>
                               <td colSpan={2} />
                             </tr>
+
+                            {(comisiones.length > 0 || cuotas.length > 0) && (
+                              <tr className="bg-[#1447e6]/[0.03] text-[11px] text-gray-600">
+                                <td colSpan={8} className="px-3 py-2 text-right font-semibold">
+                                  {cuotas.length > 0 && (
+                                    <>Efectivo incluye {cuotas.length} pago{cuotas.length === 1 ? "" : "s"} subsecuente{cuotas.length === 1 ? "" : "s"}. </>
+                                  )}
+                                  {comisiones.length > 0 && (
+                                    <>Vales pagados <span className="text-red-600 font-bold">-{$(t.valesPagados)}</span> · </>
+                                  )}
+                                  Subtotal efectivo{" "}
+                                  <span className="text-emerald-700 font-bold">{$(t.subEfectivo)}</span>
+                                </td>
+                                <td colSpan={10} />
+                              </tr>
+                            )}
                           </tbody>
                         </table>
                       </div>
@@ -589,7 +802,7 @@ export default function CorteAnalista({ usuario }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50/80 border-b border-gray-100">
-                    {["Oficina", "Operadores", "Pólizas", "1er pago total", "Pendientes de revisión"].map((h) => (
+                    {["Oficina", "Emisores", "Pólizas", "1er pago total", "Pendientes de revisión"].map((h) => (
                       <th key={h} className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-5 py-3 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -603,7 +816,13 @@ export default function CorteAnalista({ usuario }) {
                       ...regs.map((r) => r.creado_por).filter(Boolean),
                     ]);
                     const pendientes = entsOf.filter((e) => e.cerrado && (e.estatus_revision ?? "PENDIENTE") === "PENDIENTE").length;
-                    const to = totalesDe(regs);
+                    const cuotasOf = cuotasDia
+                      .filter((c) => c.polizas_cofisem?.oficina_id === o.id)
+                      .map(cuotaARow);
+                    const comisOf = comisionesDia.filter(
+                      (c) => c.polizas_cofisem?.oficina_id === o.id,
+                    );
+                    const to = totalesDeCorte(regs, cuotasOf, comisOf);
                     return (
                       <tr key={o.id} className={`hover:bg-gray-50/60 transition-colors cursor-pointer ${o.id === oficinaSel ? "bg-blue-50/40" : ""}`} onClick={() => setOficinaSel(o.id)}>
                         <td className="px-5 py-3.5 text-sm font-semibold text-[#1447e6]">{o.nombre}</td>
