@@ -140,7 +140,7 @@ export default function BotonAudioSiniestro({
                 )}
                 <input
                   type="file"
-                  accept="audio/*"
+                  accept="audio/*,.acc"
                   hidden
                   disabled={subiendo}
                   onChange={handleFile}
