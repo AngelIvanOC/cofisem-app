@@ -291,6 +291,13 @@ export default function PoliciasDia({ usuario }) {
 
   const corteDestinoCerrado = !!corteDestinoInfo?.cerrado;
 
+  // "No tengo la póliza" + cuota 1 (contado "1 de 1" o la 1 de cualquier
+  // parcialidad) = se está creando la póliza incompleta cuando debería
+  // haber entrado completa. Se exige explicar el motivo en Observaciones
+  // antes de poder registrar.
+  const exigeMotivoIncompleta =
+    modo === "PARCIAL" && Number(numCuotaParcial) === 1;
+
   async function cargarCorteInfo() {
     let query = supabase
       .from("corte_efectivo_entrega")
@@ -351,7 +358,8 @@ export default function PoliciasDia({ usuario }) {
         .eq("fecha_corte", fechaVista)
         .order("created_at", { ascending: true });
       // Pólizas del día de TODA la oficina (las lleva la encargada).
-      if (usuario?.oficina_id) query = query.eq("oficina_id", usuario.oficina_id);
+      if (usuario?.oficina_id)
+        query = query.eq("oficina_id", usuario.oficina_id);
       const { data, error } = await query;
       if (error) throw error;
       setPolizas(data ?? []);
@@ -481,6 +489,12 @@ export default function PoliciasDia({ usuario }) {
     if (esParcial && (!form.forma_pago || !numCuotaParcial)) {
       setErrorMsg(
         "Selecciona la forma de pago y qué número de cuota vienes a registrar.",
+      );
+      return;
+    }
+    if (exigeMotivoIncompleta && !form.observaciones.trim()) {
+      setErrorMsg(
+        "Indica en Observaciones por qué esta póliza no se registra completa.",
       );
       return;
     }
@@ -1032,9 +1046,13 @@ export default function PoliciasDia({ usuario }) {
                       className={inpCls}
                     >
                       <option value="">Selecciona...</option>
+                      {/* Se ofrece desde la cuota 1: registrar la 1 aquí crea
+                          la póliza igual que en "Tengo la póliza" (el trigger
+                          genera las 2..N), solo que incompleta — por eso más
+                          abajo se exige el motivo en Observaciones. */}
                       {Array.from(
-                        { length: (DIVISOR_PAGO[form.forma_pago] ?? 1) - 1 },
-                        (_, idx) => idx + 2,
+                        { length: DIVISOR_PAGO[form.forma_pago] ?? 1 },
+                        (_, idx) => idx + 1,
                       ).map((num) => (
                         <option key={num} value={num}>
                           Cuota {num} de {DIVISOR_PAGO[form.forma_pago]}
@@ -1544,12 +1562,24 @@ export default function PoliciasDia({ usuario }) {
 
           {/* ── S7: Observaciones ── */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <SeccionHeader>Observaciones</SeccionHeader>
+            <SeccionHeader>
+              Observaciones
+              {exigeMotivoIncompleta && (
+                <span className="ml-1 text-[8px] italic font-bold text-[#D97757] whitespace-normal">
+                  (Indica porque ingresas una póliza incompleta con cuota 1)
+                </span>
+              )}
+            </SeccionHeader>
             <textarea
               rows={3}
               value={form.observaciones}
               onChange={(e) => setF("observaciones", e.target.value)}
-              placeholder="Notas adicionales, irregularidades, comentarios..."
+              required={exigeMotivoIncompleta}
+              placeholder={
+                exigeMotivoIncompleta
+                  ? "Obligatorio: explica por qué la póliza no se registra completa..."
+                  : "Notas adicionales, irregularidades, comentarios..."
+              }
               className={inpCls + " resize-none"}
             />
           </div>

@@ -312,12 +312,29 @@ export async function registrarArribo(siniestroId, { lat, lng, precision, fotoLa
 // se sobrescribe si ya había uno) y guarda su storage_path en
 // siniestros.audio_url ────────────────────────────────────────
 export async function subirAudioSiniestro({ siniestroId, numeroSiniestro, file }) {
-  const ext  = file.name?.split(".").pop() || "webm";
-  const path = `${numeroSiniestro}/audio.${ext}`;
+  // Materializa los bytes en memoria antes de subir. En Android, un audio
+  // elegido desde Google Drive llega como referencia remota (stream perezoso):
+  // pasarlo crudo a supabase.upload() hace que el fetch reviente con
+  // "Failed to fetch" a mitad de la subida. Leerlo a un Blob propio fuerza a
+  // traer todo el archivo ahora, con un error atrapable. En iOS el File ya
+  // trae los bytes, así que esto no cambia nada ahí.
+  let cuerpo = file;
+  try {
+    const buf = await file.arrayBuffer();
+    cuerpo = new Blob([buf], { type: file.type || "audio/webm" });
+  } catch {
+    throw new Error(
+      "No se pudo leer el archivo desde Drive. Descárgalo a tu teléfono y vuelve a intentar."
+    );
+  }
+
+  const nombre = file.name || "audio";
+  const ext    = nombre.includes(".") ? nombre.split(".").pop() : "webm";
+  const path   = `${numeroSiniestro}/audio.${ext}`;
 
   const { error: storageErr } = await supabase.storage
     .from(AUDIO_BUCKET)
-    .upload(path, file, { contentType: file.type || "audio/webm", upsert: true });
+    .upload(path, cuerpo, { contentType: file.type || "audio/webm", upsert: true });
   if (storageErr) throw storageErr;
 
   const { error: dbErr } = await supabase
