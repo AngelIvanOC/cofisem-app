@@ -1,9 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus, Pencil } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  X as XIcon,
+} from "lucide-react";
 import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
 import CompletarPolizaModal, {
-  CompletarBadge,
   ComprobanteField,
   FotosVehiculoField,
   evaluarCompletado,
@@ -63,24 +69,24 @@ const FORMA_PAGO_OPT = [
 const FORMA_PAGO_OPT_PARCIAL = FORMA_PAGO_OPT;
 const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
 
-// Anchos fijos de la tabla "Pólizas del día" (deben sumar 100%) — se usan
-// tanto en el <colgroup> como en los <th>, para que la tabla quepa en el
-// ancho del contenedor sin necesidad de scroll horizontal.
+// Columnas de la tabla. Anchos suman 100% y la tabla es table-fixed para
+// que NO se muevan al filtrar. El ojo abre el detalle completo (solo
+// lectura); el lápiz edita.
 const COLUMNAS_TABLA = [
-  { label: "#", width: "4%" },
-  { label: "Aseguradora", width: "8%" },
-  { label: "Póliza", width: "9%" },
-  { label: "Folio", width: "5%" },
-  { label: "Asegurado", width: "9%" },
-  { label: "Vendedor", width: "9%" },
-  { label: "Cobertura", width: "7%" },
-  { label: "Forma Pago", width: "7%" },
-  { label: "Cuota", width: "5%" },
-  { label: "Pago", width: "7%" },
-  { label: "F. Emisión", width: "7%" },
-  { label: "Emitió / Capturó", width: "9%" },
-  { label: "Acción", width: "14%" },
+  { label: "Póliza", width: "11%", align: "left" },
+  { label: "Aseguradora", width: "8%", align: "left" },
+  { label: "Asegurado", width: "13%", align: "left" },
+  { label: "Cobertura", width: "8%", align: "left" },
+  { label: "Plan", width: "8%", align: "left" },
+  { label: "Método", width: "9%", align: "left" },
+  { label: "Cuota", width: "4%", align: "center" },
+  { label: "Corte", width: "8%", align: "left" },
+  { label: "Prima total", width: "8%", align: "right" },
+  { label: "1er pago", width: "8%", align: "right" },
+  { label: "Estado", width: "7%", align: "left" },
+  { label: "", width: "8%", align: "right" },
 ];
+const POR_PAGINA = 10;
 
 // Catálogo Aseguradora → Uso → Servicio. El Uso se filtra por aseguradora
 // y el Servicio se filtra por aseguradora + uso. Ajusta aquí si algún
@@ -201,27 +207,28 @@ const fmt = (d) =>
       })
     : "—";
 const $ = (v) => `$${n(v).toFixed(2)}`;
-// Para columnas angostas (Asegurado, Vendedor): deja la primera palabra
-// completa y abrevia el resto a su inicial — "FRANCISCO GUTIERREZ GARCIA"
-// → "FRANCISCO G. G."
+
+// "FRANCISCO GUTIERREZ GARCIA" → "FRANCISCO G. G." (primer nombre completo,
+// el resto —segundo nombre y apellidos— a inicial).
 const abreviarNombre = (nombre) => {
   const partes = (nombre || "").trim().split(/\s+/).filter(Boolean);
   if (partes.length === 0) return "—";
   const [primero, ...resto] = partes;
-  return [primero, ...resto.map((p) => p.charAt(0).toUpperCase() + ".")].join(
+  return [primero, ...resto.map((x) => x.charAt(0).toUpperCase() + ".")].join(
     " ",
   );
 };
-const fmtLargo = (d) =>
-  d
-    ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", {
-        weekday: "long",
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      })
-    : "—";
 
+// Cómo se cobró: se deduce de los montos capturados. Puede ser combinado.
+const metodoPago = (p) => {
+  const usados = [];
+  if (n(p.efectivo) > 0) usados.push("Efectivo");
+  if (n(p.tdc) > 0) usados.push("Tarjeta");
+  if (n(p.cheque) > 0) usados.push("Transf.");
+  if (usados.length) return usados.join(" + ");
+  if (n(p.pol_pend_pago) > 0) return "Pendiente";
+  return "—";
+};
 function SeccionHeader({ children }) {
   return (
     <div className="flex items-center gap-3 mb-4">
@@ -249,12 +256,22 @@ export default function PoliciasDia({ usuario }) {
   const [errorMsg, setErrorMsg] = useState(null);
   const [modalRow, setModalRow] = useState(null);
   const [modalEditar, setModalEditar] = useState(false);
+  const [modalDetalle, setModalDetalle] = useState(null); // solo lectura
   const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | null
   const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | ... | null
   const [corteInfo, setCorteInfo] = useState(null);
   const [fechaCorteSel, setFechaCorteSel] = useState(HOY_ISO);
   const [corteDestinoInfo, setCorteDestinoInfo] = useState(null);
   const [fechaVista, setFechaVista] = useState(HOY_ISO);
+  // "DIA" = pólizas de un día concreto (selector de fecha, comportamiento
+  // original). "TODAS" = todas las pólizas de la oficina, con buscador y
+  // filtros, y una columna "Día del corte".
+  const [modoLista, setModoLista] = useState("DIA");
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroAseg, setFiltroAseg] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState(""); // "" | "COMPLETA" | "PENDIENTE"
+  const [fechaFiltro, setFechaFiltro] = useState(""); // filtro de día en modo "Todas" (vacío = todas)
+  const [pagina, setPagina] = useState(1);
   const compUuidsRef = useRef({});
 
   const oficina = usuario?.oficinas?.nombre ?? "OFICINA";
@@ -269,7 +286,8 @@ export default function PoliciasDia({ usuario }) {
 
   useEffect(() => {
     cargar();
-  }, [fechaVista]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fechaVista, modoLista]);
 
   useEffect(() => {
     let activo = true;
@@ -354,12 +372,20 @@ export default function PoliciasDia({ usuario }) {
         .from("polizas_cofisem")
         .select(
           "*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)",
-        )
-        .eq("fecha_corte", fechaVista)
-        .order("created_at", { ascending: true });
-      // Pólizas del día de TODA la oficina (las lleva la encargada).
+        );
+      // Pólizas de TODA la oficina (las lleva la encargada).
       if (usuario?.oficina_id)
         query = query.eq("oficina_id", usuario.oficina_id);
+      if (modoLista === "DIA") {
+        query = query
+          .eq("fecha_corte", fechaVista)
+          .order("created_at", { ascending: true });
+      } else {
+        // Todas: más recientes primero, por día de corte.
+        query = query
+          .order("fecha_corte", { ascending: false })
+          .order("created_at", { ascending: true });
+      }
       const { data, error } = await query;
       if (error) throw error;
       setPolizas(data ?? []);
@@ -369,6 +395,52 @@ export default function PoliciasDia({ usuario }) {
       setLoading(false);
     }
   }
+
+  // Buscador + filtros — se aplican en cliente en AMBOS modos, para que
+  // escribir en el buscador solo filtre y nunca cambie nada de la vista.
+  const polizasFiltradas = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    return polizas.filter((p) => {
+      if (filtroAseg && p.aseguradora !== filtroAseg) return false;
+      if (filtroEstado === "COMPLETA" && !p.completado) return false;
+      if (filtroEstado === "PENDIENTE" && p.completado) return false;
+      if (modoLista === "TODAS" && fechaFiltro && p.fecha_corte !== fechaFiltro)
+        return false;
+      if (!q) return true;
+      return [
+        p.numero_poliza,
+        p.asegurado_nombre,
+        p.vendedor_nombre,
+        p.folio,
+        p.cobertura,
+      ].some((v) => (v || "").toString().toLowerCase().includes(q));
+    });
+  }, [modoLista, polizas, busqueda, filtroAseg, filtroEstado, fechaFiltro]);
+
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(polizasFiltradas.length / POR_PAGINA),
+  );
+  const paginaSegura = Math.min(pagina, totalPaginas);
+  const polizasPagina = polizasFiltradas.slice(
+    (paginaSegura - 1) * POR_PAGINA,
+    paginaSegura * POR_PAGINA,
+  );
+  const totalPrimerPago = polizasFiltradas.reduce(
+    (s, p) => s + n(p.prima_primer_pago),
+    0,
+  );
+
+  // Cualquier cambio de filtro / modo vuelve a la página 1.
+  useEffect(() => {
+    setPagina(1);
+  }, [modoLista, busqueda, filtroAseg, filtroEstado, fechaFiltro, fechaVista]);
+
+  const asegurasEnLista = useMemo(
+    () =>
+      [...new Set(polizas.map((p) => p.aseguradora).filter(Boolean))].sort(),
+    [polizas],
+  );
 
   const setF = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
 
@@ -1658,18 +1730,19 @@ export default function PoliciasDia({ usuario }) {
   return (
     <div className="p-6 min-h-full bg-gray-50 space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-[#1447e6]">Pólizas del día</h1>
-          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-[#1447e6]">Pólizas</h1>
+          <div className="flex items-center gap-2 mt-1.5">
             <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
               {oficina}
             </span>
-            <span className="text-xs text-gray-400 capitalize">
-              {fmtLargo(fechaVista)}
-            </span>
             <span className="text-xs text-gray-400">
-              {polizas.length} registros
+              {modoLista === "DIA"
+                ? `Corte del ${fmt(fechaVista)}`
+                : fechaFiltro
+                  ? `Corte del ${fmt(fechaFiltro)}`
+                  : "Todas las fechas"}
             </span>
             {corteCerrado && (
               <span className="text-[11px] font-bold text-gray-500 bg-gray-200 px-2.5 py-1 rounded-full">
@@ -1678,45 +1751,87 @@ export default function PoliciasDia({ usuario }) {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <input
-            type="date"
-            value={fechaVista}
-            max={HOY_ISO}
-            onChange={(e) => setFechaVista(e.target.value)}
-            title="Ver pólizas de otro día"
-            className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
-          />
-          {fechaVista !== HOY_ISO && (
+        {!corteCerrado && (
+          <button
+            onClick={handleNueva}
+            className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] text-white text-sm font-semibold hover:bg-[#0f36b3] transition-all shadow-sm shadow-[#1447e6]/15"
+          >
+            <Plus className="w-4 h-4" strokeWidth={2.5} />
+            Nueva póliza
+          </button>
+        )}
+      </div>
+
+      {/* Barra de controles — misma forma en ambos modos: al cambiar de
+          "Por día" a "Todas" o al escribir en el buscador NADA se mueve. */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center rounded-xl border border-gray-200 bg-white p-1 shrink-0">
+          {[
+            { k: "DIA", label: "Por día" },
+            { k: "TODAS", label: "Todas" },
+          ].map((o) => (
             <button
-              onClick={() => setFechaVista(HOY_ISO)}
-              className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
+              key={o.k}
+              type="button"
+              onClick={() => setModoLista(o.k)}
+              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                modoLista === o.k
+                  ? "bg-[#1447e6] text-white"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
             >
-              Hoy
+              {o.label}
             </button>
-          )}
-          {!corteCerrado && (
-            <button
-              onClick={handleNueva}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] text-white text-sm font-semibold hover:bg-[#0f36b3] transition-all shadow-sm shadow-[#1447e6]/15"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 4.5v15m7.5-7.5h-15"
-                />
-              </svg>
-              Nueva póliza
-            </button>
-          )}
+          ))}
         </div>
+
+        <input
+          type="text"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="Buscar póliza, asegurado, vendedor, folio…"
+          className="flex-1 min-w-[220px] px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+        />
+
+        <select
+          value={filtroAseg}
+          onChange={(e) => setFiltroAseg(e.target.value)}
+          className="shrink-0 px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+        >
+          <option value="">Todas las aseguradoras</option>
+          {asegurasEnLista.map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filtroEstado}
+          onChange={(e) => setFiltroEstado(e.target.value)}
+          className="shrink-0 px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+        >
+          <option value="">Todos los estados</option>
+          <option value="COMPLETA">Completas</option>
+          <option value="PENDIENTE">Pendientes</option>
+        </select>
+
+        <input
+          type="date"
+          max={HOY_ISO}
+          value={modoLista === "DIA" ? fechaVista : fechaFiltro}
+          onChange={(e) =>
+            modoLista === "DIA"
+              ? setFechaVista(e.target.value || HOY_ISO)
+              : setFechaFiltro(e.target.value)
+          }
+          title={
+            modoLista === "DIA"
+              ? "Día de corte que se muestra"
+              : "Filtrar por día de corte (vacío = todos)"
+          }
+          className="shrink-0 px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+        />
       </div>
 
       {corteCerrado && (
@@ -1740,171 +1855,160 @@ export default function PoliciasDia({ usuario }) {
 
       {/* Tabla */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-16 gap-2 text-gray-400 text-sm">
-            <svg
-              className="animate-spin w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8z"
-              />
-            </svg>
-            Cargando...
-          </div>
-        ) : polizas.length === 0 ? (
-          <div className="text-center py-16">
-            <svg
-              className="w-10 h-10 text-gray-200 mx-auto mb-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-              />
-            </svg>
-            <p className="text-sm text-gray-400">
-              Sin pólizas registradas hoy.
-            </p>
-            {!corteCerrado && (
-              <button
-                onClick={handleNueva}
-                className="mt-4 flex items-center gap-1.5 mx-auto px-4 py-2 rounded-xl bg-[#1447e6] text-white text-xs font-semibold hover:bg-[#0f36b3] transition-all"
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
+        <table className="w-full text-xs table-fixed">
+          <colgroup>
+            {COLUMNAS_TABLA.map((c, idx) => (
+              <col key={idx} style={{ width: c.width }} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              {COLUMNAS_TABLA.map((c, idx) => (
+                <th
+                  key={idx}
+                  className={`text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap ${
+                    c.align === "right"
+                      ? "text-right"
+                      : c.align === "center"
+                        ? "text-center"
+                        : "text-left"
+                  }`}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 4.5v15m7.5-7.5h-15"
-                  />
-                </svg>
-                Registrar primera póliza
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto max-w-[100vw]">
-            <table className="w-full text-xs table-fixed">
-              <colgroup>
-                {COLUMNAS_TABLA.map(({ label, width }) => (
-                  <col key={label} style={{ width }} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  {COLUMNAS_TABLA.slice(0, -1).map(({ label }) => (
-                    <th
-                      key={label}
-                      className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap truncate"
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {loading ? (
+              <tr>
+                <td
+                  colSpan={COLUMNAS_TABLA.length}
+                  className="h-[440px] text-center align-middle text-sm text-gray-400"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <svg
+                      className="animate-spin w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
                     >
-                      {label}
-                    </th>
-                  ))}
-                  <th className="sticky right-0 z-10 bg-gray-50 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.15)]">
-                    Acción
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {polizas.map((p, i) => (
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8v8z"
+                      />
+                    </svg>
+                    Cargando…
+                  </span>
+                </td>
+              </tr>
+            ) : polizasPagina.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={COLUMNAS_TABLA.length}
+                  className="h-[440px] text-center align-middle text-sm text-gray-400"
+                >
+                  {busqueda ||
+                  filtroAseg ||
+                  filtroEstado ||
+                  (modoLista === "TODAS" && fechaFiltro)
+                    ? "Ninguna póliza coincide con la búsqueda o los filtros."
+                    : modoLista === "TODAS"
+                      ? "Aún no hay pólizas registradas en esta oficina."
+                      : "Sin pólizas registradas este día."}
+                </td>
+              </tr>
+            ) : (
+              <>
+                {polizasPagina.map((p) => (
                   <tr
                     key={p.id}
-                    className="hover:bg-gray-50/60 transition-colors"
+                    className="h-11 hover:bg-gray-50/60 transition-colors"
                   >
-                    <td className="px-4 py-3 font-bold text-[#1447e6] truncate">
-                      {i + 1}
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-gray-700 truncate">
-                      {p.aseguradora || "—"}
-                    </td>
-                    <td className="px-4 py-3 font-mono font-bold text-[#1447e6] truncate">
+                    <td
+                      className="px-4 font-mono font-bold text-[#1447e6] truncate"
+                      title={p.numero_poliza || "—"}
+                    >
                       {p.numero_poliza || "—"}
                     </td>
-                    <td className="px-4 py-3 font-mono text-gray-500 truncate">
-                      {p.folio || "—"}
+                    <td className="px-4 font-semibold text-gray-700 truncate">
+                      {p.aseguradora || "—"}
                     </td>
                     <td
-                      className="px-4 py-3 text-gray-700 truncate"
+                      className="px-4 text-gray-700 truncate"
                       title={p.asegurado_nombre || "—"}
                     >
                       {abreviarNombre(p.asegurado_nombre)}
                     </td>
                     <td
-                      className="px-4 py-3 text-gray-600 truncate"
-                      title={p.vendedor_nombre || "—"}
+                      className="px-4 text-gray-500 truncate"
+                      title={p.cobertura || "—"}
                     >
-                      {abreviarNombre(p.vendedor_nombre)}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 truncate">
                       {p.cobertura || "—"}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 truncate">
+                    <td
+                      className="px-4 text-gray-500 truncate"
+                      title={p.forma_pago || "—"}
+                    >
                       {p.forma_pago || "—"}
                     </td>
-                    <td className="px-4 py-3 text-center font-bold text-gray-500 truncate">
+                    <td
+                      className="px-4 text-gray-600 truncate"
+                      title={metodoPago(p)}
+                    >
+                      {metodoPago(p)}
+                    </td>
+                    <td className="px-4 text-center font-bold text-gray-500">
                       {p.num_cuota_pago ?? 1}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-emerald-700 truncate">
+                    <td className="px-4 text-gray-500 whitespace-nowrap">
+                      {fmt(p.fecha_corte)}
+                    </td>
+                    <td className="px-4 text-right text-gray-700 tabular-nums">
+                      {$(p.prima_anual)}
+                    </td>
+                    <td className="px-4 text-right font-bold text-emerald-700 tabular-nums">
                       {$(p.prima_primer_pago)}
                     </td>
-                    <td className="px-4 py-3 text-gray-400 truncate">
-                      {fmt(p.fecha_emision)}
+                    <td className="px-4">
+                      <span
+                        className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          p.completado
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200"
+                        }`}
+                      >
+                        {p.completado ? "Completa" : "Incompleta"}
+                      </span>
                     </td>
-                    <td
-                      className="px-4 py-3 text-gray-600 truncate"
-                      title={
-                        p.creador
-                          ? [p.creador.nombre, p.creador.apellido]
-                              .filter(Boolean)
-                              .join(" ")
-                          : "—"
-                      }
-                    >
-                      {p.creador
-                        ? abreviarNombre(
-                            [p.creador.nombre, p.creador.apellido]
-                              .filter(Boolean)
-                              .join(" "),
-                          )
-                        : "—"}
-                    </td>
-                    <td className="sticky right-0 z-10 bg-white px-4 py-3 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.15)]">
-                      <div className="flex items-center gap-1.5">
-                        <CompletarBadge
-                          completado={p.completado}
-                          onClick={() => {
-                            if (corteCerrado) return;
-                            setModalEditar(false);
-                            setModalRow(p);
-                          }}
-                        />
+                    <td className="px-4">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          title="Ver detalle"
+                          onClick={() => setModalDetalle(p)}
+                          className="w-7 h-7 rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center justify-center text-gray-400 hover:text-[#1447e6] transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
                         {!corteCerrado && (
                           <button
                             type="button"
-                            title="Editar todos los datos de la póliza"
+                            title={
+                              p.completado
+                                ? "Editar todos los datos"
+                                : "Completar / editar"
+                            }
                             onClick={() => {
-                              setModalEditar(true);
+                              setModalEditar(p.completado);
                               setModalRow(p);
                             }}
                             className="w-7 h-7 rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center justify-center text-gray-400 hover:text-[#1447e6] transition-colors"
@@ -1914,8 +2018,10 @@ export default function PoliciasDia({ usuario }) {
                         )}
                         {!corteCerrado && (
                           <button
+                            type="button"
+                            title="Eliminar"
                             onClick={() => handleEliminar(p)}
-                            className="w-6 h-6 rounded-md hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors"
+                            className="w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors"
                           >
                             <svg
                               className="w-3.5 h-3.5"
@@ -1936,29 +2042,53 @@ export default function PoliciasDia({ usuario }) {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-              {/* Totales */}
-              <tfoot>
-                <tr className="bg-[#1447e6]/5 border-t-2 border-[#1447e6]/20">
-                  <td
-                    colSpan={8}
-                    className="px-4 py-3 text-right text-xs font-bold text-[#1447e6]"
-                  >
-                    TOTALES
-                  </td>
-                  <td />
-                  <td className="px-4 py-3 text-right text-xs font-bold text-emerald-700">
-                    {$(polizas.reduce((s, p) => s + n(p.prima_primer_pago), 0))}
-                  </td>
-                  <td />
-                  <td />
-                  <td className="sticky right-0 z-10 bg-[#1447e6]/5" />
-                </tr>
-              </tfoot>
-            </table>
+                {Array.from({
+                  length: POR_PAGINA - polizasPagina.length,
+                }).map((_, k) => (
+                  <tr key={`pad-${k}`} className="h-11">
+                    <td colSpan={COLUMNAS_TABLA.length} />
+                  </tr>
+                ))}
+              </>
+            )}
+          </tbody>
+        </table>
+
+        {/* Pie: conteo + total + paginación (siempre presente) */}
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 bg-gray-50/50 text-xs">
+          <span className="text-gray-500">
+            <strong className="text-gray-700">
+              {polizasFiltradas.length}
+            </strong>{" "}
+            registros · 1er pago total{" "}
+            <strong className="text-emerald-700 tabular-nums">
+              {$(totalPrimerPago)}
+            </strong>
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPagina((p) => Math.max(1, p - 1))}
+              disabled={paginaSegura <= 1}
+              className="w-7 h-7 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="px-2 text-gray-500 tabular-nums">
+              {paginaSegura} / {totalPaginas}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+              disabled={paginaSegura >= totalPaginas}
+              className="w-7 h-7 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-        )}
+        </div>
       </div>
+
 
       <CompletarPolizaModal
         row={modalRow}
@@ -1969,11 +2099,11 @@ export default function PoliciasDia({ usuario }) {
           setModalEditar(false);
         }}
         onSaved={(data) => {
-          // Si al editar se movió a otro corte, ya no pertenece a la
-          // lista del día que se está viendo — se quita en vez de
-          // actualizarla in situ.
+          // En modo "Todas" la póliza sigue en la lista aunque cambie de
+          // corte. En modo "Por día", si al editar se movió a otro día ya
+          // no pertenece a la vista actual y se quita.
           setPolizas((prev) =>
-            data.fecha_corte === fechaVista
+            modoLista === "TODAS" || data.fecha_corte === fechaVista
               ? prev.map((p) => (p.id === data.id ? data : p))
               : prev.filter((p) => p.id !== data.id),
           );
@@ -1981,6 +2111,123 @@ export default function PoliciasDia({ usuario }) {
           setModalEditar(false);
         }}
       />
+
+      <DetallePolizaModal
+        row={modalDetalle}
+        onClose={() => setModalDetalle(null)}
+      />
+    </div>
+  );
+}
+
+// ── Modal de solo lectura: todo el detalle de la póliza ──────────
+function DetallePolizaModal({ row, onClose }) {
+  if (!row) return null;
+  const p = row;
+  const creador = p.creador
+    ? [p.creador.nombre, p.creador.apellido].filter(Boolean).join(" ")
+    : "—";
+
+  const Campo = ({ label, children }) => (
+    <div>
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+        {label}
+      </p>
+      <p className="text-sm text-gray-700 mt-0.5 break-words">
+        {children ?? "—"}
+      </p>
+    </div>
+  );
+  const Seccion = ({ titulo, children }) => (
+    <div>
+      <p className="text-[11px] font-bold text-[#1447e6] uppercase tracking-wide mb-2">
+        {titulo}
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
+        {children}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto">
+        <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-[#1447e6]">
+              Detalle de póliza
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              <span className="font-mono font-semibold text-gray-600">
+                {p.numero_poliza || "—"}
+              </span>{" "}
+              · {p.asegurado_nombre || "—"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span
+              className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                p.completado
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-amber-50 text-amber-700 border-amber-200"
+              }`}
+            >
+              {p.completado ? "Completa" : "Incompleta"}
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <Seccion titulo="Póliza">
+            <Campo label="Número">{p.numero_poliza}</Campo>
+            <Campo label="Folio">{p.folio}</Campo>
+            <Campo label="Aseguradora">{p.aseguradora}</Campo>
+            <Campo label="Cobertura">{p.cobertura}</Campo>
+            <Campo label="F. emisión">{fmt(p.fecha_emision)}</Campo>
+            <Campo label="Vigencia">
+              {fmt(p.vigencia_inicio)} – {fmt(p.vigencia_fin)}
+            </Campo>
+            <Campo label="Día de corte">{fmt(p.fecha_corte)}</Campo>
+          </Seccion>
+
+          <Seccion titulo="Asegurado y vehículo">
+            <Campo label="Asegurado">{p.asegurado_nombre}</Campo>
+            <Campo label="Teléfono">{p.telefono}</Campo>
+            <Campo label="Placas">{p.placas}</Campo>
+            <Campo label="Núm. serie">{p.num_serie}</Campo>
+            <Campo label="Tipo / uso / servicio">
+              {[p.tipo, p.uso, p.servicio].filter(Boolean).join(" · ") || "—"}
+            </Campo>
+          </Seccion>
+
+          <Seccion titulo="Pago">
+            <Campo label="Plan">{p.forma_pago}</Campo>
+            <Campo label="Método">{metodoPago(p)}</Campo>
+            <Campo label="Cuota">{p.num_cuota_pago ?? 1}</Campo>
+            <Campo label="Prima total anual">{$(p.prima_anual)}</Campo>
+            <Campo label="Prima neta anual">{$(p.prima_neta)}</Campo>
+            <Campo label="1er pago total">{$(p.prima_primer_pago)}</Campo>
+            <Campo label="1er pago neta">{$(p.prima_primer_pago_neta)}</Campo>
+            <Campo label="Efectivo">{$(p.efectivo)}</Campo>
+            <Campo label="Cheque / dep.">{$(p.cheque)}</Campo>
+            <Campo label="T. crédito/déb.">{$(p.tdc)}</Campo>
+            <Campo label="Pól. pend. pago">{$(p.pol_pend_pago)}</Campo>
+          </Seccion>
+
+          <Seccion titulo="Otros">
+            <Campo label="Vendedor">{p.vendedor_nombre}</Campo>
+            <Campo label="Emitió / capturó">{creador}</Campo>
+            <Campo label="Observaciones">{p.observaciones}</Campo>
+          </Seccion>
+        </div>
+      </div>
     </div>
   );
 }

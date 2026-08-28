@@ -100,6 +100,46 @@ const GAMAN_META = {
 };
 
 function infoFila(c, p) {
+  // ── Cuota 1 que quedó como "pól. pend. pago" al emitir (no se cobró ese
+  //    día). Aplica IGUAL a GAMAN y a cualquier otra aseguradora. El cobro
+  //    se registra aparte con "Registrar cobro" y entra al corte del día en
+  //    que el cliente vino a pagar; el corte de emisión sigue mostrándola
+  //    como pendiente. No se usa el estatus de GAMAN para nada de esto.
+  const esCuota1 = (c.num_cuota ?? 1) === 1 && !p?.registro_parcial;
+  if (esCuota1 && n(p?.pol_pend_pago) > 0) {
+    const cobrado = n(c.efectivo) + n(c.cheque) + n(c.tdc);
+    const yaCobrado =
+      !c._virtual &&
+      (cobrado > 0 || c.estatus === "RECIBIDO" || c.estatus === "APLICADO");
+    if (yaCobrado) {
+      return {
+        esGaman: !!c.pago_gaman_id,
+        bucket: c.estatus === "APLICADO" ? "APLICADO" : "RECIBIDO",
+        meta: {
+          label: "Cobrado",
+          cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        },
+        primaTotal: cobrado || p.pol_pend_pago,
+        primaNeta: c.prima_neta ?? null,
+        fecha: c.fecha_recibido,
+        vence: p.fecha_corte,
+      };
+    }
+    return {
+      esGaman: !!c.pago_gaman_id,
+      _saldoPendiente: true,
+      bucket: "PENDIENTE",
+      meta: {
+        label: "Pendiente de pago",
+        cls: "bg-amber-50 text-amber-700 border-amber-200",
+      },
+      primaTotal: p.pol_pend_pago,
+      primaNeta: null,
+      fecha: null,
+      vence: p.fecha_corte,
+    };
+  }
+
   if (c._virtual) {
     return {
       esGaman: false,
@@ -113,45 +153,6 @@ function infoFila(c, p) {
   }
   if (c.pago_gaman_id) {
     const g = c.pago_gaman ?? {};
-    // Cuota 1 de una póliza GAMAN cuyo saldo lo cobra COFISEM aparte (quedó
-    // como "pól. pend. pago" al emitir). El estatus de GAMAN NO se usa aquí:
-    //  - ya se registró el cobro en COFISEM (efectivo/cheque/tdc o estatus
-    //    RECIBIDO/APLICADO) -> "Cobrado", con su fecha.
-    //  - todavía con saldo pendiente -> "Pendiente de pago" + botón.
-    if (c.num_cuota === 1 && n(p?.pol_pend_pago) > 0) {
-      const cobradoCofisem = n(c.efectivo) + n(c.cheque) + n(c.tdc);
-      if (
-        cobradoCofisem > 0 ||
-        c.estatus === "RECIBIDO" ||
-        c.estatus === "APLICADO"
-      ) {
-        return {
-          esGaman: true,
-          bucket: c.estatus === "APLICADO" ? "APLICADO" : "RECIBIDO",
-          meta: {
-            label: "Cobrado",
-            cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
-          },
-          primaTotal: cobradoCofisem || p.pol_pend_pago,
-          primaNeta: null,
-          fecha: c.fecha_recibido,
-          vence: p.fecha_corte,
-        };
-      }
-      return {
-        esGaman: true,
-        _saldoPendiente: true,
-        bucket: "PENDIENTE",
-        meta: {
-          label: "Pendiente de pago",
-          cls: "bg-amber-50 text-amber-700 border-amber-200",
-        },
-        primaTotal: p.pol_pend_pago,
-        primaNeta: null,
-        fecha: null,
-        vence: p.fecha_corte,
-      };
-    }
     return {
       esGaman: true,
       bucket: GAMAN_BUCKET[g.estatus] ?? "PENDIENTE",
@@ -346,16 +347,21 @@ export default function PagosOperador({ usuario }) {
   // guardarla desde uno de los modales.
   function actualizarCuota(actualizado) {
     setPolizas((prev) =>
-      prev.map((p) =>
-        p.id !== actualizado.poliza_cofisem_id
-          ? p
-          : {
-              ...p,
-              pagos_cofisem: (p.pagos_cofisem ?? []).map((c) =>
+      prev.map((p) => {
+        if (p.id !== actualizado.poliza_cofisem_id) return p;
+        const cuotas = p.pagos_cofisem ?? [];
+        const existe = cuotas.some((c) => c.id === actualizado.id);
+        return {
+          ...p,
+          // Un cobro tardío de cuota 1 (póliza sin fila previa) CREA la
+          // fila — hay que agregarla, no solo mapear las existentes.
+          pagos_cofisem: existe
+            ? cuotas.map((c) =>
                 c.id === actualizado.id ? { ...c, ...actualizado } : c,
-              ),
-            },
-      ),
+              )
+            : [...cuotas, actualizado],
+        };
+      }),
     );
   }
 
@@ -739,6 +745,19 @@ function ModalCuotasPoliza({
                         title="Ver comprobante"
                       >
                         <Paperclip className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {/* Cuota 1 virtual (póliza sin fila real en pagos_cofisem —
+                        p. ej. CONTADO de cualquier aseguradora) que quedó como
+                        "pól. pend. pago": único caso en que una fila virtual
+                        tiene acción, para poder ponerla al corriente otro día. */}
+                    {c._virtual && !grupo.cancelada && _saldoPendiente && (
+                      <button
+                        type="button"
+                        onClick={() => onMarcarRecibido(c)}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold whitespace-nowrap"
+                      >
+                        Registrar cobro
                       </button>
                     )}
                     {!c._virtual &&

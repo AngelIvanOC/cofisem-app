@@ -204,28 +204,55 @@ export default function RegistrarCobroModal({
     }
     setGuardando(true);
     try {
-      const { data, error: err } = await supabase
-        .from("pagos_cofisem")
-        .update({
-          prima_total: n(form.prima_total),
-          prima_neta: n(form.prima_neta),
-          fecha_recibido: form.fecha_recibido || hoyISO(),
-          efectivo: n(form.efectivo),
-          cheque: n(form.cheque),
-          tdc: n(form.tdc),
-          pol_pend_pago: 0,
-          autorizacion: form.autorizacion || null,
-          comprobante_cheque_url: form.comprobante_cheque_path,
-          comprobante_tdc_url: form.comprobante_tdc_path,
-          endoso_url: form.endoso_path,
-          endoso_nota: form.endoso_nota || null,
-          estatus: "RECIBIDO",
-          recibido_por: usuario?.id ?? null,
-        })
-        .eq("id", row.id)
-        .select()
-        .single();
-      if (err) throw err;
+      const campos = {
+        prima_total: n(form.prima_total),
+        prima_neta: n(form.prima_neta),
+        fecha_recibido: form.fecha_recibido || hoyISO(),
+        efectivo: n(form.efectivo),
+        cheque: n(form.cheque),
+        tdc: n(form.tdc),
+        pol_pend_pago: 0,
+        autorizacion: form.autorizacion || null,
+        comprobante_cheque_url: form.comprobante_cheque_path,
+        comprobante_tdc_url: form.comprobante_tdc_path,
+        endoso_url: form.endoso_path,
+        endoso_nota: form.endoso_nota || null,
+        estatus: "RECIBIDO",
+        recibido_por: usuario?.id ?? null,
+      };
+
+      let data;
+      if (row._virtual) {
+        // Póliza sin fila real en pagos_cofisem (p. ej. CONTADO de cualquier
+        // aseguradora) que quedó como "pól. pend. pago": se CREA la fila del
+        // cobro. Su fecha_recibido la mete al corte de ese día; el corte de
+        // emisión sigue mostrando la póliza como pendiente (no se toca
+        // polizas_cofisem.pol_pend_pago).
+        const pc = row.polizas_cofisem ?? {};
+        const res = await supabase
+          .from("pagos_cofisem")
+          .insert({
+            ...campos,
+            poliza_cofisem_id: row.poliza_cofisem_id,
+            num_cuota: row.num_cuota ?? 1,
+            fecha_vencimiento: pc.fecha_emision ?? null,
+            oficina_id: pc.oficina_id ?? null,
+            operador_id: usuario?.id ?? null,
+          })
+          .select()
+          .single();
+        if (res.error) throw res.error;
+        data = res.data;
+      } else {
+        const res = await supabase
+          .from("pagos_cofisem")
+          .update(campos)
+          .eq("id", row.id)
+          .select()
+          .single();
+        if (res.error) throw res.error;
+        data = res.data;
+      }
       // NO se toca polizas_cofisem.pol_pend_pago: el corte del día en que se
       // emitió debe seguir mostrando que ESE día quedó pendiente de pago.
       // El cobro de hoy vive en esta fila de pagos_cofisem (fecha_recibido)
