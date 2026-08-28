@@ -61,6 +61,7 @@ function cuotaARow(c) {
     ...p,
     id: `cuota-${c.id}`,
     _esCuotaSubsecuente: true,
+    _esPagoTardio: c.num_cuota === 1,
     num_cuota_pago: c.num_cuota,
     prima_primer_pago: c.prima_total,
     prima_primer_pago_neta: c.prima_neta,
@@ -212,12 +213,13 @@ export default function CorteAnalista({ usuario }) {
           .from("polizas_historial")
           .select("id, poliza_id, notas, cambiado_at, cambiado_por, polizas(numero_poliza, constancia, oficina_id)")
           .in("tipo_endoso", ["A", "C"]),
-        // Cuotas subsecuentes efectivamente cobradas ese día (mismo criterio
-        // que el corte del operador ya cerrado: fecha_recibido = fecha).
+        // Cuotas efectivamente cobradas ese día (fecha_recibido = fecha).
+        // Incluye la cuota 1 solo cuando fue un cobro tardío de un saldo que
+        // quedó pendiente (estatus RECIBIDO) — no la captura de emisión.
         supabase
           .from("pagos_cofisem")
           .select("*, polizas_cofisem(*)")
-          .gt("num_cuota", 1)
+          .gte("num_cuota", 1)
           .eq("fecha_recibido", fecha),
         // Vales / comisiones pagadas a vendedores ese día.
         supabase
@@ -241,7 +243,10 @@ export default function CorteAnalista({ usuario }) {
       );
       setCuotasDia(
         (cuotas ?? []).filter(
-          (c) => c.polizas_cofisem && !c.polizas_cofisem.perdida,
+          (c) =>
+            c.polizas_cofisem &&
+            !c.polizas_cofisem.perdida &&
+            (c.num_cuota > 1 || c.estatus === "RECIBIDO"),
         ),
       );
       setComisionesDia(comis ?? []);
@@ -665,7 +670,9 @@ export default function CorteAnalista({ usuario }) {
                                 <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{r.aseguradora || "—"}</td>
                                 <td className="px-3 py-2.5 font-mono font-bold text-[#1447e6] whitespace-nowrap">
                                   {r.numero_poliza || "—"}
-                                  <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle whitespace-nowrap">pago subsecuente</span>
+                                  <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle whitespace-nowrap">
+                                    {r._esPagoTardio ? "pago tardío" : "pago subsecuente"}
+                                  </span>
                                 </td>
                                 <td className="px-3 py-2.5 font-mono text-gray-600">{r.folio || "—"}</td>
                                 <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{r.asegurado_nombre || "—"}</td>

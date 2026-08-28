@@ -51,6 +51,9 @@ function cuotaARow(c) {
     ...p,
     id: `cuota-${c.id}`,
     _esCuotaSubsecuente: true,
+    // Cuota 1 que se cobra en un corte posterior al de su emisión: quedó
+    // como "pól. pend. pago" y el cliente pagó días después.
+    _esPagoTardio: c.num_cuota === 1,
     _cuotaEstatus: c.estatus,
     _cuotaRaw: c,
     num_cuota_pago: c.num_cuota,
@@ -254,9 +257,12 @@ export default function CorteOperador({ usuario }) {
   // nunca aparece aquí — se captura directo en polizas_cofisem (vía
   // "Completar"), tanto para pólizas normales como para las vinculadas a
   // GAMAN, y el trigger de BD no genera ninguna fila en pagos_cofisem
-  // para ella salvo el link informativo de GAMAN (pago_gaman_id), que
-  // por eso se descarta aquí con num_cuota > 1 — de lo contrario esa
-  // cuota 1 de GAMAN se contaría dos veces (aquí y en `registros`).
+  // para ella salvo el link informativo de GAMAN (pago_gaman_id). Por eso
+  // la cuota 1 normalmente se descarta aquí — de lo contrario se contaría
+  // dos veces (aquí y en `registros`). ÚNICA excepción: una cuota 1 que
+  // quedó como "pól. pend. pago" al emitir y se liquidó otro día — ahí sí
+  // tiene su propia fila de cobro (estatus RECIBIDO + fecha_recibido) y
+  // debe entrar al corte de ese día, igual que un pago subsecuente.
   async function cargarCuotasDia(corteEstaCerrado) {
     try {
       let query = supabase
@@ -264,12 +270,15 @@ export default function CorteOperador({ usuario }) {
         .select(
           "*, polizas_cofisem(*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)), pago_gaman:pagos(fecha_pago)",
         )
-        .gt("num_cuota", 1);
+        .gte("num_cuota", 1);
       if (usuario?.oficina_id)
         query = query.eq("oficina_id", usuario.oficina_id);
       const { data, error } = await query;
       if (error) throw error;
       const relevantes = (data ?? []).filter((c) => {
+        if (c.num_cuota === 1) {
+          return c.estatus === "RECIBIDO" && c.fecha_recibido === fechaCorte;
+        }
         if (c.fecha_recibido === fechaCorte) return true;
         if (corteEstaCerrado) return false;
         if (
@@ -947,7 +956,7 @@ export default function CorteOperador({ usuario }) {
                       {r.numero_poliza || "—"}
                       {r._esCuotaSubsecuente && (
                         <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle whitespace-nowrap">
-                          pago subsecuente
+                          {r._esPagoTardio ? "pago tardío" : "pago subsecuente"}
                         </span>
                       )}
                     </td>

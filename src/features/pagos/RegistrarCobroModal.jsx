@@ -43,7 +43,6 @@ const VACIO = {
   efectivo: "",
   cheque: "",
   tdc: "",
-  pol_pend_pago: "",
   autorizacion: "",
   comprobante_cheque_path: null,
   comprobante_tdc_path: null,
@@ -56,18 +55,13 @@ const VACIO = {
 // verificó cuando se registró la póliza).
 function faltantes(f) {
   const detalle = {
-    pago: !(
-      n(f.efectivo) > 0 ||
-      n(f.cheque) > 0 ||
-      n(f.tdc) > 0 ||
-      n(f.pol_pend_pago) > 0
-    ),
+    pago: !(n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0),
     autorizacion: n(f.tdc) > 0 && !(f.autorizacion && f.autorizacion.trim()),
     comprobanteTdc: n(f.tdc) > 0 && !f.comprobante_tdc_path,
     comprobanteCheque: n(f.cheque) > 0 && !f.comprobante_cheque_path,
   };
   const labels = {
-    pago: "Marca al menos una forma de pago (Efectivo, Cheque/Dep., T. Crédito/Déb. o Pól. Pend. Pago)",
+    pago: "Marca al menos una forma de pago (Efectivo, Cheque/Dep. o T. Crédito/Déb.)",
     autorizacion:
       "Autorización (obligatoria porque se pagó con T. Crédito/Déb.)",
     comprobanteTdc: "Comprobante de la terminal (TDC)",
@@ -98,14 +92,18 @@ export default function RegistrarCobroModal({
 
   useEffect(() => {
     if (!row) return;
+    // Cuota 1 que quedó como "pól. pend. pago": el saldo a cobrar vive en la
+    // póliza padre, no en esta fila. Se precarga en Efectivo para que la
+    // encargada solo confirme la forma de pago y la fecha del cobro.
+    const saldoCuota1 =
+      row.num_cuota === 1 ? n(row.polizas_cofisem?.pol_pend_pago) : 0;
     setForm({
-      prima_total: row.prima_total || "",
+      prima_total: row.prima_total || (saldoCuota1 > 0 ? saldoCuota1 : ""),
       prima_neta: row.prima_neta || "",
       fecha_recibido: row.fecha_recibido || hoyISO(),
-      efectivo: row.efectivo || "",
+      efectivo: row.efectivo || (saldoCuota1 > 0 ? String(saldoCuota1) : ""),
       cheque: row.cheque || "",
       tdc: row.tdc || "",
-      pol_pend_pago: row.pol_pend_pago || "",
       autorizacion: row.autorizacion ?? "",
       comprobante_cheque_path: row.comprobante_cheque_url ?? null,
       comprobante_tdc_path: row.comprobante_tdc_url ?? null,
@@ -215,7 +213,7 @@ export default function RegistrarCobroModal({
           efectivo: n(form.efectivo),
           cheque: n(form.cheque),
           tdc: n(form.tdc),
-          pol_pend_pago: n(form.pol_pend_pago),
+          pol_pend_pago: 0,
           autorizacion: form.autorizacion || null,
           comprobante_cheque_url: form.comprobante_cheque_path,
           comprobante_tdc_url: form.comprobante_tdc_path,
@@ -228,6 +226,11 @@ export default function RegistrarCobroModal({
         .select()
         .single();
       if (err) throw err;
+      // NO se toca polizas_cofisem.pol_pend_pago: el corte del día en que se
+      // emitió debe seguir mostrando que ESE día quedó pendiente de pago.
+      // El cobro de hoy vive en esta fila de pagos_cofisem (fecha_recibido)
+      // y entra al corte de esa fecha por separado — la póliza aparece dos
+      // veces: pendiente el día de emisión, cobrada el día del pago.
       onSaved(data);
     } catch (e) {
       setError(e.message);
@@ -345,7 +348,7 @@ export default function RegistrarCobroModal({
                 </span>
               )}
             </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <div>
                 <label className={lbl}>Efectivo</label>
                 <input
@@ -378,18 +381,6 @@ export default function RegistrarCobroModal({
                   step="0.01"
                   value={form.tdc}
                   onChange={(e) => setF("tdc", e.target.value)}
-                  placeholder="0.00"
-                  className={campoCls("pago")}
-                />
-              </div>
-              <div>
-                <label className={lbl}>Pól. Pend. Pago</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.pol_pend_pago}
-                  onChange={(e) => setF("pol_pend_pago", e.target.value)}
                   placeholder="0.00"
                   className={campoCls("pago")}
                 />

@@ -99,7 +99,7 @@ const GAMAN_META = {
   },
 };
 
-function infoFila(c) {
+function infoFila(c, p) {
   if (c._virtual) {
     return {
       esGaman: false,
@@ -113,6 +113,45 @@ function infoFila(c) {
   }
   if (c.pago_gaman_id) {
     const g = c.pago_gaman ?? {};
+    // Cuota 1 de una póliza GAMAN cuyo saldo lo cobra COFISEM aparte (quedó
+    // como "pól. pend. pago" al emitir). El estatus de GAMAN NO se usa aquí:
+    //  - ya se registró el cobro en COFISEM (efectivo/cheque/tdc o estatus
+    //    RECIBIDO/APLICADO) -> "Cobrado", con su fecha.
+    //  - todavía con saldo pendiente -> "Pendiente de pago" + botón.
+    if (c.num_cuota === 1 && n(p?.pol_pend_pago) > 0) {
+      const cobradoCofisem = n(c.efectivo) + n(c.cheque) + n(c.tdc);
+      if (
+        cobradoCofisem > 0 ||
+        c.estatus === "RECIBIDO" ||
+        c.estatus === "APLICADO"
+      ) {
+        return {
+          esGaman: true,
+          bucket: c.estatus === "APLICADO" ? "APLICADO" : "RECIBIDO",
+          meta: {
+            label: "Cobrado",
+            cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
+          },
+          primaTotal: cobradoCofisem || p.pol_pend_pago,
+          primaNeta: null,
+          fecha: c.fecha_recibido,
+          vence: p.fecha_corte,
+        };
+      }
+      return {
+        esGaman: true,
+        _saldoPendiente: true,
+        bucket: "PENDIENTE",
+        meta: {
+          label: "Pendiente de pago",
+          cls: "bg-amber-50 text-amber-700 border-amber-200",
+        },
+        primaTotal: p.pol_pend_pago,
+        primaNeta: null,
+        fecha: null,
+        vence: p.fecha_corte,
+      };
+    }
     return {
       esGaman: true,
       bucket: GAMAN_BUCKET[g.estatus] ?? "PENDIENTE",
@@ -142,13 +181,13 @@ function cuotasDePoliza(p) {
   const reales = (p.pagos_cofisem ?? []).map((c) => ({
     ...c,
     polizas_cofisem: p,
-    _info: infoFila(c),
+    _info: infoFila(c, p),
   }));
   if (p.poliza_id) return reales;
   const numCuotaPropia = p.registro_parcial ? (p.num_cuota_pago ?? 1) : 1;
   if (reales.some((c) => c.num_cuota === numCuotaPropia)) return reales;
   const virtual = cuotaPropiaVirtual(p);
-  return [{ ...virtual, _info: infoFila(virtual) }, ...reales];
+  return [{ ...virtual, _info: infoFila(virtual, p) }, ...reales];
 }
 
 // Mismos 3 estatus que GAMAN ya trata como "bloqueada" en su propia
@@ -246,7 +285,7 @@ export default function PagosOperador({ usuario }) {
         .select(
           `
           id, poliza_id, aseguradora, numero_poliza, asegurado_nombre,
-          fecha_emision, prima_primer_pago, prima_primer_pago_neta,
+          fecha_emision, fecha_corte, prima_primer_pago, prima_primer_pago_neta,
           efectivo, cheque, tdc, pol_pend_pago, poliza_gaman_estatus,
           comprobante_cheque_url, comprobante_tdc_url,
           perdida, perdida_nota, registro_parcial, num_cuota_pago,
@@ -643,8 +682,15 @@ function ModalCuotasPoliza({
 
           <div className="space-y-2">
             {grupo.cuotas.map((c) => {
-              const { esGaman, meta, primaTotal, primaNeta, vence, fecha } =
-                c._info;
+              const {
+                esGaman,
+                meta,
+                primaTotal,
+                primaNeta,
+                vence,
+                fecha,
+                _saldoPendiente,
+              } = c._info;
               return (
                 <div
                   key={c.id}
@@ -699,20 +745,24 @@ function ModalCuotasPoliza({
                       !grupo.cancelada &&
                       (esGaman ? (
                         <>
-                          <button
-                            type="button"
-                            onClick={() => onAdjuntarArchivo(c)}
-                            className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-[11px] font-bold whitespace-nowrap"
-                          >
-                            {c.comprobante_url
-                              ? "Cambiar archivo"
-                              : "Adjuntar archivo"}
-                          </button>
+                          {!_saldoPendiente && (
+                            <button
+                              type="button"
+                              onClick={() => onAdjuntarArchivo(c)}
+                              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-[11px] font-bold whitespace-nowrap"
+                            >
+                              {c.comprobante_url
+                                ? "Cambiar archivo"
+                                : "Adjuntar archivo"}
+                            </button>
+                          )}
                           {/* Cuota 1 de una póliza GAMAN se cobra desde
-                              "Completar" (polizas_cofisem), no aquí — solo
-                              cuotas 2+ necesitan capturar su propio
-                              efectivo/cheque/tdc para sumar al corte. */}
-                          {c.num_cuota > 1 && c.estatus === "PENDIENTE" && (
+                              "Completar" al emitir. Solo aparece "Registrar
+                              cobro" aquí cuando quedó con saldo pendiente de
+                              pago (_saldoPendiente) para liquidarlo otro día,
+                              o para las cuotas 2+ pendientes. */}
+                          {((c.num_cuota > 1 && c.estatus === "PENDIENTE") ||
+                            _saldoPendiente) && (
                             <button
                               type="button"
                               onClick={() => onMarcarRecibido(c)}
