@@ -60,6 +60,8 @@ const COLS_PAGO = [
 
 const th = { fontFamily: "Helvetica-Bold", fontSize: 6.5, color: COLORS.white };
 const td = { fontFamily: "Helvetica", fontSize: 6.5, color: COLORS.ink };
+// Azul claro — cuota subsecuente que toca cobrar ese día y aún no se cobra.
+const POR_COBRAR_BG = "#BBDEFB";
 const tdBold = {
   fontFamily: "Helvetica-Bold",
   fontSize: 6.5,
@@ -114,7 +116,11 @@ function TablaHeader({ cols }) {
 const marca = (path) => (path ? "XXX" : "—");
 
 function FilaPoliza({ r, i }) {
-  const bg = i % 2 === 1 ? COLORS.stripe : COLORS.white;
+  const bg = r._cuotaPorCobrar
+    ? POR_COBRAR_BG
+    : i % 2 === 1
+      ? COLORS.stripe
+      : COLORS.white;
   const val = {
     no: i + 1,
     aseguradora: r.aseguradora || "—",
@@ -129,7 +135,9 @@ function FilaPoliza({ r, i }) {
     primaNeta: $(r.prima_neta),
     cuota: r.num_cuota_pago ?? 1,
     pago: $(r.prima_primer_pago),
-    cobertura: r.cobertura || "—",
+    cobertura: r._cuotaPorCobrar
+      ? "• POR COBRAR"
+      : r.cobertura || "—",
     placas: r.placas || "—",
     tipo: r.tipo || "—",
     uso: r.uso || "—",
@@ -214,7 +222,11 @@ function FilaComision({ c }) {
 }
 
 function FilaPago({ r, i }) {
-  const bg = i % 2 === 1 ? COLORS.stripe : COLORS.white;
+  const bg = r._cuotaPorCobrar
+    ? POR_COBRAR_BG
+    : i % 2 === 1
+      ? COLORS.stripe
+      : COLORS.white;
   const val = {
     no: i + 1,
     formaPago: r.forma_pago || "—",
@@ -224,7 +236,8 @@ function FilaPago({ r, i }) {
     autorizacion: r.autorizacion || "—",
     polPendPago: n(r.pol_pend_pago) > 0 ? $(r.pol_pend_pago) : "—",
     telefono: r.telefono || "—",
-    observaciones: r.observaciones || "—",
+    observaciones:
+      (r._cuotaPorCobrar ? "• POR COBRAR — " : "") + (r.observaciones || "—"),
     fotos: r.fotos_url || r.fotos_verificado ? "XXX" : "—",
     factura: marca(r.factura_url),
     tCirc: marca(r.t_circ_url),

@@ -133,7 +133,19 @@ export default function CorteOperador({ usuario }) {
   // pagar) ni para el bloqueo de cierre por "pendientes de completar"
   // (esas filas no tienen concepto de completado — si el cliente no
   // vino, simplemente se sigue mostrando al día siguiente).
-  const filasCuotas = cuotasDia.map(cuotaARow);
+  const filasCuotas = cuotasDia.map((c) => {
+    const row = cuotaARow(c);
+    // "Por cobrar": cuota subsecuente que le toca cobrarse ESTE día (por su
+    // vencimiento, o porque GAMAN ya registró el pago) y todavía NO se ha
+    // cobrado. Si llegó a este corte por adelanto o ya se cobró (pago
+    // tardío), NO lleva el color de alerta.
+    row._cuotaPorCobrar =
+      (c.num_cuota ?? 1) > 1 &&
+      c.estatus === "PENDIENTE" &&
+      c.fecha_recibido !== fechaCorte &&
+      c.fecha_adelantado !== fechaCorte;
+    return row;
+  });
   const filasTabla = [...registros, ...filasCuotas];
 
   const totalEfectivo = filasTabla.reduce((s, r) => s + n(r.efectivo), 0);
@@ -944,7 +956,13 @@ export default function CorteOperador({ usuario }) {
                 {filasTabla.map((r, i) => (
                   <tr
                     key={r.id}
-                    className={`hover:bg-gray-50/60 transition-colors ${r._esCuotaSubsecuente ? "bg-amber-50/20" : ""}`}
+                    className={`transition-colors ${
+                      r._cuotaPorCobrar
+                        ? "bg-blue-100 hover:bg-blue-100/80"
+                        : r._esCuotaSubsecuente
+                          ? "bg-amber-50/20 hover:bg-gray-50/60"
+                          : "hover:bg-gray-50/60"
+                    }`}
                   >
                     <td className="px-3 py-2.5 text-center font-bold text-[#1447e6]">
                       {i + 1}
@@ -955,8 +973,18 @@ export default function CorteOperador({ usuario }) {
                     <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-bold text-[#1447e6]">
                       {r.numero_poliza || "—"}
                       {r._esCuotaSubsecuente && (
-                        <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle whitespace-nowrap">
-                          {r._esPagoTardio ? "pago tardío" : "pago subsecuente"}
+                        <span
+                          className={`ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full align-middle whitespace-nowrap ${
+                            r._cuotaPorCobrar
+                              ? "bg-blue-600 text-white"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {r._cuotaPorCobrar
+                            ? "por cobrar"
+                            : r._esPagoTardio
+                              ? "pago tardío"
+                              : "pago subsecuente"}
                         </span>
                       )}
                     </td>
@@ -1189,7 +1217,13 @@ export default function CorteOperador({ usuario }) {
                 {filasTabla.map((r, i) => (
                   <tr
                     key={r.id}
-                    className={`hover:bg-gray-50/60 transition-colors ${r._esCuotaSubsecuente ? "bg-amber-50/20" : ""}`}
+                    className={`transition-colors ${
+                      r._cuotaPorCobrar
+                        ? "bg-blue-100 hover:bg-blue-100/80"
+                        : r._esCuotaSubsecuente
+                          ? "bg-amber-50/20 hover:bg-gray-50/60"
+                          : "hover:bg-gray-50/60"
+                    }`}
                   >
                     <td className="px-3 py-2.5 text-center font-bold text-[#1447e6]">
                       {i + 1}

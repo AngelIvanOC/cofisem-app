@@ -58,6 +58,7 @@ const FILL_TITLE_H2 = { fgColor: { rgb: "FF99CCFF" } }; // azul — título de l
 const FILL_HEADER_H2 = { fgColor: { rgb: "FFC0C0C0" } }; // gris — encabezados de la tabla por aseguradora / gastos / FECHA
 const FILL_TOTAL = { fgColor: { rgb: "FFFFFFCC" } }; // amarillo — total efectivo final destacado
 const FILL_CUOTA = { fgColor: { rgb: "FFFFF3E0" } }; // ámbar claro — pagos subsecuentes (propio del sistema)
+const FILL_POR_COBRAR = { fgColor: { rgb: "FFBBDEFB" } }; // azul claro — cuota subsecuente que toca cobrar ese día y aún no se cobra
 const FILL_COMISION = { fgColor: { rgb: "FFFCE4E4" } }; // rojo pastel — filas de comisión (propio del sistema)
 const FILL_NOTA = { fgColor: { rgb: "FFEDEDED" } }; // gris — notas de endoso tipo A/C (propio del sistema)
 
@@ -221,6 +222,9 @@ function valorColumna(r, col, index) {
   }
   if (r?._esComision && !CLAVES_COMISION.has(col.key)) return "";
   if (r?._esNota && !CLAVES_NOTA.has(col.key)) return "";
+  // Marca "POR COBRAR" en la columna Cobertura de las cuotas subsecuentes
+  // que tocan cobrarse ese día y aún no se cobran (fila azul).
+  if (r?._cuotaPorCobrar && col.key === "cobertura") return "• POR COBRAR";
   const raw = r?.[col.key];
   switch (col.tipo) {
     case "dinero":
@@ -409,7 +413,15 @@ function construirHojaPolizas({ registros, comisiones = [], notasEndoso = [], bi
           wrapText: col.tipo === "texto",
         },
         border: bordeTabla(c, { esBottom: esUltima }),
-        fill: r._esNota ? FILL_NOTA : r._esComision ? FILL_COMISION : r._esCuotaSubsecuente ? FILL_CUOTA : undefined,
+        fill: r._esNota
+          ? FILL_NOTA
+          : r._esComision
+            ? FILL_COMISION
+            : r._cuotaPorCobrar
+              ? FILL_POR_COBRAR
+              : r._esCuotaSubsecuente
+                ? FILL_CUOTA
+                : undefined,
       };
       escribir(
         ws,
