@@ -26,6 +26,7 @@ export const datosAfectadoVacio = () => ({
   danosSiniestro: {}, danosPreexistente: {},
   declaracion: "",
   solicitoGrua: null,
+  firmaReclamanteUrl: "",
 });
 
 export default function useTercerosState(siniestroId) {

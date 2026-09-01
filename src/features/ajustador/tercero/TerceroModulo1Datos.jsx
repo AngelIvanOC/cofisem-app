@@ -5,15 +5,62 @@
 // adjuntos a este tercero viven en su propio módulo (ver
 // TerceroModulo4Lesionados.jsx).
 // ============================================================
+import { useState, useEffect } from "react";
 import { IdCard, CreditCard, FileText } from "lucide-react";
 import { Campo, PanelHeader, Seccion, combinarDireccion } from "../shared";
 import { BtnEvidencia, useEvidencias } from "../EvidenciaUI";
+import { FirmaField } from "../FirmaCaptura";
+import { subirFirma, getFirmaSignedUrl } from "../../../services/evidencias";
+import { guardarFirmaTercero } from "../../../services/siniestros";
 import DireccionCascada from "../../../shared/components/DireccionCascada";
 
 export default function TerceroModulo1Datos({ siniestro, datos, onDatos, onGuardar, guardando, errorGuardar, guardadoOk, onVolver }) {
   const sid = siniestro.id;
   const num = siniestro.numero_siniestro ?? siniestro.folio;
   const afId = datos._dbId ? `AF${datos._dbId}` : "AF_nuevo";
+
+  // Firma del tercero — se sube y persiste al confirmar (columna por
+  // fila en siniestros_terceros). Necesita que el tercero ya exista en
+  // BD (_dbId), igual que el módulo de Lesionados.
+  const [firmaPreview, setFirmaPreview] = useState(null);
+  const [firmaBusy,    setFirmaBusy]    = useState(false);
+  const [firmaError,   setFirmaError]   = useState(null);
+
+  useEffect(() => {
+    if (datos.firmaReclamanteUrl && !firmaPreview) {
+      getFirmaSignedUrl(datos.firmaReclamanteUrl).then(setFirmaPreview).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datos.firmaReclamanteUrl]);
+
+  const handleFirmar = async (dataUrl) => {
+    setFirmaBusy(true);
+    setFirmaError(null);
+    try {
+      const path = await subirFirma({ numeroSiniestro: num, tipo: `tercero_${datos._dbId}`, dataUrl });
+      await guardarFirmaTercero(datos._dbId, path);
+      onDatos("firmaReclamanteUrl", path);
+      setFirmaPreview(dataUrl);
+    } catch (err) {
+      setFirmaError(err.message ?? "No se pudo guardar la firma");
+    } finally {
+      setFirmaBusy(false);
+    }
+  };
+
+  const handleBorrarFirma = async () => {
+    setFirmaBusy(true);
+    setFirmaError(null);
+    try {
+      await guardarFirmaTercero(datos._dbId, null);
+      onDatos("firmaReclamanteUrl", "");
+      setFirmaPreview(null);
+    } catch (err) {
+      setFirmaError(err.message ?? "No se pudo borrar la firma");
+    } finally {
+      setFirmaBusy(false);
+    }
+  };
 
   const licencia = useEvidencias(sid, num, afId, "licencias");
   const ine = useEvidencias(sid, num, afId, "ine");
@@ -110,6 +157,24 @@ export default function TerceroModulo1Datos({ siniestro, datos, onDatos, onGuard
             <BtnEvidencia label="Tarjeta circulación — frente" icon={<FileText className="w-4 h-4 text-gray-400" />} items={tarjetaFrente.items} onAdd={tarjetaFrente.agregar} onRemove={tarjetaFrente.eliminar} />
             <BtnEvidencia label="Tarjeta circulación — reverso" icon={<FileText className="w-4 h-4 text-gray-400" />} items={tarjetaReverso.items} onAdd={tarjetaReverso.agregar} onRemove={tarjetaReverso.eliminar} />
           </div>
+        </Seccion>
+
+        <Seccion titulo="Firma del Tercero">
+          {datos._dbId ? (
+            <FirmaField
+              label="Firma del Tercero"
+              sub={datos.nombre || "Tercero involucrado"}
+              previewUrl={firmaPreview}
+              onCapture={handleFirmar}
+              onClear={handleBorrarFirma}
+              busy={firmaBusy}
+              error={firmaError}
+            />
+          ) : (
+            <p className="text-xs text-gray-400 text-center py-4">
+              Guarda los datos del tercero (botón de abajo) primero para poder capturar su firma.
+            </p>
+          )}
         </Seccion>
 
         <div className="pt-2 pb-6 space-y-2">

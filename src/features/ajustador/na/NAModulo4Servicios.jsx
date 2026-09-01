@@ -86,7 +86,7 @@ export default function NAModulo4Servicios({ siniestro, onVolver }) {
         </Seccion>
 
         <Seccion titulo="Pase Médico — lesionados del vehículo asegurado">
-          <LesionadosPanel siniestro={siniestro} terceroId="" />
+          <LesionadosPanel siniestro={siniestro} terceroId="" responsableNombre={siniestro.asegurado} />
         </Seccion>
       </div>
     </div>

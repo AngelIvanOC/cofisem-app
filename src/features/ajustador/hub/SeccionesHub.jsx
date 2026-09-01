@@ -100,7 +100,7 @@ export default function SeccionesHub({ siniestro, onFinalizarCaso, onVolverAList
         </div>
 
         <Tile titulo="Evidencias" subtitulo="Fotos y documentación general" icon={<Images className="w-5 h-5 text-[#13193a]" />} onClick={() => setSeccion("evidencias")} />
-        <Tile titulo="Cierre" subtitulo="Encuesta, ajuste, croquis, firmas y finalizar" icon={<CheckCircle2 className="w-5 h-5 text-[#13193a]" />} onClick={() => setSeccion("cierre")} />
+        <Tile titulo="Cierre" subtitulo="Encuesta, ajuste, croquis, firma del ajustador y finalizar" icon={<CheckCircle2 className="w-5 h-5 text-[#13193a]" />} onClick={() => setSeccion("cierre")} />
       </div>
     </div>
   );

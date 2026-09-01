@@ -12,7 +12,9 @@ import { useState, useEffect } from "react";
 import { IdCard, CreditCard, FileText } from "lucide-react";
 import { Campo, CampoSistema, Seccion, Sep, PanelHeader, soloCambios, combinarDireccion } from "../shared";
 import { BtnEvidencia, useEvidencias } from "../EvidenciaUI";
-import { actualizarDatosSiniestro, fetchDatosSiniestro } from "../../../services/siniestros";
+import { FirmaField } from "../FirmaCaptura";
+import { actualizarDatosSiniestro, fetchDatosSiniestro, guardarFirmaAsegurado } from "../../../services/siniestros";
+import { subirFirma, getFirmaSignedUrl } from "../../../services/evidencias";
 import DireccionCascada from "../../../shared/components/DireccionCascada";
 
 export default function NAModulo1Asegurado({ siniestro, onVolver }) {
@@ -40,6 +42,12 @@ export default function NAModulo1Asegurado({ siniestro, onVolver }) {
   const [guardando,    setGuardando]    = useState(false);
   const [errorGuardar, setErrorGuardar] = useState(null);
   const [guardadoOk,   setGuardadoOk]   = useState(false);
+
+  // Firma del asegurado — se sube y persiste al confirmar, no espera al
+  // botón "Guardar" del módulo.
+  const [firmaPreview, setFirmaPreview] = useState(null);
+  const [firmaBusy,    setFirmaBusy]    = useState(false);
+  const [firmaError,   setFirmaError]   = useState(null);
 
   const construirOriginal = (row) => ({
     conductorDomicilio: row.conductorEsTercero === false ? (a.direccion || "") : (row.conductorDomicilio ?? ""),
@@ -69,9 +77,39 @@ export default function NAModulo1Asegurado({ siniestro, onVolver }) {
       setLicenciaPermanente(row.licenciaPermanente ?? true);
       setLicenciaFechaVigencia(row.licenciaFechaVigencia || "");
       setOriginal(construirOriginal(row));
+      if (row.firmaAseguradoUrl) {
+        getFirmaSignedUrl(row.firmaAseguradoUrl).then(setFirmaPreview).catch(() => {});
+      }
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sid]);
+
+  const handleFirmar = async (dataUrl) => {
+    setFirmaBusy(true);
+    setFirmaError(null);
+    try {
+      const path = await subirFirma({ numeroSiniestro: num, tipo: "asegurado", dataUrl });
+      await guardarFirmaAsegurado(sid, path);
+      setFirmaPreview(dataUrl);
+    } catch (err) {
+      setFirmaError(err.message ?? "No se pudo guardar la firma");
+    } finally {
+      setFirmaBusy(false);
+    }
+  };
+
+  const handleBorrarFirma = async () => {
+    setFirmaBusy(true);
+    setFirmaError(null);
+    try {
+      await guardarFirmaAsegurado(sid, null);
+      setFirmaPreview(null);
+    } catch (err) {
+      setFirmaError(err.message ?? "No se pudo borrar la firma");
+    } finally {
+      setFirmaBusy(false);
+    }
+  };
 
   const actualizarConductorDireccion = (patch) => {
     const next = { ...conductorDireccion, ...patch };
@@ -139,6 +177,18 @@ export default function NAModulo1Asegurado({ siniestro, onVolver }) {
               </div>
             </div>
           </div>
+        </Seccion>
+
+        <Seccion titulo="Firma del Asegurado">
+          <FirmaField
+            label="Firma del Asegurado"
+            sub={a.nombre}
+            previewUrl={firmaPreview}
+            onCapture={handleFirmar}
+            onClear={handleBorrarFirma}
+            busy={firmaBusy}
+            error={firmaError}
+          />
         </Seccion>
 
         <Seccion titulo="Conductor">

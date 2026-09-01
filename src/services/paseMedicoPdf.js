@@ -16,9 +16,10 @@ const SEL_PASE_MEDICO = `
   region_cuerpo, causa_lesion, estado_lesionado, tipo_lesion, primeros_auxilios, motivo_traslado,
   pase_medico_numero, pase_medico_fecha_expedicion,
   hospital_asignado, hospital_telefono, hospital_domicilio,
+  participante_id, firma_url, usa_firma_responsable,
   siniestros!siniestro_id(
-    numero_siniestro, fecha_siniestro,
-    firma_ajustador_url, firma_lesionado_url,
+    id, numero_siniestro, fecha_siniestro,
+    firma_ajustador_url, firma_lesionado_url, firma_asegurado_url,
     polizas(
       numero_poliza, constancia, fecha_inicio,
       clientes(nombre, apellido),
@@ -43,9 +44,33 @@ export async function fetchPaseMedicoData(lesionadoId) {
   if (error) throw error;
 
   const s = data.siniestros ?? {};
+
+  // Firma que va en la casilla del lesionado:
+  //   - si marcó "ocupar firma del responsable" → la del asegurado
+  //     (ocupante del vehículo asegurado, participante_id "NA") o la del
+  //     tercero correspondiente.
+  //   - si no → su propia firma (firma_url).
+  //   - fallback a la columna legada firma_lesionado_url (siniestros ya
+  //     cerrados antes de este cambio).
+  let firmaLesionadoPath = null;
+  if (data.usa_firma_responsable) {
+    if (data.participante_id && data.participante_id !== "NA") {
+      const { data: tercero } = await supabase
+        .from("siniestros_terceros")
+        .select("firma_reclamante_url")
+        .eq("id", data.participante_id)
+        .maybeSingle();
+      firmaLesionadoPath = tercero?.firma_reclamante_url ?? null;
+    } else {
+      firmaLesionadoPath = s.firma_asegurado_url ?? null;
+    }
+  } else {
+    firmaLesionadoPath = data.firma_url ?? s.firma_lesionado_url ?? null;
+  }
+
   const [firmaAjustadorUrl, firmaLesionadoUrl] = await Promise.all([
     s.firma_ajustador_url ? getFirmaSignedUrl(s.firma_ajustador_url) : null,
-    s.firma_lesionado_url ? getFirmaSignedUrl(s.firma_lesionado_url) : null,
+    firmaLesionadoPath ? getFirmaSignedUrl(firmaLesionadoPath) : null,
   ]);
 
   return { ...data, siniestroInfo: s, firmaAjustadorUrl, firmaLesionadoUrl };

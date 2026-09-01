@@ -13,7 +13,9 @@
 // ============================================================
 import { useState, useCallback, useEffect } from "react";
 import { Campo, CampoSistema, Sep, ToggleRow, REGIONES_CUERPO } from "./shared";
-import { guardarLesionados, fetchLesionados } from "../../services/siniestros";
+import { FirmaField } from "./FirmaCaptura";
+import { guardarLesionados, fetchLesionados, guardarFirmaLesionado } from "../../services/siniestros";
+import { subirFirma, getFirmaSignedUrl } from "../../services/evidencias";
 import { fetchHospitales } from "../../services/servicios";
 
 const CAUSAS_LESION = ["Atropello", "Colisión"];
@@ -33,10 +35,70 @@ function Switch({ checked, onToggle, label }) {
   );
 }
 
-function CardLesionado({ idx, datos, onDatos, onEliminar, hospitales, expandido, onToggleExpandir, copiaDisponible }) {
+function CardLesionado({ id, idx, datos, onDatos, onEliminar, hospitales, expandido, onToggleExpandir, copiaDisponible, responsableNombre, numeroSiniestro }) {
   const toggleRegion = (zona) => {
     const activa = datos.regionCuerpo.includes(zona);
     onDatos("regionCuerpo", activa ? datos.regionCuerpo.filter((z) => z !== zona) : [...datos.regionCuerpo, zona]);
+  };
+
+  // Firma del lesionado — se sube al confirmar; si el lesionado ya
+  // existe en BD (id numérico) también se persiste al instante, si no
+  // viaja con "Guardar lesionados". El switch "ocupar firma del
+  // responsable" solo marca la intención (se resuelve al generar el
+  // Pase Médico).
+  const yaEnBD = /^\d+$/.test(String(id));
+  const [firmaPreview, setFirmaPreview] = useState(null);
+  const [firmaBusy,    setFirmaBusy]    = useState(false);
+  const [firmaError,   setFirmaError]   = useState(null);
+
+  useEffect(() => {
+    if (datos.firmaUrl && !firmaPreview) {
+      getFirmaSignedUrl(datos.firmaUrl).then(setFirmaPreview).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datos.firmaUrl]);
+
+  const persistirFirma = async (patch) => {
+    if (yaEnBD) {
+      await guardarFirmaLesionado(id, {
+        firmaUrl: datos.firmaUrl, usaFirmaResponsable: datos.usaFirmaResponsable, ...patch,
+      });
+    }
+  };
+
+  const handleFirmar = async (dataUrl) => {
+    setFirmaBusy(true);
+    setFirmaError(null);
+    try {
+      const path = await subirFirma({ numeroSiniestro, tipo: `lesionado_${id}`, dataUrl });
+      onDatos("firmaUrl", path);
+      setFirmaPreview(dataUrl);
+      await persistirFirma({ firmaUrl: path });
+    } catch (err) {
+      setFirmaError(err.message ?? "No se pudo guardar la firma");
+    } finally {
+      setFirmaBusy(false);
+    }
+  };
+
+  const handleBorrarFirma = async () => {
+    setFirmaBusy(true);
+    setFirmaError(null);
+    try {
+      onDatos("firmaUrl", "");
+      setFirmaPreview(null);
+      await persistirFirma({ firmaUrl: "" });
+    } catch (err) {
+      setFirmaError(err.message ?? "No se pudo borrar la firma");
+    } finally {
+      setFirmaBusy(false);
+    }
+  };
+
+  const toggleUsaResponsable = async () => {
+    const v = !datos.usaFirmaResponsable;
+    onDatos("usaFirmaResponsable", v);
+    try { await persistirFirma({ usaFirmaResponsable: v }); } catch { /* se re-guarda con "Guardar lesionados" */ }
   };
 
   const elegirTipoLesionado = (tipo) => {
@@ -195,6 +257,30 @@ function CardLesionado({ idx, datos, onDatos, onEliminar, hospitales, expandido,
           </div>
         )}
 
+        <Sep label="Firma del lesionado" />
+        <Switch
+          checked={datos.usaFirmaResponsable}
+          onToggle={toggleUsaResponsable}
+          label={responsableNombre ? `¿Ocupar firma de ${responsableNombre}?` : "¿Ocupar firma de su responsable?"}
+        />
+        {datos.usaFirmaResponsable ? (
+          <p className="text-xs text-gray-400 bg-gray-50 rounded-xl px-3 py-2.5">
+            {responsableNombre
+              ? `El lesionado no firma — se usará la firma de ${responsableNombre}.`
+              : "El lesionado no firma — se usará la firma de su responsable."}
+          </p>
+        ) : (
+          <FirmaField
+            label="Firma del Lesionado"
+            sub={datos.nombre || "Persona lesionada"}
+            previewUrl={firmaPreview}
+            onCapture={handleFirmar}
+            onClear={handleBorrarFirma}
+            busy={firmaBusy}
+            error={firmaError}
+          />
+        )}
+
         <button type="button" onClick={onToggleExpandir}
           className="w-full py-3 rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold hover:bg-emerald-100 transition-all flex items-center justify-center gap-2">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
@@ -219,6 +305,7 @@ const lesionadoVacio = (terceroId) => ({
   paseMedico: true,
   hospitalId: "", hospital: "", hospitalTelefono: "", hospitalDomicilio: "",
   paseMedicoNumero: "", paseMedicoFechaExpedicion: "",
+  firmaUrl: "", usaFirmaResponsable: false,
 });
 
 function filaAFormulario(row) {
@@ -235,6 +322,7 @@ function filaAFormulario(row) {
     hospitalId: "", hospital: row.hospital_asignado ?? "", hospitalTelefono: row.hospital_telefono ?? "",
     hospitalDomicilio: row.hospital_domicilio ?? "",
     paseMedicoNumero: row.pase_medico_numero ?? "", paseMedicoFechaExpedicion: row.pase_medico_fecha_expedicion ?? "",
+    firmaUrl: row.firma_url ?? "", usaFirmaResponsable: row.usa_firma_responsable ?? false,
   };
 }
 
@@ -244,7 +332,8 @@ function filaAFormulario(row) {
 // tercero actual — se usa para autocompletar cuando el lesionado es
 // "Conductor" de ESE tercero (mismo comportamiento que antes tenía
 // Lesionados.jsx al elegir "¿en qué vehículo iba?").
-export default function LesionadosPanel({ siniestro, terceroId, copiaDisponible }) {
+export default function LesionadosPanel({ siniestro, terceroId, copiaDisponible, responsableNombre }) {
+  const numeroSiniestro = siniestro.numero_siniestro ?? siniestro.folio;
   const [lesionadosIds, setLesionadosIds] = useState([]);
   const [lesionados,    setLesionados]    = useState({});
   const [original,      setOriginal]      = useState({});
@@ -329,6 +418,7 @@ export default function LesionadosPanel({ siniestro, terceroId, copiaDisponible 
         {idsVisibles.map((id, i) => (
           <CardLesionado
             key={id}
+            id={id}
             idx={i}
             datos={lesionados[id] ?? lesionadoVacio(terceroId)}
             onDatos={(campo, valor) => actualizarDatoLesionado(id, campo, valor)}
@@ -337,6 +427,8 @@ export default function LesionadosPanel({ siniestro, terceroId, copiaDisponible 
             expandido={expandedId === id}
             onToggleExpandir={() => toggleExpandir(id)}
             copiaDisponible={copiaDisponible}
+            responsableNombre={responsableNombre}
+            numeroSiniestro={numeroSiniestro}
           />
         ))}
       </div>

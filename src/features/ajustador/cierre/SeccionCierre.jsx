@@ -6,8 +6,9 @@
 // que antes eran CierreCaso.jsx + Documentos.jsx (sin el bloque de
 // Pase Taller, que ahora vive en Tercero-Módulo4).
 // ============================================================
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Campo, CampoSistema, CampoSelect, Seccion, Sep, PanelHeader, soloCambios } from "../shared";
+import { FirmaField } from "../FirmaCaptura";
 import {
   guardarDatosAjuste, guardarEncuesta, fetchDatosAjuste, fetchEncuesta,
   fetchTiemposSiniestro, horaLocal, fetchLesionados, asignarFolioPaseMedico,
@@ -46,64 +47,6 @@ function CalificacionTag({ value, onChange }) {
           {c}
         </button>
       ))}
-    </div>
-  );
-}
-
-function ModalFirma({ label, onConfirmar, onCerrar }) {
-  const canvasRef  = useRef(null);
-  const dibujando  = useRef(false);
-  const ultimoPto  = useRef(null);
-
-  const getXY = (e, canvas) => {
-    const r   = canvas.getBoundingClientRect();
-    const src = e.touches?.[0] ?? e;
-    return { x: (src.clientX - r.left) * (canvas.width / r.width), y: (src.clientY - r.top) * (canvas.height / r.height) };
-  };
-  const draw = (from, to, ctx) => {
-    ctx.beginPath(); ctx.moveTo(from.x, from.y);
-    ctx.lineTo(to.x, to.y);
-    ctx.strokeStyle = "#13193a"; ctx.lineWidth = 2.5;
-    ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
-  };
-  const onDown = (e) => { dibujando.current = true; ultimoPto.current = getXY(e, canvasRef.current); if (e.cancelable) e.preventDefault(); };
-  const onMove = (e) => {
-    if (!dibujando.current) return;
-    if (e.cancelable) e.preventDefault();
-    const to = getXY(e, canvasRef.current);
-    draw(ultimoPto.current, to, canvasRef.current.getContext("2d"));
-    ultimoPto.current = to;
-  };
-  const onUp = () => { dibujando.current = false; };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
-      style={{ backdropFilter: "blur(8px)", backgroundColor: "rgba(10,15,40,0.6)" }} onClick={onCerrar}>
-      <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div>
-            <p className="font-bold text-[#13193a] text-sm">Capturar firma</p>
-            <p className="text-xs text-gray-400">{label}</p>
-          </div>
-          <button onClick={onCerrar} className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="p-4">
-          <p className="text-xs text-gray-400 mb-3 text-center">Firma dentro del recuadro con el dedo o el lápiz</p>
-          <canvas ref={canvasRef} width={460} height={200} className="w-full border-2 border-dashed border-gray-300 rounded-2xl touch-none bg-gray-50" style={{ height: 180 }}
-            onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-            onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp} />
-          <div className="flex gap-3 mt-4">
-            <button onClick={() => { const ctx = canvasRef.current?.getContext("2d"); if (ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); }}
-              className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Limpiar</button>
-            <button onClick={() => onConfirmar(canvasRef.current.toDataURL())}
-              className="flex-1 py-3 rounded-xl bg-[#13193a] text-white text-sm font-bold hover:bg-[#1e2a50] shadow-lg shadow-[#13193a]/15">Confirmar Firma</button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -183,22 +126,16 @@ export default function SeccionCierre({ siniestro, onVolver, onFinalizar }) {
     }
   };
 
-  // ── Firmas + Finalizar ──────────────────────────────────────
-  const [lesionados, setLesionados] = useState([]);
-  const [firmas,     setFirmas]     = useState({ asegurado: null, afectado: null, ajustador: null, lesionado: null });
-  const [firmando,   setFirmando]   = useState(null);
-  const [cerrando,   setCerrando]   = useState(false);
+  // ── Firma del ajustador + Finalizar ─────────────────────────
+  // Las firmas del asegurado, de cada tercero y de cada lesionado ya no
+  // se piden aquí — cada una vive en su propio módulo. En Cierre solo
+  // queda la del ajustador.
+  const [lesionados,  setLesionados]  = useState([]);
+  const [firmaAjustador, setFirmaAjustador] = useState(null);
+  const [cerrando,    setCerrando]    = useState(false);
   const [errorCierre, setErrorCierre] = useState(null);
 
   useEffect(() => { fetchLesionados(siniestro.id).then(setLesionados).catch(() => setLesionados([])); }, [siniestro.id]);
-
-  const hayPaseMedico = lesionados.some((l) => l.pase_medico);
-  const FIRMAS_CONFIG = [
-    { id: "asegurado", label: "Firma del Asegurado", sub: siniestro.asegurado },
-    { id: "afectado",  label: "Firma del Afectado",  sub: "Tercero involucrado" },
-    { id: "ajustador", label: "Firma del Ajustador", sub: "Ajustador asignado" },
-    ...(hayPaseMedico ? [{ id: "lesionado", label: "Firma del Lesionado", sub: "Recibe el Pase Médico" }] : []),
-  ];
 
   const handleFinalizar = async () => {
     setCerrando(true);
@@ -226,12 +163,10 @@ export default function SeccionCierre({ siniestro, onVolver, onFinalizar }) {
       }
 
       const numeroSiniestro = siniestro.numero_siniestro ?? siniestro.folio;
-      const paths = {};
-      if (firmas.asegurado) paths.asegurado  = await subirFirma({ numeroSiniestro, tipo: "asegurado",  dataUrl: firmas.asegurado });
-      if (firmas.ajustador) paths.ajustador  = await subirFirma({ numeroSiniestro, tipo: "ajustador",  dataUrl: firmas.ajustador });
-      if (firmas.afectado)  paths.reclamante = await subirFirma({ numeroSiniestro, tipo: "reclamante", dataUrl: firmas.afectado });
-      if (firmas.lesionado) paths.lesionado  = await subirFirma({ numeroSiniestro, tipo: "lesionado",  dataUrl: firmas.lesionado });
-      await guardarFirmas(siniestro.id, paths);
+      if (firmaAjustador) {
+        const ajustador = await subirFirma({ numeroSiniestro, tipo: "ajustador", dataUrl: firmaAjustador });
+        await guardarFirmas(siniestro.id, { ajustador });
+      }
       await cerrarSiniestro(siniestro.id);
       onFinalizar(docs);
     } catch (err) {
@@ -341,34 +276,17 @@ export default function SeccionCierre({ siniestro, onVolver, onFinalizar }) {
           </button>
         </div>
 
-        <Seccion titulo="Firmas requeridas">
-          <div className="space-y-3">
-            {FIRMAS_CONFIG.map((f) => (
-              <div key={f.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                  <div>
-                    <p className="text-sm font-semibold text-[#13193a]">{f.label}</p>
-                    <p className="text-xs text-gray-400">{f.sub}</p>
-                  </div>
-                  {firmas[f.id] && (
-                    <button onClick={() => setFirmas((p) => ({ ...p, [f.id]: null }))} className="text-xs text-red-400 hover:text-red-600 font-medium">Borrar</button>
-                  )}
-                </div>
-                {firmas[f.id] ? (
-                  <div className="p-3 bg-gray-50 flex items-center justify-center h-16">
-                    <img src={firmas[f.id]} alt="Firma" className="h-full" style={{ filter: "invert(1) brightness(0.15)" }} />
-                  </div>
-                ) : (
-                  <button onClick={() => setFirmando(f.id)} className="w-full px-4 py-5 flex flex-col items-center gap-2 text-gray-400 hover:bg-gray-50 transition-colors">
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-                    </svg>
-                    <span className="text-xs font-semibold">Toca para firmar</span>
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+        <Seccion titulo="Firma del Ajustador">
+          <FirmaField
+            label="Firma del Ajustador"
+            sub="Ajustador asignado"
+            previewUrl={firmaAjustador}
+            onCapture={(dataUrl) => setFirmaAjustador(dataUrl)}
+            onClear={() => setFirmaAjustador(null)}
+          />
+          <p className="text-[11px] text-gray-400 mt-2">
+            Las firmas del asegurado, de cada tercero y de cada lesionado se capturan en sus propios módulos.
+          </p>
         </Seccion>
 
         <div className="pt-2 pb-6 space-y-2">
@@ -391,14 +309,6 @@ export default function SeccionCierre({ siniestro, onVolver, onFinalizar }) {
           </button>
         </div>
       </div>
-
-      {firmando && (
-        <ModalFirma
-          label={FIRMAS_CONFIG.find((f) => f.id === firmando)?.label ?? ""}
-          onConfirmar={(dataUrl) => { setFirmas((p) => ({ ...p, [firmando]: dataUrl })); setFirmando(null); }}
-          onCerrar={() => setFirmando(null)}
-        />
-      )}
     </div>
   );
 }

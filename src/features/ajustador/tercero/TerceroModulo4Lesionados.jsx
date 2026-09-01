@@ -17,6 +17,7 @@ export default function TerceroModulo4Lesionados({ siniestro, datos, onVolver })
             siniestro={siniestro}
             terceroId={String(datos._dbId)}
             copiaDisponible={{ nombre: datos.nombre, domicilio: datos.direccion, telefono: datos.telefono, edad: datos.edad }}
+            responsableNombre={datos.nombre}
           />
         ) : (
           <p className="text-xs text-gray-400 text-center py-8">Guarda los datos del tercero (Módulo 1) primero para poder agregar lesionados.</p>

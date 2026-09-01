@@ -441,7 +441,7 @@ export async function fetchDatosSiniestro(siniestroId) {
       conductor_es_tercero, conductor_nombre, conductor_telefono, conductor_domicilio,
       licencia_tipo, licencia_numero, licencia_fecha_exp, licencia_lugar_exp,
       conductor_fecha_nacimiento, conductor_sexo, presenta_licencia,
-      licencia_permanente, licencia_fecha_vigencia
+      licencia_permanente, licencia_fecha_vigencia, firma_asegurado_url
     `)
     .eq("id", siniestroId)
     .maybeSingle();
@@ -475,6 +475,7 @@ export async function fetchDatosSiniestro(siniestroId) {
     presentaLicencia:       s.presenta_licencia          ?? true,
     licenciaPermanente:     s.licencia_permanente        ?? null,
     licenciaFechaVigencia:  s.licencia_fecha_vigencia    ?? "",
+    firmaAseguradoUrl:      s.firma_asegurado_url        ?? "",
   };
 }
 
@@ -625,7 +626,9 @@ export async function guardarPartesInvolucradas(siniestroId, { cambiosNA, afecta
     if (d._dbId) {
       dbIdsVigentes.add(d._dbId);
       const antes = original[id];
-      const cambio = !antes || JSON.stringify({ ...antes, _dbId: undefined }) !== JSON.stringify({ ...d, _dbId: undefined });
+      // `firmaReclamanteUrl` se guarda aparte (guardarFirmaTercero) — no
+      // debe contar como cambio del tercero ni viajar en filaTercero.
+      const cambio = !antes || JSON.stringify({ ...antes, _dbId: undefined, firmaReclamanteUrl: undefined }) !== JSON.stringify({ ...d, _dbId: undefined, firmaReclamanteUrl: undefined });
       if (cambio) {
         const { error } = await supabase.from("siniestros_terceros").update(row).eq("id", d._dbId);
         if (error) throw error;
@@ -695,7 +698,7 @@ export async function fetchPartesInvolucradas(siniestroId) {
       reporte_tercero, cobertura_tercero, vencimiento_tercero, ajustador_tercero,
       descripcion_dano, abrir_reserva, monto_estimado_dano,
       danos_siniestro_marcadores, danos_preexistente_marcadores,
-      tipo_tercero, solicito_grua
+      tipo_tercero, solicito_grua, firma_reclamante_url
     `)
     .eq("siniestro_id", siniestroId)
     .order("id", { ascending: true });
@@ -728,6 +731,9 @@ export async function fetchPartesInvolucradas(siniestroId) {
       danosSiniestro: t.danos_siniestro_marcadores ?? {}, danosPreexistente: t.danos_preexistente_marcadores ?? {},
       declaracion: t.declaracion || "",
       tipoTercero: t.tipo_tercero || "", solicitoGrua: t.solicito_grua ?? null,
+      // Se captura aparte (Tercero · Módulo 1) y se persiste al instante
+      // con guardarFirmaTercero — no viaja en filaTercero.
+      firmaReclamanteUrl: t.firma_reclamante_url || "",
     })),
   };
 }
@@ -798,6 +804,10 @@ function filaLesionado(siniestroId, l) {
     // se quedan null hasta que se asignen al finalizar (paso Documentos).
     pase_medico_numero:           l.paseMedicoNumero           || null,
     pase_medico_fecha_expedicion: l.paseMedicoFechaExpedicion  || null,
+    // Firma propia del lesionado (o intención de usar la del responsable
+    // — asegurado/tercero — que se resuelve al generar el Pase Médico).
+    firma_url:             l.firmaUrl || null,
+    usa_firma_responsable: l.usaFirmaResponsable ?? false,
   };
 }
 
@@ -867,37 +877,51 @@ export async function guardarLesionados(siniestroId, { lesionadosIds, lesionados
   }
 }
 
-// ── Guardar firmas (paso 4 — al cerrar el siniestro) ──────────
-// Recibe storage paths ya subidos (ver subirFirma en services/evidencias.js).
-// Nota: "reclamante" hoy es una sola firma para todos los terceros; si el
-// siniestro tiene más de un tercero, se asigna al primero registrado.
-export async function guardarFirmas(siniestroId, { asegurado, ajustador, reclamante, lesionado } = {}) {
-  const updates = {};
-  if (asegurado) updates.firma_asegurado_url = asegurado;
-  if (ajustador) updates.firma_ajustador_url = ajustador;
-  if (lesionado) updates.firma_lesionado_url = lesionado;
-  if (Object.keys(updates).length) {
-    const { error } = await supabase.from("siniestros").update(updates).eq("id", siniestroId);
-    if (error) throw error;
-  }
+// ── Guardar firma del ajustador (paso "Cierre") ───────────────
+// Recibe el storage path ya subido (ver subirFirma en services/evidencias.js).
+// Las demás firmas (asegurado, cada tercero, cada lesionado) ya no se
+// piden aquí — cada una se captura en su propio módulo y se persiste al
+// instante con las funciones de abajo.
+export async function guardarFirmas(siniestroId, { ajustador } = {}) {
+  if (!ajustador) return;
+  const { error } = await supabase
+    .from("siniestros")
+    .update({ firma_ajustador_url: ajustador })
+    .eq("id", siniestroId);
+  if (error) throw error;
+}
 
-  if (reclamante) {
-    const { data: tercero, error: errSel } = await supabase
-      .from("siniestros_terceros")
-      .select("id")
-      .eq("siniestro_id", siniestroId)
-      .order("id", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (errSel) throw errSel;
-    if (tercero) {
-      const { error: errUpd } = await supabase
-        .from("siniestros_terceros")
-        .update({ firma_reclamante_url: reclamante })
-        .eq("id", tercero.id);
-      if (errUpd) throw errUpd;
-    }
-  }
+// ── Firma del asegurado — se captura en NA · Módulo 1 ─────────
+export async function guardarFirmaAsegurado(siniestroId, url) {
+  const { error } = await supabase
+    .from("siniestros")
+    .update({ firma_asegurado_url: url })
+    .eq("id", siniestroId);
+  if (error) throw error;
+}
+
+// ── Firma de un tercero — se captura en Tercero · Módulo 1, una
+// por tercero (columna por fila en siniestros_terceros) ───────
+export async function guardarFirmaTercero(terceroId, url) {
+  const { error } = await supabase
+    .from("siniestros_terceros")
+    .update({ firma_reclamante_url: url })
+    .eq("id", terceroId);
+  if (error) throw error;
+}
+
+// ── Firma de un lesionado ya guardado — se captura en su tarjeta
+// (LesionadosPanel). `usaFirmaResponsable`: si true, no firma él,
+// se usará la firma del asegurado/tercero al generar el Pase Médico.
+export async function guardarFirmaLesionado(lesionadoId, { firmaUrl, usaFirmaResponsable } = {}) {
+  const { error } = await supabase
+    .from("siniestros_lesionados")
+    .update({
+      firma_url: firmaUrl || null,
+      usa_firma_responsable: usaFirmaResponsable ?? false,
+    })
+    .eq("id", lesionadoId);
+  if (error) throw error;
 }
 
 // ── Guardar Datos de Ajuste (sección Reverso) + croquis ───────
@@ -1120,7 +1144,8 @@ export async function fetchLesionados(siniestroId) {
       primeros_auxilios, motivo_traslado, tipo_lesionado,
       hospital_asignado, hospital_telefono, hospital_domicilio,
       cobertura, abrir_reserva, estimado_lesiones,
-      pase_medico, pase_medico_numero, pase_medico_fecha_expedicion
+      pase_medico, pase_medico_numero, pase_medico_fecha_expedicion,
+      firma_url, usa_firma_responsable
     `)
     .eq("siniestro_id", siniestroId)
     .order("id", { ascending: true });
