@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { Paperclip, Inbox, CheckCircle2, Loader2 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import { verComprobante as abrirComprobante } from "../../services/comprobantesPago";
+import { verComprobantePago } from "../../services/comprobantesPagoCofisem";
+import { fetchEndososManualesDia } from "../../services/endososCofisem";
 import { hoyISO } from "../../utils/fecha";
 
 const n = (v) => parseFloat(v) || 0;
@@ -236,11 +238,16 @@ export default function CorteAnalista({ usuario }) {
       if (e5) throw e5;
       setRegistrosDia(polizas ?? []);
       setEntregasDia(entregas ?? []);
-      setNotasEndosoDia(
-        (notas ?? []).filter(
+      // Endosos manuales (endosos_cofisem) de esa fecha, todas las oficinas —
+      // se filtran por oficina al render (notasOficina). Ya vienen con la
+      // forma de nota de endoso, así el Excel/PDF los toman sin cambios.
+      const manuales = await fetchEndososManualesDia(fecha, null).catch(() => []);
+      setNotasEndosoDia([
+        ...(notas ?? []).filter(
           (n) => n.cambiado_at && new Date(n.cambiado_at).toLocaleDateString("en-CA") === fecha,
         ),
-      );
+        ...manuales,
+      ]);
       setCuotasDia(
         (cuotas ?? []).filter(
           (c) =>
@@ -758,7 +765,18 @@ export default function CorteAnalista({ usuario }) {
                                 <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">
                                   {fmt(new Date(nt.cambiado_at).toLocaleDateString("en-CA"))}
                                 </td>
-                                <td colSpan={14} className="px-3 py-2.5 text-gray-500 italic">{nt.notas}</td>
+                                <td colSpan={14} className="px-3 py-2.5 text-gray-500 italic">
+                                  {nt.notas}
+                                  {nt._esManual && nt.archivo_url && (
+                                    <button
+                                      type="button"
+                                      onClick={() => verComprobantePago(nt.archivo_url)}
+                                      className="ml-2 not-italic text-[11px] font-bold text-[#1447e6] underline underline-offset-2"
+                                    >
+                                      ver archivo
+                                    </button>
+                                  )}
+                                </td>
                               </tr>
                             ))}
 

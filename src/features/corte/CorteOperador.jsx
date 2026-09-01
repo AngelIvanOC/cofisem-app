@@ -22,6 +22,8 @@ import {
   getDocumentoSignedUrl,
 } from "../../services/documentacionPoliza";
 import { exportarCorteExcel } from "../../services/corteExport";
+import { fetchEndososManualesDia } from "../../services/endososCofisem";
+import { verComprobantePago } from "../../services/comprobantesPagoCofisem";
 import { hoyISO } from "../../utils/fecha";
 import CompletarPolizaModal, { CompletarBadge } from "./CompletarPolizaModal";
 import RegistrarCobroModal from "../pagos/RegistrarCobroModal";
@@ -353,7 +355,11 @@ export default function CorteOperador({ usuario }) {
           r.cambiado_at &&
           new Date(r.cambiado_at).toLocaleDateString("en-CA") === fechaCorte,
       );
-      setNotasEndoso(delDia);
+      // Endosos manuales (endosos_cofisem) de esa fecha/oficina — ya vienen
+      // con la forma de una nota de endoso, así se mezclan directo aquí y
+      // el badge/tabla/Excel/PDF los toman sin cambios.
+      const manuales = await fetchEndososManualesDia(fechaCorte, usuario?.oficina_id).catch(() => []);
+      setNotasEndoso([...delDia, ...manuales]);
     } catch (e) {
       setErrorMsg(e.message);
     }
@@ -1139,6 +1145,15 @@ export default function CorteOperador({ usuario }) {
                     </td>
                     <td colSpan={15} className="px-3 py-2.5 text-left italic text-gray-500">
                       {nt.notas}
+                      {nt._esManual && nt.archivo_url && (
+                        <button
+                          type="button"
+                          onClick={() => verComprobantePago(nt.archivo_url)}
+                          className="ml-2 not-italic text-[11px] font-bold text-[#1447e6] underline underline-offset-2"
+                        >
+                          ver archivo
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X as XIcon,
+  FileSignature,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
@@ -31,6 +32,7 @@ import { fetchVendedores, crearVendedor } from "../../services/vendedores";
 import { fetchCoberturasActivas } from "../../services/coberturas";
 import SelectTypeahead from "../../components/SelectTypeahead";
 import ModalNuevoVendedor from "../operador/components/ModalNuevoVendedor";
+import ModalEndososPoliza from "./ModalEndososPoliza";
 import { hoyISO } from "../../utils/fecha";
 
 const HOY_ISO = hoyISO();
@@ -75,16 +77,16 @@ const COBERTURA_OPT = ["AMPLIA", "LIMITADA", "BÁSICA", "OBLIGATORIO", "OTRA"];
 const COLUMNAS_TABLA = [
   { label: "Póliza", width: "11%", align: "left" },
   { label: "Aseguradora", width: "8%", align: "left" },
-  { label: "Asegurado", width: "13%", align: "left" },
+  { label: "Asegurado", width: "10%", align: "left" },
   { label: "Cobertura", width: "8%", align: "left" },
   { label: "Plan", width: "8%", align: "left" },
-  { label: "Método", width: "9%", align: "left" },
+  { label: "Método", width: "7%", align: "left" },
   { label: "Cuota", width: "4%", align: "center" },
   { label: "Corte", width: "8%", align: "left" },
   { label: "Prima total", width: "8%", align: "right" },
   { label: "1er pago", width: "8%", align: "right" },
   { label: "Estado", width: "7%", align: "left" },
-  { label: "", width: "8%", align: "right" },
+  { label: "Acciones", width: "13%", align: "right" },
 ];
 const POR_PAGINA = 10;
 
@@ -151,6 +153,7 @@ const TIPO_OPT = [
 const FORM_VACIO = {
   aseguradora: "",
   numero_poliza: "",
+  tipo_persona: "FISICA",
   folio: "",
   cobertura: "",
   uso: "",
@@ -183,12 +186,18 @@ const FORM_VACIO = {
   identif_reverso_path: null,
   pol_ant_path: null,
   otro_path: null,
+  acta_constitutiva_path: null,
+  poderes_path: null,
+  comprobante_domicilio_path: null,
+  constancia_fiscal_path: null,
   fotos_verificado: false,
   fotos_verificado_nota: "",
   observaciones: "",
   comprobante_tdc_path: null,
   comprobante_cheque_path: null,
 };
+
+const esPersonaMoral = (tipoPersona) => tipoPersona === "MORAL";
 
 const esAmpliaOLimitada = (cobertura) =>
   /AMPLIA|LIMITADA/i.test(cobertura || "");
@@ -257,6 +266,7 @@ export default function PoliciasDia({ usuario }) {
   const [modalRow, setModalRow] = useState(null);
   const [modalEditar, setModalEditar] = useState(false);
   const [modalDetalle, setModalDetalle] = useState(null); // solo lectura
+  const [modalEndososRow, setModalEndososRow] = useState(null); // endosos manuales de la póliza
   const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | null
   const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | ... | null
   const [corteInfo, setCorteInfo] = useState(null);
@@ -622,6 +632,7 @@ export default function PoliciasDia({ usuario }) {
             // completa.
             aseguradora: form.aseguradora,
             numero_poliza: form.numero_poliza,
+            tipo_persona: form.tipo_persona,
             folio: form.folio || null,
             cobertura: form.cobertura || null,
             uso: form.uso || null,
@@ -667,10 +678,15 @@ export default function PoliciasDia({ usuario }) {
             identif_reverso_url: null,
             pol_ant_url: null,
             otro_url: null,
+            acta_constitutiva_url: null,
+            poderes_url: null,
+            comprobante_domicilio_url: null,
+            constancia_fiscal_url: null,
           }
         : {
             aseguradora: form.aseguradora,
             numero_poliza: form.numero_poliza,
+            tipo_persona: form.tipo_persona,
             folio: form.folio || null,
             cobertura: form.cobertura || null,
             uso: form.uso || null,
@@ -712,6 +728,10 @@ export default function PoliciasDia({ usuario }) {
             identif_reverso_url: form.identif_reverso_path,
             pol_ant_url: form.pol_ant_path,
             otro_url: form.otro_path,
+            acta_constitutiva_url: form.acta_constitutiva_path,
+            poderes_url: form.poderes_path,
+            comprobante_domicilio_url: form.comprobante_domicilio_path,
+            constancia_fiscal_url: form.constancia_fiscal_path,
             fotos_verificado: form.fotos_verificado,
             fotos_verificado_nota: form.fotos_verificado
               ? form.fotos_verificado_nota || null
@@ -805,6 +825,10 @@ export default function PoliciasDia({ usuario }) {
         p.identif_reverso_url,
         p.pol_ant_url,
         p.otro_url,
+        p.acta_constitutiva_url,
+        p.poderes_url,
+        p.comprobante_domicilio_url,
+        p.constancia_fiscal_url,
       ].filter(Boolean);
       const comprobantesPaths = [
         p.comprobante_tdc_url,
@@ -984,6 +1008,33 @@ export default function PoliciasDia({ usuario }) {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <SeccionHeader>Datos de la póliza</SeccionHeader>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className={lblCls}>Tipo de persona</label>
+                <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setF("tipo_persona", "FISICA")}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      form.tipo_persona === "FISICA"
+                        ? "bg-white text-[#1447e6] shadow-sm"
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                  >
+                    Persona física
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setF("tipo_persona", "MORAL")}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      form.tipo_persona === "MORAL"
+                        ? "bg-white text-[#1447e6] shadow-sm"
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                  >
+                    Persona moral
+                  </button>
+                </div>
+              </div>
               <div>
                 <label className={lblCls}>
                   Aseguradora <span className="text-red-400">*</span>
@@ -1567,6 +1618,8 @@ export default function PoliciasDia({ usuario }) {
                 {esAmpliaOLimitada(form.cobertura)
                   ? ", fotos del vehículo (cobertura amplia/limitada) y al menos una de Factura, T. Circulación o Póliza anterior."
                   : " y al menos una de Fotos, Factura, T. Circulación o Póliza anterior."}
+                {esPersonaMoral(form.tipo_persona) &&
+                  " Por ser persona moral, también se exigen Acta constitutiva, Poderes, Comprobante de domicilio y Constancia de situación fiscal."}
               </p>
               <div className="space-y-2">
                 <ComprobanteField
@@ -1575,7 +1628,7 @@ export default function PoliciasDia({ usuario }) {
                   subiendo={subiendoDocumento === "identif"}
                   onFile={(f) => handleDocumentoChange("identif", f)}
                   onVer={() => handleVerDocumento(form.identif_path)}
-                  obligatorio={false}
+                  obligatorio={esPersonaMoral(form.tipo_persona)}
                 />
                 <ComprobanteField
                   label="Identificación (reverso)"
@@ -1628,6 +1681,50 @@ export default function PoliciasDia({ usuario }) {
                   onVer={() => handleVerDocumento(form.otro_path)}
                   obligatorio={false}
                 />
+                {esPersonaMoral(form.tipo_persona) && (
+                  <>
+                    <ComprobanteField
+                      label="Acta constitutiva"
+                      path={form.acta_constitutiva_path}
+                      subiendo={subiendoDocumento === "acta_constitutiva"}
+                      onFile={(f) =>
+                        handleDocumentoChange("acta_constitutiva", f)
+                      }
+                      onVer={() =>
+                        handleVerDocumento(form.acta_constitutiva_path)
+                      }
+                    />
+                    <ComprobanteField
+                      label="Poderes"
+                      path={form.poderes_path}
+                      subiendo={subiendoDocumento === "poderes"}
+                      onFile={(f) => handleDocumentoChange("poderes", f)}
+                      onVer={() => handleVerDocumento(form.poderes_path)}
+                    />
+                    <ComprobanteField
+                      label="Comprobante de domicilio"
+                      path={form.comprobante_domicilio_path}
+                      subiendo={subiendoDocumento === "comprobante_domicilio"}
+                      onFile={(f) =>
+                        handleDocumentoChange("comprobante_domicilio", f)
+                      }
+                      onVer={() =>
+                        handleVerDocumento(form.comprobante_domicilio_path)
+                      }
+                    />
+                    <ComprobanteField
+                      label="Constancia de situación fiscal"
+                      path={form.constancia_fiscal_path}
+                      subiendo={subiendoDocumento === "constancia_fiscal"}
+                      onFile={(f) =>
+                        handleDocumentoChange("constancia_fiscal", f)
+                      }
+                      onVer={() =>
+                        handleVerDocumento(form.constancia_fiscal_path)
+                      }
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1999,6 +2096,14 @@ export default function PoliciasDia({ usuario }) {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
+                        <button
+                          type="button"
+                          title="Endosos"
+                          onClick={() => setModalEndososRow(p)}
+                          className="w-7 h-7 rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center justify-center text-gray-400 hover:text-[#1447e6] transition-colors"
+                        >
+                          <FileSignature className="w-3.5 h-3.5" />
+                        </button>
                         {!corteCerrado && (
                           <button
                             type="button"
@@ -2057,9 +2162,7 @@ export default function PoliciasDia({ usuario }) {
         {/* Pie: conteo + total + paginación (siempre presente) */}
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 bg-gray-50/50 text-xs">
           <span className="text-gray-500">
-            <strong className="text-gray-700">
-              {polizasFiltradas.length}
-            </strong>{" "}
+            <strong className="text-gray-700">{polizasFiltradas.length}</strong>{" "}
             registros · 1er pago total{" "}
             <strong className="text-emerald-700 tabular-nums">
               {$(totalPrimerPago)}
@@ -2089,7 +2192,6 @@ export default function PoliciasDia({ usuario }) {
         </div>
       </div>
 
-
       <CompletarPolizaModal
         row={modalRow}
         usuario={usuario}
@@ -2115,6 +2217,13 @@ export default function PoliciasDia({ usuario }) {
       <DetallePolizaModal
         row={modalDetalle}
         onClose={() => setModalDetalle(null)}
+      />
+
+      <ModalEndososPoliza
+        poliza={modalEndososRow}
+        usuario={usuario}
+        corteCerrado={corteCerrado}
+        onClose={() => setModalEndososRow(null)}
       />
     </div>
   );
@@ -2189,6 +2298,9 @@ function DetallePolizaModal({ row, onClose }) {
             <Campo label="Número">{p.numero_poliza}</Campo>
             <Campo label="Folio">{p.folio}</Campo>
             <Campo label="Aseguradora">{p.aseguradora}</Campo>
+            <Campo label="Tipo de persona">
+              {p.tipo_persona === "MORAL" ? "Persona moral" : "Persona física"}
+            </Campo>
             <Campo label="Cobertura">{p.cobertura}</Campo>
             <Campo label="F. emisión">{fmt(p.fecha_emision)}</Campo>
             <Campo label="Vigencia">

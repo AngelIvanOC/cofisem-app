@@ -75,6 +75,7 @@ const VACIO = {
   // el modal se haya abierto en modo "completar".
   aseguradora: "",
   numero_poliza: "",
+  tipo_persona: "FISICA",
   fecha_emision: "",
   vigencia_inicio: "",
   asegurado_nombre_pila: "",
@@ -108,6 +109,10 @@ const VACIO = {
   identif_reverso_path: null,
   pol_ant_path: null,
   otro_path: null,
+  acta_constitutiva_path: null,
+  poderes_path: null,
+  comprobante_domicilio_path: null,
+  constancia_fiscal_path: null,
   fotos_verificado: false,
   fotos_verificado_nota: "",
   observaciones: "",
@@ -158,6 +163,9 @@ const lblModal =
 //     (comisión del vendedor) ya no se captura aquí — se mueve a la
 //     sección Comisiones, porque normalmente se calcula días después de
 //     la venta.
+//   - Si tipo_persona = MORAL: además se exigen Acta constitutiva, Poderes,
+//     Comprobante de domicilio y Constancia de situación fiscal (la
+//     identificación ya es obligatoria para ambos tipos de persona).
 // Igual que evaluarCompletado(), pero además regresa CUÁLES requisitos
 // faltan — para el botón "Completar": si no está listo, se le dice al
 // operador exactamente qué le falta en vez de solo negarse en silencio.
@@ -170,6 +178,7 @@ const lblModal =
 // cualquier otra póliza — se captura aquí mismo, en el mismo formulario.
 export function faltantesCompletado(f, { registroParcial = false } = {}) {
   const amplLim = esAmpliaOLimitada(f.cobertura);
+  const esMoral = f.tipo_persona === "MORAL";
   const grupoMinimo = amplLim
     ? [f.factura_path, f.t_circ_path, f.pol_ant_path]
     : [fotosOk(f), f.factura_path, f.t_circ_path, f.pol_ant_path];
@@ -203,6 +212,13 @@ export function faltantesCompletado(f, { registroParcial = false } = {}) {
       f.fotos_verificado &&
       !(f.fotos_verificado_nota && f.fotos_verificado_nota.trim()),
     documentoMinimo: !registroParcial && !grupoMinimo.some(Boolean),
+    actaConstitutiva:
+      !registroParcial && esMoral && !f.acta_constitutiva_path,
+    poderes: !registroParcial && esMoral && !f.poderes_path,
+    comprobanteDomicilio:
+      !registroParcial && esMoral && !f.comprobante_domicilio_path,
+    constanciaFiscal:
+      !registroParcial && esMoral && !f.constancia_fiscal_path,
   };
 
   const labels = {
@@ -226,6 +242,12 @@ export function faltantesCompletado(f, { registroParcial = false } = {}) {
     documentoMinimo: amplLim
       ? "Mínimo un documento: Factura, T. Circulación o Póliza anterior"
       : "Mínimo un documento: Fotos, Factura, T. Circulación o Póliza anterior",
+    actaConstitutiva: "Acta constitutiva (obligatoria por ser persona moral)",
+    poderes: "Poderes (obligatorio por ser persona moral)",
+    comprobanteDomicilio:
+      "Comprobante de domicilio (obligatorio por ser persona moral)",
+    constanciaFiscal:
+      "Constancia de situación fiscal (obligatoria por ser persona moral)",
   };
 
   const mensajes = Object.keys(detalle)
@@ -463,6 +485,8 @@ export default function CompletarPolizaModal({
   // trae folio/cobertura/vendedor/teléfono, nunca vigencia, vehículo,
   // primas ni documentación, porque esos datos no existen para esta venta.
   const esRegistroParcial = !!row?.registro_parcial;
+  // Persona moral exige documentos adicionales — ver faltantesCompletado().
+  const esMoral = form.tipo_persona === "MORAL";
   // Mientras no se confirme que GAMAN ya tiene el primer pago recibido, no
   // se puede describir "cómo" se pagó — sería inventar un cobro que GAMAN
   // no tiene registrado.
@@ -523,6 +547,7 @@ export default function CompletarPolizaModal({
     setForm({
       aseguradora: row.aseguradora ?? "",
       numero_poliza: row.numero_poliza ?? "",
+      tipo_persona: row.tipo_persona ?? "FISICA",
       fecha_emision: row.fecha_emision ?? "",
       vigencia_inicio: row.vigencia_inicio ?? "",
       asegurado_nombre_pila: row.asegurado_nombre_pila ?? "",
@@ -556,6 +581,10 @@ export default function CompletarPolizaModal({
       identif_reverso_path: row.identif_reverso_url ?? null,
       pol_ant_path: row.pol_ant_url ?? null,
       otro_path: row.otro_url ?? null,
+      acta_constitutiva_path: row.acta_constitutiva_url ?? null,
+      poderes_path: row.poderes_url ?? null,
+      comprobante_domicilio_path: row.comprobante_domicilio_url ?? null,
+      constancia_fiscal_path: row.constancia_fiscal_url ?? null,
       fotos_verificado: row.fotos_verificado ?? false,
       fotos_verificado_nota: row.fotos_verificado_nota ?? "",
       observaciones: row.observaciones ?? "",
@@ -719,6 +748,7 @@ export default function CompletarPolizaModal({
       const payload = {
         aseguradora: datos.aseguradora || row.aseguradora,
         numero_poliza: datos.numero_poliza || row.numero_poliza,
+        tipo_persona: datos.tipo_persona || "FISICA",
         fecha_emision: datos.fecha_emision || null,
         vigencia_inicio: datos.vigencia_inicio || null,
         asegurado_nombre: nombrePartes || row.asegurado_nombre || null,
@@ -753,6 +783,10 @@ export default function CompletarPolizaModal({
         identif_reverso_url: datos.identif_reverso_path,
         pol_ant_url: datos.pol_ant_path,
         otro_url: datos.otro_path,
+        acta_constitutiva_url: datos.acta_constitutiva_path,
+        poderes_url: datos.poderes_path,
+        comprobante_domicilio_url: datos.comprobante_domicilio_path,
+        constancia_fiscal_url: datos.constancia_fiscal_path,
         fotos_verificado: datos.fotos_verificado,
         fotos_verificado_nota: datos.fotos_verificado
           ? datos.fotos_verificado_nota || null
@@ -850,6 +884,33 @@ export default function CompletarPolizaModal({
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
                 Identidad de la póliza
               </p>
+              <div className="mb-4">
+                <label className={lblModal}>Tipo de persona</label>
+                <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setF("tipo_persona", "FISICA")}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      form.tipo_persona === "FISICA"
+                        ? "bg-white text-[#1447e6] shadow-sm"
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                  >
+                    Persona física
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setF("tipo_persona", "MORAL")}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      form.tipo_persona === "MORAL"
+                        ? "bg-white text-[#1447e6] shadow-sm"
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                  >
+                    Persona moral
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <label className={lblModal}>Aseguradora</label>
@@ -1366,6 +1427,8 @@ export default function CompletarPolizaModal({
                 {esAmpliaOLimitada(form.cobertura)
                   ? "Cobertura amplia/limitada: fotos también obligatorias (o marca Verificado con una nota), y mínimo una de Factura, T. Circulación o Póliza anterior."
                   : "Mínimo una de Fotos, Factura, T. Circulación o Póliza anterior."}
+                {esMoral &&
+                  " Por ser persona moral, también son obligatorios Acta constitutiva, Poderes, Comprobante de domicilio y Constancia de situación fiscal."}
               </p>
               <div className="space-y-2">
                 <ComprobanteField
@@ -1427,6 +1490,50 @@ export default function CompletarPolizaModal({
                   onVer={() => handleVerDocumento(form.otro_path)}
                   obligatorio={false}
                 />
+                {esMoral && (
+                  <>
+                    <ComprobanteField
+                      label="Acta constitutiva"
+                      path={form.acta_constitutiva_path}
+                      subiendo={subiendoDocumento === "acta_constitutiva"}
+                      onFile={(f) =>
+                        handleDocumentoChange("acta_constitutiva", f)
+                      }
+                      onVer={() =>
+                        handleVerDocumento(form.acta_constitutiva_path)
+                      }
+                    />
+                    <ComprobanteField
+                      label="Poderes"
+                      path={form.poderes_path}
+                      subiendo={subiendoDocumento === "poderes"}
+                      onFile={(f) => handleDocumentoChange("poderes", f)}
+                      onVer={() => handleVerDocumento(form.poderes_path)}
+                    />
+                    <ComprobanteField
+                      label="Comprobante de domicilio"
+                      path={form.comprobante_domicilio_path}
+                      subiendo={subiendoDocumento === "comprobante_domicilio"}
+                      onFile={(f) =>
+                        handleDocumentoChange("comprobante_domicilio", f)
+                      }
+                      onVer={() =>
+                        handleVerDocumento(form.comprobante_domicilio_path)
+                      }
+                    />
+                    <ComprobanteField
+                      label="Constancia de situación fiscal"
+                      path={form.constancia_fiscal_path}
+                      subiendo={subiendoDocumento === "constancia_fiscal"}
+                      onFile={(f) =>
+                        handleDocumentoChange("constancia_fiscal", f)
+                      }
+                      onVer={() =>
+                        handleVerDocumento(form.constancia_fiscal_path)
+                      }
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}
