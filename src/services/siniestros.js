@@ -283,7 +283,11 @@ export async function crearSiniestro({ polizaId, clienteId, folio, form, reporta
       siniestro_id:    data.id,
       vehiculo_desc:   t.vehiculoDesc   || null,
       vehiculo_color:  t.vehiculoColor  || null,
-      vehiculo_modelo: t.vehiculoModelo || null,
+      // El select "Modelo" del cabinero se alimenta de getTiposPorMarca()
+      // (la línea/submarca del vehículo), así que va a vehiculo_tipo —
+      // vehiculo_modelo queda para el año, igual que lo usa el ajustador
+      // (ver filaTercero: vehiculo_modelo = d.anio).
+      vehiculo_tipo:   t.vehiculoModelo || null,
       vehiculo_placas: t.vehiculoPlacas || null,
     }));
   if (filasTerceros.length) {
