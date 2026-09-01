@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import { IdCard, CreditCard, FileText } from "lucide-react";
 import { Campo, PanelHeader, Seccion, combinarDireccion } from "../shared";
-import { BtnEvidencia, useEvidencias } from "../EvidenciaUI";
+import { DocumentoFotos, useEvidencias } from "../EvidenciaUI";
 import { FirmaField } from "../FirmaCaptura";
 import { subirFirma, getFirmaSignedUrl } from "../../../services/evidencias";
 import { guardarFirmaTercero } from "../../../services/siniestros";
@@ -64,8 +64,10 @@ export default function TerceroModulo1Datos({ siniestro, datos, onDatos, onGuard
 
   const licencia = useEvidencias(sid, num, afId, "licencias");
   const ine = useEvidencias(sid, num, afId, "ine");
-  const tarjetaFrente = useEvidencias(sid, num, afId, "tarjeta_circulacion_frente");
-  const tarjetaReverso = useEvidencias(sid, num, afId, "tarjeta_circulacion_reverso");
+  // Una sola caja para la tarjeta de circulación — también rehidrata las
+  // filas legadas frente/reverso.
+  const tarjeta = useEvidencias(sid, num, afId, "tarjeta_circulacion",
+    ["tarjeta_circulacion", "tarjeta_circulacion_frente", "tarjeta_circulacion_reverso"]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
@@ -151,11 +153,10 @@ export default function TerceroModulo1Datos({ siniestro, datos, onDatos, onGuard
         </Seccion>
 
         <Seccion titulo="Fotos">
-          <div className="grid grid-cols-2 gap-3">
-            <BtnEvidencia label="Licencia" icon={<IdCard className="w-4 h-4 text-gray-400" />} items={licencia.items} onAdd={licencia.agregar} onRemove={licencia.eliminar} />
-            <BtnEvidencia label="INE" icon={<CreditCard className="w-4 h-4 text-gray-400" />} items={ine.items} onAdd={ine.agregar} onRemove={ine.eliminar} />
-            <BtnEvidencia label="Tarjeta circulación — frente" icon={<FileText className="w-4 h-4 text-gray-400" />} items={tarjetaFrente.items} onAdd={tarjetaFrente.agregar} onRemove={tarjetaFrente.eliminar} />
-            <BtnEvidencia label="Tarjeta circulación — reverso" icon={<FileText className="w-4 h-4 text-gray-400" />} items={tarjetaReverso.items} onAdd={tarjetaReverso.agregar} onRemove={tarjetaReverso.eliminar} />
+          <div className="space-y-3">
+            <DocumentoFotos label="Licencia" icon={<IdCard className="w-4 h-4 text-gray-400" />} items={licencia.items} onAdd={licencia.agregar} onRemove={licencia.eliminar} />
+            <DocumentoFotos label="INE" icon={<CreditCard className="w-4 h-4 text-gray-400" />} items={ine.items} onAdd={ine.agregar} onRemove={ine.eliminar} />
+            <DocumentoFotos label="Tarjeta de circulación (frente y reverso)" icon={<FileText className="w-4 h-4 text-gray-400" />} items={tarjeta.items} onAdd={tarjeta.agregar} onRemove={tarjeta.eliminar} />
           </div>
         </Seccion>
 

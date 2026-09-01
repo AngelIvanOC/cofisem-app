@@ -11,7 +11,7 @@
 import { useState, useEffect } from "react";
 import { IdCard, CreditCard, FileText } from "lucide-react";
 import { Campo, CampoSistema, Seccion, Sep, PanelHeader, soloCambios, combinarDireccion } from "../shared";
-import { BtnEvidencia, useEvidencias } from "../EvidenciaUI";
+import { DocumentoFotos, useEvidencias } from "../EvidenciaUI";
 import { FirmaField } from "../FirmaCaptura";
 import { actualizarDatosSiniestro, fetchDatosSiniestro, guardarFirmaAsegurado } from "../../../services/siniestros";
 import { subirFirma, getFirmaSignedUrl } from "../../../services/evidencias";
@@ -119,8 +119,10 @@ export default function NAModulo1Asegurado({ siniestro, onVolver }) {
 
   const licencia = useEvidencias(sid, num, "NA", "licencias");
   const idOficial = useEvidencias(sid, num, "NA", "identificacion_oficial");
-  const tarjetaFrente = useEvidencias(sid, num, "NA", "tarjeta_circulacion_frente");
-  const tarjetaReverso = useEvidencias(sid, num, "NA", "tarjeta_circulacion_reverso");
+  // Una sola caja para la tarjeta de circulación — también rehidrata las
+  // filas legadas frente/reverso de siniestros ya capturados.
+  const tarjeta = useEvidencias(sid, num, "NA", "tarjeta_circulacion",
+    ["tarjeta_circulacion", "tarjeta_circulacion_frente", "tarjeta_circulacion_reverso"]);
 
   const handleGuardar = async () => {
     setGuardando(true);
@@ -233,7 +235,7 @@ export default function NAModulo1Asegurado({ siniestro, onVolver }) {
 
             {presentaLicencia ? (
               <>
-                <BtnEvidencia label="Foto de licencia" icon={<IdCard className="w-4 h-4 text-gray-400" />} items={licencia.items} onAdd={licencia.agregar} onRemove={licencia.eliminar} />
+                <DocumentoFotos label="Foto de licencia" icon={<IdCard className="w-4 h-4 text-gray-400" />} items={licencia.items} onAdd={licencia.agregar} onRemove={licencia.eliminar} />
                 <div className="grid grid-cols-2 gap-3">
                   <Campo label="Tipo de licencia" placeholder="Ej. Tipo A" value={licenciaTipo} onChange={setLicenciaTipo} />
                   <Campo label="Número de licencia (opcional)" value={licenciaNumero} onChange={setLicenciaNumero} />
@@ -258,17 +260,14 @@ export default function NAModulo1Asegurado({ siniestro, onVolver }) {
             ) : (
               <>
                 <Sep label="No presenta licencia — identificación oficial" />
-                <BtnEvidencia label="Foto de identificación oficial" icon={<CreditCard className="w-4 h-4 text-gray-400" />} items={idOficial.items} onAdd={idOficial.agregar} onRemove={idOficial.eliminar} />
+                <DocumentoFotos label="Foto de identificación oficial" icon={<CreditCard className="w-4 h-4 text-gray-400" />} items={idOficial.items} onAdd={idOficial.agregar} onRemove={idOficial.eliminar} />
               </>
             )}
           </div>
         </Seccion>
 
         <Seccion titulo="Tarjeta de circulación">
-          <div className="grid grid-cols-2 gap-3">
-            <BtnEvidencia label="Frente" icon={<FileText className="w-4 h-4 text-gray-400" />} items={tarjetaFrente.items} onAdd={tarjetaFrente.agregar} onRemove={tarjetaFrente.eliminar} />
-            <BtnEvidencia label="Reverso" icon={<FileText className="w-4 h-4 text-gray-400" />} items={tarjetaReverso.items} onAdd={tarjetaReverso.agregar} onRemove={tarjetaReverso.eliminar} />
-          </div>
+          <DocumentoFotos label="Tarjeta de circulación (frente y reverso)" icon={<FileText className="w-4 h-4 text-gray-400" />} items={tarjeta.items} onAdd={tarjeta.agregar} onRemove={tarjeta.eliminar} />
         </Seccion>
 
         <div className="pt-2 pb-6 space-y-2">
