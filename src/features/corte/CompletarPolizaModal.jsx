@@ -900,7 +900,14 @@ export default function CompletarPolizaModal({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setF("tipo_persona", "MORAL")}
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        tipo_persona: "MORAL",
+                        asegurado_apellido_paterno: "",
+                        asegurado_apellido_materno: "",
+                      }))
+                    }
                     className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       form.tipo_persona === "MORAL"
                         ? "bg-white text-[#1447e6] shadow-sm"
@@ -969,7 +976,9 @@ export default function CompletarPolizaModal({
                   </div>
                 )}
                 <div>
-                  <label className={lblModal}>Nombre(s) de NA</label>
+                  <label className={lblModal}>
+                    {esMoral ? "Nombre de la Empresa" : "Nombre(s) de NA"}
+                  </label>
                   <input
                     value={form.asegurado_nombre_pila}
                     onChange={(e) =>
@@ -981,32 +990,36 @@ export default function CompletarPolizaModal({
                     className={inpModal}
                   />
                 </div>
-                <div>
-                  <label className={lblModal}>Apellido paterno</label>
-                  <input
-                    value={form.asegurado_apellido_paterno}
-                    onChange={(e) =>
-                      setF(
-                        "asegurado_apellido_paterno",
-                        e.target.value.toUpperCase(),
-                      )
-                    }
-                    className={inpModal}
-                  />
-                </div>
-                <div>
-                  <label className={lblModal}>Apellido materno</label>
-                  <input
-                    value={form.asegurado_apellido_materno}
-                    onChange={(e) =>
-                      setF(
-                        "asegurado_apellido_materno",
-                        e.target.value.toUpperCase(),
-                      )
-                    }
-                    className={inpModal}
-                  />
-                </div>
+                {!esMoral && (
+                  <>
+                    <div>
+                      <label className={lblModal}>Apellido paterno</label>
+                      <input
+                        value={form.asegurado_apellido_paterno}
+                        onChange={(e) =>
+                          setF(
+                            "asegurado_apellido_paterno",
+                            e.target.value.toUpperCase(),
+                          )
+                        }
+                        className={inpModal}
+                      />
+                    </div>
+                    <div>
+                      <label className={lblModal}>Apellido materno</label>
+                      <input
+                        value={form.asegurado_apellido_materno}
+                        onChange={(e) =>
+                          setF(
+                            "asegurado_apellido_materno",
+                            e.target.value.toUpperCase(),
+                          )
+                        }
+                        className={inpModal}
+                      />
+                    </div>
+                  </>
+                )}
                 {!esRegistroParcial && (
                   <div>
                     <label className={lblModal}>Tipo</label>

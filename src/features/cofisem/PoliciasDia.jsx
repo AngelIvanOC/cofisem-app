@@ -1024,7 +1024,16 @@ export default function PoliciasDia({ usuario }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setF("tipo_persona", "MORAL")}
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        tipo_persona: "MORAL",
+                        // Una empresa no tiene apellidos — se limpian para no
+                        // arrastrar datos de un tipo de persona anterior.
+                        asegurado_apellido_paterno: "",
+                        asegurado_apellido_materno: "",
+                      }))
+                    }
                     className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       form.tipo_persona === "MORAL"
                         ? "bg-white text-[#1447e6] shadow-sm"
@@ -1234,7 +1243,10 @@ export default function PoliciasDia({ usuario }) {
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div>
                 <label className={lblCls}>
-                  Nombre(s) <span className="text-red-400">*</span>
+                  {esPersonaMoral(form.tipo_persona)
+                    ? "Nombre de la Empresa"
+                    : "Nombre(s)"}{" "}
+                  <span className="text-red-400">*</span>
                 </label>
                 <input
                   value={form.asegurado_nombre_pila}
@@ -1242,41 +1254,49 @@ export default function PoliciasDia({ usuario }) {
                     setF("asegurado_nombre_pila", e.target.value.toUpperCase())
                   }
                   required
-                  placeholder="Nombre(s)"
-                  className={inpCls}
-                />
-              </div>
-              <div>
-                <label className={lblCls}>
-                  Apellido paterno <span className="text-red-400">*</span>
-                </label>
-                <input
-                  value={form.asegurado_apellido_paterno}
-                  onChange={(e) =>
-                    setF(
-                      "asegurado_apellido_paterno",
-                      e.target.value.toUpperCase(),
-                    )
+                  placeholder={
+                    esPersonaMoral(form.tipo_persona)
+                      ? "Nombre de la Empresa"
+                      : "Nombre(s)"
                   }
-                  required
-                  placeholder="Apellido paterno"
                   className={inpCls}
                 />
               </div>
-              <div>
-                <label className={lblCls}>Apellido materno</label>
-                <input
-                  value={form.asegurado_apellido_materno}
-                  onChange={(e) =>
-                    setF(
-                      "asegurado_apellido_materno",
-                      e.target.value.toUpperCase(),
-                    )
-                  }
-                  placeholder="Apellido materno"
-                  className={inpCls}
-                />
-              </div>
+              {!esPersonaMoral(form.tipo_persona) && (
+                <>
+                  <div>
+                    <label className={lblCls}>
+                      Apellido paterno <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      value={form.asegurado_apellido_paterno}
+                      onChange={(e) =>
+                        setF(
+                          "asegurado_apellido_paterno",
+                          e.target.value.toUpperCase(),
+                        )
+                      }
+                      required
+                      placeholder="Apellido paterno"
+                      className={inpCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={lblCls}>Apellido materno</label>
+                    <input
+                      value={form.asegurado_apellido_materno}
+                      onChange={(e) =>
+                        setF(
+                          "asegurado_apellido_materno",
+                          e.target.value.toUpperCase(),
+                        )
+                      }
+                      placeholder="Apellido materno"
+                      className={inpCls}
+                    />
+                  </div>
+                </>
+              )}
               <div>
                 <label className={lblCls}>
                   Teléfono{" "}
