@@ -323,22 +323,72 @@ export async function crearPolizaSubsecuente({ polizaOriginalId, clienteId, cobe
   }
 }
 
-// ── Leer pólizas subsecuentes asignadas a un operador ────────────────────
+// ── Leer pólizas subsecuentes/renovaciones pendientes de un operador ─────
+// Incluye tanto las SUBSECUENTE (constancia reservada tras una cancelación)
+// como las RENOVACION que quedaron a medias (p. ej. si se recargó la página
+// durante el wizard) para que el operador pueda retomarlas o pedir su borrado.
 export async function fetchPolizasSubsecuentes(usuarioId) {
   const { data, error } = await supabase
     .from('polizas')
     .select(`
-      id, constancia, numero_poliza, fecha_inicio, fecha_fin, created_at,
+      id, constancia, numero_poliza, estatus, fecha_inicio, fecha_fin, created_at,
       cliente_id, notas,
       clientes(id, nombre, apellido),
       coberturas(id, nombre, prima_neta, prima_total, duracion_meses,
         cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
     `)
-    .eq('estatus', 'SUBSECUENTE')
+    .in('estatus', ['SUBSECUENTE', 'RENOVACION'])
     .eq('creado_por', usuarioId)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data ?? [];
+}
+
+// ── Leer pólizas incompletas de todas las oficinas (administración) ──────
+// Renovaciones/subsecuentes que nunca se terminaron de emitir. No aparecen
+// en ninguna otra vista porque su estatus no está en la lista "normal".
+export async function fetchPolizasIncompletas() {
+  const { data, error } = await supabase
+    .from('polizas')
+    .select(`
+      id, constancia, numero_poliza, estatus, fecha_inicio, fecha_fin, created_at,
+      cliente_id, oficina_id, creado_por,
+      clientes(nombre, apellido),
+      oficinas(id, nombre),
+      coberturas(nombre, prima_total),
+      usuarios!polizas_creado_por_fkey(nombre, apellido)
+    `)
+    .in('estatus', ['SUBSECUENTE', 'RENOVACION'])
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ── Eliminar una póliza incompleta (solo administración) ─────────────────
+// Borra la fila huérfana y limpia dependencias que normalmente están vacías
+// en una póliza a medias (cuotas, registro de corte). Nunca toca una póliza
+// ya emitida o cancelada.
+export async function eliminarPolizaIncompleta(id) {
+  const { data: p, error: e0 } = await supabase
+    .from('polizas')
+    .select('estatus')
+    .eq('id', id)
+    .single();
+  if (e0) throw e0;
+  if (!['RENOVACION', 'SUBSECUENTE'].includes(p.estatus)) {
+    throw new Error(
+      'Solo se pueden eliminar pólizas incompletas (renovación o subsecuente).',
+    );
+  }
+  // Limpieza defensiva — en una póliza a medias estas tablas suelen estar vacías.
+  try { await supabase.from('pagos').delete().eq('poliza_id', id); } catch {}
+  try { await supabase.from('polizas_cofisem').delete().eq('poliza_id', id); } catch {}
+  const { error } = await supabase
+    .from('polizas')
+    .delete()
+    .eq('id', id)
+    .in('estatus', ['RENOVACION', 'SUBSECUENTE']);
+  if (error) throw error;
 }
 
 // ── Emitir póliza ──────────────────────────────────────────────────────────

@@ -292,6 +292,67 @@ export default function Polizas({ usuario }) {
     }
   };
 
+  // Retoma una pendiente: si es RENOVACION reabre el wizard con todos los
+  // datos del vehículo; si es SUBSECUENTE usa el flujo de captura desde cero.
+  const continuarPendiente = async (row) => {
+    if (row.estatus !== "RENOVACION") {
+      abrirSubsecuente(row);
+      return;
+    }
+    try {
+      const full = await fetchPolizaById(row.id);
+      let esGestor = false;
+      try {
+        esGestor = JSON.parse(full.notas ?? "{}").esGestor ?? false;
+      } catch {}
+      setCotActiva({
+        polizaId: full.id,
+        id: full.constancia,
+        pasoInicial: 1,
+        esRenovacion: true,
+        esSubsecuente: true,
+        coberturaId: null,
+        coberturaData: null,
+        clienteId: full.cliente_id,
+        vendedorId: full.vendedor_id ?? 1,
+        concesionario: full.concesionario_id ?? null,
+        vehiculoAmisId: full.vehiculo_amis_id,
+        codAMIS: String(full.vehiculos_amis?.cve ?? ""),
+        marca: full.vehiculos_amis?.marca ?? "",
+        tipoVehiculo: full.vehiculos_amis?.tipo ?? "",
+        version: full.vehiculos_amis?.dc ?? "",
+        descripcion: full.vehiculos_amis?.dl ?? "",
+        modelo: String(full.anio ?? new Date().getFullYear()),
+        serie: full.num_serie ?? "",
+        motor: full.num_motor ?? "",
+        placas: full.placas ?? "",
+        conductorHabitual: full.conductor_habitual ?? "",
+        conductorSexo: full.conductor_sexo ?? "",
+        conductorEdad: full.conductor_edad ?? "",
+        fechaInicio: full.fecha_inicio ?? "",
+        formaPago: full.forma_pago ?? "CONTADO",
+        esGestor,
+      });
+      setTab("nueva");
+    } catch (e) {
+      Swal.fire({
+        icon: "error",
+        title: "Error al abrir la renovación",
+        text: e.message,
+        confirmButtonColor: "#13193a",
+      });
+    }
+  };
+
+  const avisarEliminarPendiente = () => {
+    Swal.fire({
+      icon: "info",
+      title: "No puedes eliminarla",
+      text: "Para eliminar esta póliza incompleta, comunícate con el administrador.",
+      confirmButtonColor: "#13193a",
+    });
+  };
+
   const abrirSubsecuente = (row) => {
     setCotActiva({
       polizaId: row.id,
@@ -589,7 +650,7 @@ export default function Polizas({ usuario }) {
                   cargarSubsecuentes();
                 }}
               >
-                Pólizas subsecuentes
+                Subsecuentes y renovaciones
                 {subsecuentes.length > 0 && (
                   <span className="ml-1.5 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                     {subsecuentes.length}
@@ -901,7 +962,7 @@ export default function Polizas({ usuario }) {
                 </div>
               ) : subsecuentes.length === 0 ? (
                 <div className="text-center py-12 text-sm text-gray-400">
-                  No hay pólizas subsecuentes pendientes.
+                  No hay pólizas subsecuentes ni renovaciones pendientes.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -910,6 +971,7 @@ export default function Polizas({ usuario }) {
                       <tr className="bg-gray-50/80 border-b border-gray-100">
                         {[
                           "Constancia",
+                          "Tipo",
                           "Asegurado",
                           "Cobertura",
                           "Fecha inicio",
@@ -935,6 +997,19 @@ export default function Polizas({ usuario }) {
                           <td className="px-5 py-2 font-mono text-xs font-bold text-[#13193a]">
                             {s.constancia}
                           </td>
+                          <td className="px-5 py-2">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                s.estatus === "RENOVACION"
+                                  ? "bg-violet-100 text-violet-700"
+                                  : "bg-blue-100 text-blue-700"
+                              }`}
+                            >
+                              {s.estatus === "RENOVACION"
+                                ? "Renovación"
+                                : "Subsecuente"}
+                            </span>
+                          </td>
                           <td className="px-5 py-2 text-xs font-semibold text-gray-700">
                             {s.clientes?.nombre} {s.clientes?.apellido || ""}
                           </td>
@@ -951,13 +1026,22 @@ export default function Polizas({ usuario }) {
                             {new Date(s.created_at).toLocaleDateString("es-MX")}
                           </td>
                           <td className="px-5 py-2">
-                            <button
-                              onClick={() => abrirSubsecuente(s)}
-                              className="flex items-center gap-1.5 text-xs font-bold text-blue-600 border border-blue-200 px-3 py-1.5 rounded-xl hover:bg-blue-50 transition-all whitespace-nowrap"
-                            >
-                              <ClipboardList className="w-3.5 h-3.5" />
-                              Completar
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => continuarPendiente(s)}
+                                className="flex items-center gap-1.5 text-xs font-bold text-blue-600 border border-blue-200 px-3 py-1.5 rounded-xl hover:bg-blue-50 transition-all whitespace-nowrap"
+                              >
+                                <ClipboardList className="w-3.5 h-3.5" />
+                                Continuar
+                              </button>
+                              <button
+                                onClick={avisarEliminarPendiente}
+                                className="flex items-center gap-1 text-xs font-semibold text-red-500 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50 transition-all"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Eliminar
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

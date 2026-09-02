@@ -10,6 +10,8 @@ import {
   calcularEstatus,
   crearPolizaSubsecuente,
   cambiarOficinaPoliza,
+  fetchPolizasIncompletas,
+  eliminarPolizaIncompleta,
 } from "../../services/polizas";
 import {
   fetchOperadores,
@@ -1987,6 +1989,56 @@ export default function AdminPolizas() {
   const [loadingViewerId, setLoadingViewerId] = useState(null);
   const [detalleData, setDetalleData] = useState(null);
   const [loadingDetalleId, setLoadingDetalleId] = useState(null);
+  const [incompletas, setIncompletas] = useState([]);
+  const [cargandoIncompletas, setCargandoIncompletas] = useState(true);
+  const [eliminandoId, setEliminandoId] = useState(null);
+
+  const cargarIncompletas = useCallback(async () => {
+    setCargandoIncompletas(true);
+    try {
+      setIncompletas(await fetchPolizasIncompletas());
+    } catch (e) {
+      console.error("Error cargando pólizas incompletas:", e.message);
+    } finally {
+      setCargandoIncompletas(false);
+    }
+  }, []);
+
+  const eliminarIncompleta = async (p) => {
+    const { isConfirmed } = await Swal.fire({
+      icon: "warning",
+      title: "Eliminar póliza incompleta",
+      html: `Se eliminará <b>${p.constancia || p.numero_poliza}</b> (${
+        p.estatus === "RENOVACION" ? "renovación" : "subsecuente"
+      } a medias).<br/>Esta acción no se puede deshacer.`,
+      showCancelButton: true,
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Eliminar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!isConfirmed) return;
+    setEliminandoId(p.id);
+    try {
+      await eliminarPolizaIncompleta(p.id);
+      setIncompletas((xs) => xs.filter((x) => x.id !== p.id));
+      Swal.fire({
+        icon: "success",
+        title: "Póliza eliminada",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    } catch (e) {
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo eliminar",
+        text: e.message,
+        confirmButtonColor: "#13193a",
+      });
+    } finally {
+      setEliminandoId(null);
+    }
+  };
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -2025,6 +2077,10 @@ export default function AdminPolizas() {
   useEffect(() => {
     cargar();
   }, [cargar]);
+
+  useEffect(() => {
+    cargarIncompletas();
+  }, [cargarIncompletas]);
 
   useEffect(() => {
     const t = setTimeout(() => setBusquedaFiltro(busqueda), 300);
@@ -2222,8 +2278,115 @@ export default function AdminPolizas() {
           >
             Pólizas
           </button>
+          <button
+            onClick={() => setTab("incompletas")}
+            className={`px-4 py-3 text-sm font-semibold border-b-2 transition-all ${tab === "incompletas" ? "border-[#13193a] text-[#13193a]" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+          >
+            Incompletas
+            {incompletas.length > 0 && (
+              <span className="ml-1.5 bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {incompletas.length}
+              </span>
+            )}
+          </button>
         </div>
 
+        {tab === "incompletas" && (
+          <div className="overflow-x-auto">
+            <div className="px-5 py-3 border-b border-gray-100 text-xs text-gray-500">
+              Renovaciones y subsecuentes que quedaron a medias (p. ej. por una
+              recarga durante la emisión). No aparecen en ninguna otra lista.
+            </div>
+            {cargandoIncompletas ? (
+              <div className="flex items-center justify-center py-16 gap-3 text-gray-400">
+                <Loader2 className="animate-spin w-5 h-5" />
+                <span className="text-sm">Cargando…</span>
+              </div>
+            ) : incompletas.length === 0 ? (
+              <div className="text-center py-12 text-sm text-gray-400">
+                No hay pólizas incompletas.
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50/80 border-b border-gray-100">
+                    {[
+                      "Constancia",
+                      "Tipo",
+                      "Asegurado",
+                      "Oficina",
+                      "Operador",
+                      "Cobertura",
+                      "Creada",
+                      "Acciones",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-2 py-1 whitespace-nowrap"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {incompletas.map((p) => (
+                    <tr key={p.id} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="px-2 py-1 font-mono text-xs font-bold text-[#13193a] whitespace-nowrap">
+                        {p.constancia || p.numero_poliza}
+                      </td>
+                      <td className="px-2 py-1">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            p.estatus === "RENOVACION"
+                              ? "bg-violet-100 text-violet-700"
+                              : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {p.estatus === "RENOVACION" ? "Renovación" : "Subsecuente"}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1 text-xs font-semibold text-gray-700 max-w-[10rem] truncate">
+                        {p.clientes?.nombre} {p.clientes?.apellido || ""}
+                      </td>
+                      <td className="px-2 py-1 text-xs text-gray-500 max-w-[8rem] truncate">
+                        {p.oficinas?.nombre || "—"}
+                      </td>
+                      <td className="px-2 py-1 text-xs text-gray-500 max-w-[9rem] truncate">
+                        {p.usuarios
+                          ? `${p.usuarios.nombre || ""} ${p.usuarios.apellido || ""}`.trim()
+                          : "—"}
+                      </td>
+                      <td className="px-2 py-1 text-xs text-gray-500 max-w-[9rem] truncate">
+                        {p.coberturas?.nombre || "—"}
+                      </td>
+                      <td className="px-2 py-1 text-xs text-gray-400 whitespace-nowrap">
+                        {new Date(p.created_at).toLocaleDateString("es-MX")}
+                      </td>
+                      <td className="px-2 py-1">
+                        <button
+                          onClick={() => eliminarIncompleta(p)}
+                          disabled={eliminandoId === p.id}
+                          className="flex items-center gap-1 text-[11px] font-bold text-red-600 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-50 transition-all disabled:opacity-40 whitespace-nowrap"
+                        >
+                          {eliminandoId === p.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <X className="w-3 h-3" />
+                          )}
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {tab === "polizas" && (
+        <>
         {/* Filtros */}
         <div className="flex flex-wrap items-end gap-2 px-5 py-3 border-b border-gray-100">
           {/* Búsqueda */}
@@ -2477,6 +2640,8 @@ export default function AdminPolizas() {
           pageSize={10}
           onPage={setPage}
         />
+        </>
+        )}
       </div>
 
       {modal === "endoso" && polSel && (
