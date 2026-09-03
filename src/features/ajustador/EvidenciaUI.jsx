@@ -17,7 +17,11 @@ import CarruselFotos from "./CarruselFotos";
 // vez de mandar directo a la app de cámara nativa del celular, que no
 // permite dibujar ninguna guía encima. Se deja "o elegir de galería"
 // como respaldo por si la cámara en vivo falla (permiso negado, etc.).
-export function BtnEvidencia({ label, icon, items, onAdd, onRemove, guiaCamara }) {
+// `permitirGaleria` (opcional): quita el `capture="environment"` del input
+// para que al tocar el botón el celular ofrezca cámara O galería, en vez
+// de abrir la cámara directo. Se usa en cajas donde la foto puede venir
+// de fotos ya tomadas (p. ej. los 4 vértices del vehículo).
+export function BtnEvidencia({ label, icon, items, onAdd, onRemove, guiaCamara, permitirGaleria }) {
   const ref = useRef();
   const [camaraAbierta, setCamaraAbierta] = useState(false);
 
@@ -47,7 +51,7 @@ export function BtnEvidencia({ label, icon, items, onAdd, onRemove, guiaCamara }
         type="file"
         accept="image/*"
         multiple
-        capture={guiaCamara ? undefined : "environment"}
+        capture={guiaCamara || permitirGaleria ? undefined : "environment"}
         className="hidden"
         onChange={handleFiles}
       />

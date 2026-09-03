@@ -29,10 +29,16 @@ export default function TerceroDetalle({ siniestro, idx, datos, onDatos, onGuard
   const [modulo, setModulo] = useState(null);
 
   if (modulo) {
-    const props = { siniestro, datos, onDatos, onGuardar, guardando, errorGuardar, guardadoOk, onVolver: () => setModulo(null) };
-    if (modulo === "datos")      return <TerceroModulo1Datos {...props} />;
-    if (modulo === "vehiculo")   return <TerceroModulo2Vehiculo {...props} />;
-    if (modulo === "danos")      return <TerceroModulo3Danos {...props} />;
+    const volver = () => setModulo(null);
+    const props = { siniestro, datos, onDatos, onGuardar, guardando, errorGuardar, guardadoOk, onVolver: volver };
+    // Módulos de formulario: al guardar con éxito, regresar a la grilla
+    // de módulos (igual que la flecha atrás). Lesionados/Servicios no —
+    // tienen paneles/sub-guardados debajo y salir sería peor.
+    const guardarYVolver = async () => { if ((await onGuardar()) !== false) volver(); };
+    const propsForm = { ...props, onGuardar: guardarYVolver };
+    if (modulo === "datos")      return <TerceroModulo1Datos {...propsForm} />;
+    if (modulo === "vehiculo")   return <TerceroModulo2Vehiculo {...propsForm} />;
+    if (modulo === "danos")      return <TerceroModulo3Danos {...propsForm} />;
     if (modulo === "lesionados") return <TerceroModulo4Lesionados {...props} />;
     if (modulo === "servicios")  return <TerceroModulo5Servicios {...props} />;
   }

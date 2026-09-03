@@ -9,7 +9,7 @@
 import { Campo, CampoSistema, PanelHeader, Seccion, sumaMontosDanos, formatMonto } from "../shared";
 import DanosMarcadores from "../danos/DanosMarcadores";
 
-export default function TerceroModulo3Danos({ datos, onDatos, onGuardar, guardando, errorGuardar, guardadoOk, onVolver }) {
+export default function TerceroModulo3Danos({ datos, onDatos, onGuardar, guardando, errorGuardar, onVolver }) {
   const sumaDanos = sumaMontosDanos(datos.danosSiniestro);
 
   return (
@@ -58,7 +58,6 @@ export default function TerceroModulo3Danos({ datos, onDatos, onGuardar, guardan
 
         <div className="pt-2 pb-6 space-y-2">
           {errorGuardar && <p className="text-xs text-red-500 text-center font-medium">{errorGuardar}</p>}
-          {guardadoOk && !errorGuardar && <p className="text-xs text-emerald-600 text-center font-medium">Guardado.</p>}
           <button onClick={onGuardar} disabled={guardando}
             className="w-full py-3.5 rounded-2xl bg-[#13193a] hover:bg-[#1e2a50] text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-[#13193a]/15 disabled:opacity-60 disabled:cursor-wait">
             {guardando ? "Guardando..." : "Guardar"}

@@ -51,7 +51,7 @@ export default function NAModulo2Vehiculo({ siniestro, onVolver }) {
         <Seccion titulo="Fotografías de los 4 vértices (obligatorio)">
           <div className="grid grid-cols-2 gap-3">
             {vertices.map((x) => (
-              <BtnEvidencia key={x.label} label={x.label} icon={<Car className="w-4 h-4 text-gray-400" />} items={x.ev.items} onAdd={x.ev.agregar} onRemove={x.ev.eliminar} />
+              <BtnEvidencia key={x.label} label={x.label} icon={<Car className="w-4 h-4 text-gray-400" />} items={x.ev.items} onAdd={x.ev.agregar} onRemove={x.ev.eliminar} permitirGaleria />
             ))}
           </div>
         </Seccion>

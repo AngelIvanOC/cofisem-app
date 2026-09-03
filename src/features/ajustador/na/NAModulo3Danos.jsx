@@ -18,7 +18,6 @@ export default function NAModulo3Danos({ siniestro, onVolver }) {
   const [original, setOriginal] = useState(datosNAVacio());
   const [guardando,    setGuardando]    = useState(false);
   const [errorGuardar, setErrorGuardar] = useState(null);
-  const [guardadoOk,   setGuardadoOk]   = useState(false);
 
   useEffect(() => {
     fetchPartesInvolucradas(siniestro.id).then(({ datosNA }) => {
@@ -31,7 +30,6 @@ export default function NAModulo3Danos({ siniestro, onVolver }) {
   const handleGuardar = async () => {
     setGuardando(true);
     setErrorGuardar(null);
-    setGuardadoOk(false);
     try {
       const cambiosNA = soloCambios(original, datos);
       // afectadosIds/afectados/originalTerceros van vacíos a propósito:
@@ -41,7 +39,8 @@ export default function NAModulo3Danos({ siniestro, onVolver }) {
       // cálculo da lista vacía y ningún tercero se ve afectado.
       await guardarPartesInvolucradas(siniestro.id, { cambiosNA, afectadosIds: [], afectados: {}, originalTerceros: {} });
       setOriginal(datos);
-      setGuardadoOk(true);
+      // Guardado OK → volver a la grilla de módulos, igual que la flecha atrás.
+      onVolver();
     } catch (err) {
       setErrorGuardar(err.message ?? "Error al guardar los daños");
     } finally {
@@ -89,7 +88,6 @@ export default function NAModulo3Danos({ siniestro, onVolver }) {
 
         <div className="pt-2 pb-6 space-y-2">
           {errorGuardar && <p className="text-xs text-red-500 text-center font-medium">{errorGuardar}</p>}
-          {guardadoOk && !errorGuardar && <p className="text-xs text-emerald-600 text-center font-medium">Guardado.</p>}
           <button
             onClick={handleGuardar}
             disabled={guardando}

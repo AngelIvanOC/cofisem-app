@@ -41,7 +41,6 @@ export default function NAModulo1Asegurado({ siniestro, onVolver }) {
 
   const [guardando,    setGuardando]    = useState(false);
   const [errorGuardar, setErrorGuardar] = useState(null);
-  const [guardadoOk,   setGuardadoOk]   = useState(false);
 
   // Firma del asegurado — se sube y persiste al confirmar, no espera al
   // botón "Guardar" del módulo.
@@ -127,7 +126,6 @@ export default function NAModulo1Asegurado({ siniestro, onVolver }) {
   const handleGuardar = async () => {
     setGuardando(true);
     setErrorGuardar(null);
-    setGuardadoOk(false);
     try {
       const actual = {
         conductorDomicilio: conductorEsAsegurado ? (a.direccion || "") : conductorDomicilio,
@@ -139,7 +137,8 @@ export default function NAModulo1Asegurado({ siniestro, onVolver }) {
         await actualizarDatosSiniestro(sid, cambios);
         setOriginal(actual);
       }
-      setGuardadoOk(true);
+      // Guardado OK → volver a la grilla de módulos, igual que la flecha atrás.
+      onVolver();
     } catch (err) {
       setErrorGuardar(err.message ?? "Error al guardar los datos del asegurado");
     } finally {
@@ -272,7 +271,6 @@ export default function NAModulo1Asegurado({ siniestro, onVolver }) {
 
         <div className="pt-2 pb-6 space-y-2">
           {errorGuardar && <p className="text-xs text-red-500 text-center font-medium">{errorGuardar}</p>}
-          {guardadoOk && !errorGuardar && <p className="text-xs text-emerald-600 text-center font-medium">Guardado.</p>}
           <button
             onClick={handleGuardar}
             disabled={guardando}

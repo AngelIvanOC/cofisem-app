@@ -75,6 +75,8 @@ export default function useTercerosState(siniestroId) {
   // disparar esto, no solo un guardado parcial del tercero que se está
   // viendo (mismo comportamiento que el paso único de antes,
   // CapturaEvidencia.jsx).
+  // Devuelve true si guardó sin error — quien lo llama lo usa para
+  // decidir si navegar de regreso a la grilla de módulos.
   const guardarTodo = async () => {
     setGuardando(true);
     setErrorGuardar(null);
@@ -85,8 +87,10 @@ export default function useTercerosState(siniestroId) {
       // Lesionados/fotos ya puedan ligarse a un id real.
       await cargar();
       setGuardadoOk(true);
+      return true;
     } catch (err) {
       setErrorGuardar(err.message ?? "Error al guardar el tercero");
+      return false;
     } finally {
       setGuardando(false);
     }
