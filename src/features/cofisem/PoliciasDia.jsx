@@ -2127,13 +2127,14 @@ export default function PoliciasDia({ usuario }) {
                         {!corteCerrado && (
                           <button
                             type="button"
-                            title={
-                              p.completado
-                                ? "Editar todos los datos"
-                                : "Completar / editar"
-                            }
+                            title="Editar todos los datos de la póliza"
                             onClick={() => {
-                              setModalEditar(p.completado);
+                              // El lápiz siempre abre en modo edición
+                              // (soloEditar=true): muestra la fecha de corte
+                              // hasta arriba y toda la identidad de la póliza.
+                              // "Completar" es otra acción (botón de /corte),
+                              // no esta.
+                              setModalEditar(true);
                               setModalRow(p);
                             }}
                             className="w-7 h-7 rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center justify-center text-gray-400 hover:text-[#1447e6] transition-colors"
