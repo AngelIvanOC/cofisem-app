@@ -36,7 +36,6 @@ export default function DatosGenerales({ siniestro, onVolver }) {
 
   const [guardando,    setGuardando]    = useState(false);
   const [errorGuardar, setErrorGuardar] = useState(null);
-  const [guardadoOk,   setGuardadoOk]   = useState(false);
 
   const construirOriginal = (fuente) => ({
     tipo: fuente.tipo ?? "",
@@ -87,7 +86,6 @@ export default function DatosGenerales({ siniestro, onVolver }) {
   const handleGuardar = async () => {
     setGuardando(true);
     setErrorGuardar(null);
-    setGuardadoOk(false);
     try {
       const actual = {
         tipo, fechaAccidente, horaAccidente, lugar, descripcion, versionAsegurado,
@@ -99,7 +97,8 @@ export default function DatosGenerales({ siniestro, onVolver }) {
         await actualizarDatosSiniestro(siniestro.id, cambios);
         setOriginal(actual);
       }
-      setGuardadoOk(true);
+      // Guardado OK → volver al hub, igual que la flecha atrás.
+      onVolver();
     } catch (err) {
       setErrorGuardar(err.message ?? "Error al guardar los datos generales");
     } finally {
@@ -177,7 +176,6 @@ export default function DatosGenerales({ siniestro, onVolver }) {
 
         <div className="pt-2 pb-6 space-y-2">
           {errorGuardar && <p className="text-xs text-red-500 text-center font-medium">{errorGuardar}</p>}
-          {guardadoOk && !errorGuardar && <p className="text-xs text-emerald-600 text-center font-medium">Guardado.</p>}
           <button
             onClick={handleGuardar}
             disabled={guardando}
