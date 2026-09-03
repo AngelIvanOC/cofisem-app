@@ -4,6 +4,29 @@ import { mockCoberturas, mockCondiciones } from "../components/pdf/mockData";
 import { obtenerPrimaGaman } from "./primaGaman";
 import { hoyISO } from "../utils/fecha";
 
+// Resuelve una cobertura activa por prima_total cuando no se pasó cobertura_id
+// explícito (flujo legacy / borradores viejos). Puede haber MÁS DE UNA cobertura
+// activa con la misma prima_total (p. ej. la global $2,500 y la propia de una
+// oficina); por eso NO se usa .single() (rompería) y se prioriza:
+//   1. la cobertura propia de la oficina (oficina_id = oficinaId)
+//   2. la cobertura global (oficina_id NULL)
+//   3. cualquiera, como último recurso
+async function resolverCoberturaPorPrima(primaTotal, oficinaId = null) {
+  if (primaTotal == null) return null;
+  const { data } = await supabase
+    .from('coberturas')
+    .select('id, nombre, oficina_id')
+    .eq('prima_total', primaTotal)
+    .eq('activa', true);
+  const lista = data ?? [];
+  return (
+    lista.find(c => oficinaId != null && c.oficina_id === oficinaId) ??
+    lista.find(c => c.oficina_id == null) ??
+    lista[0] ??
+    null
+  );
+}
+
 // Convierte cobertura_rubros de la BD al formato que espera Coberturas.jsx
 function rubrosACoberturasPDF(rubros = []) {
   if (!rubros || rubros.length === 0) return mockCoberturas;
@@ -156,7 +179,7 @@ export async function guardarCotizacion({ form, total, enLetras, usuario }) {
   let coberturaId = form.coberturaId ?? null;
   let coberturaNombre = form.coberturaData?.nombre ?? null;
   if (!coberturaId) {
-    const { data: cob } = await supabase.from('coberturas').select('id, nombre').eq('prima_total', total).eq('activa', true).maybeSingle();
+    const cob = await resolverCoberturaPorPrima(total, usuario?.oficinas?.id ?? null);
     coberturaId = cob?.id ?? null;
     coberturaNombre = coberturaNombre ?? cob?.nombre ?? null;
   } else if (!coberturaNombre) {
@@ -203,7 +226,7 @@ export async function guardarCotizacion({ form, total, enLetras, usuario }) {
 export async function actualizarCotizacion({ polizaId, form, total, enLetras, usuario }) {
   let coberturaId = form.coberturaId ?? null;
   if (!coberturaId) {
-    const { data: cob } = await supabase.from('coberturas').select('id').eq('prima_total', total).eq('activa', true).maybeSingle();
+    const cob = await resolverCoberturaPorPrima(total, usuario?.oficinas?.id ?? null);
     coberturaId = cob?.id ?? null;
   }
 
@@ -412,12 +435,7 @@ export async function emitirPoliza({
   let resolvedCoberturaId = coberturaId ?? null;
   let resolvedCoberturaNombre = coberturaNombre;
   if (!resolvedCoberturaId && primaTotal) {
-    const { data: cob } = await supabase
-      .from('coberturas')
-      .select('id, nombre')
-      .eq('prima_total', primaTotal)
-      .eq('activa', true)
-      .single();
+    const cob = await resolverCoberturaPorPrima(primaTotal, oficinaId ?? null);
     resolvedCoberturaId = cob?.id ?? null;
     resolvedCoberturaNombre = resolvedCoberturaNombre ?? cob?.nombre ?? null;
   } else if (!resolvedCoberturaNombre && resolvedCoberturaId) {

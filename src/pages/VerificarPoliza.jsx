@@ -170,13 +170,28 @@ export default function VerificarPoliza() {
   let pagoSubs = 0;
   let nSubs = 0;
   if (formaPago !== "CONTADO") {
-    for (const tierData of Object.values(PRECIO_MATRIZ)) {
-      const entry = tierData[formaPago];
-      if (entry && Math.abs(entry.total - primaTotal) < 0.01) {
-        primerPago = entry.primerPago;
-        pagoSubs = entry.pagoSubs;
-        nSubs = entry.nSubs;
-        break;
+    // Fuente de verdad: las cuotas reales de la póliza (cubre cualquier
+    // esquema — 799+3×625, 4×625 de JIUTEPEC, gestor, etc.).
+    const cuotasOrden = [...pagos].sort(
+      (a, b) =>
+        new Date((a.fecha_vencimiento ?? "") + "T12:00:00") -
+        new Date((b.fecha_vencimiento ?? "") + "T12:00:00"),
+    );
+    if (cuotasOrden.length > 1) {
+      primerPago = Number(cuotasOrden[0].monto);
+      const subs = cuotasOrden.slice(1);
+      nSubs = subs.length;
+      pagoSubs = Number(subs[0].monto);
+    } else {
+      // Sin cuotas disponibles: estimación por PRECIO_MATRIZ (comportamiento previo)
+      for (const tierData of Object.values(PRECIO_MATRIZ)) {
+        const entry = tierData[formaPago];
+        if (entry && Math.abs(entry.total - primaTotal) < 0.01) {
+          primerPago = entry.primerPago;
+          pagoSubs = entry.pagoSubs;
+          nSubs = entry.nSubs;
+          break;
+        }
       }
     }
   }

@@ -11,6 +11,8 @@ import {
   ID_A_FAMILIA,
   IDS_OCULTOS,
   resolverCobertura,
+  OFICINAS_COBERTURA_PROPIA,
+  coberturaPropiaOficina,
 } from "../constants/familiasCobertura";
 import { fetchCoberturasActivas } from "../../../services/coberturas";
 import {
@@ -87,6 +89,12 @@ export default function FormCotizacion({
   const nroCot =
     cotizacionInicial?.id ??
     `COT-${usuario?.oficinas?.id ?? "0"}${Date.now().toString().slice(-6)}`;
+
+  // Oficina con esquema de cobro propio (p. ej. COFISEM JIUTEPEC: 4 pagos
+  // iguales de $625 y sin switch Normal/Gestor). null = oficina normal.
+  const oficinaIdUsuario = usuario?.oficinas?.id ?? null;
+  const cfgOficinaPropia = OFICINAS_COBERTURA_PROPIA[oficinaIdUsuario] ?? null;
+  const ocultarTipoCuota = !!cfgOficinaPropia?.ocultarTipoCuota;
   // pasoInicial: 1=fresco, 2=subsecuente (cobertura ya elegida), 5=guardado (resumen)
   const [paso, setPaso] = useState(
     cotizacionInicial?.pasoInicial ?? (esEdicion ? 5 : 1),
@@ -113,7 +121,8 @@ export default function FormCotizacion({
     concesionario: cotizacionInicial?.concesionario ?? null,
     fechaInicio: cotizacionInicial?.fechaInicio ?? fechaLocalISO(new Date()),
     formaPago: cotizacionInicial?.formaPago ?? "CONTADO",
-    esGestor: cotizacionInicial?.esGestor ?? false,
+    // Las oficinas con cobertura propia no manejan "Gestor": siempre false.
+    esGestor: ocultarTipoCuota ? false : (cotizacionInicial?.esGestor ?? false),
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -178,6 +187,44 @@ export default function FormCotizacion({
       .catch(console.error)
       .finally(() => setLoadingDB(false));
   }, []);
+
+  // ── Reconciliador para oficinas con cobertura propia (JIUTEPEC) ──────────
+  // Si el operador es de una oficina con esquema propio y la cobertura
+  // seleccionada pertenece a la familia intervenida (o ya es la propia),
+  // fuerza SIEMPRE la cobertura propia y esGestor=false. Es la red de
+  // seguridad que cubre todos los flujos: selección en paso 1, cambio de
+  // forma de pago, edición de cotización, renovación y subsecuente.
+  useEffect(() => {
+    if (!cfgOficinaPropia) return;
+    const propia = coberturaPropiaOficina(oficinaIdUsuario, todasCoberturas);
+    if (!propia) return; // catálogo aún no carga
+    const cobSel = form.coberturaData;
+    if (!cobSel) return;
+    const perteneceFamilia =
+      cobSel.id === propia.id ||
+      ID_A_FAMILIA[cobSel.id]?.raiz === cfgOficinaPropia.familiaRaiz;
+    if (!perteneceFamilia) return;
+    if (
+      form.coberturaId === propia.id &&
+      cobSel.id === propia.id &&
+      form.esGestor === false
+    )
+      return;
+    setForm((f) => ({
+      ...f,
+      esGestor: false,
+      coberturaId: propia.id,
+      coberturaData: propia,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    cfgOficinaPropia,
+    oficinaIdUsuario,
+    todasCoberturas,
+    form.coberturaId,
+    form.coberturaData,
+    form.esGestor,
+  ]);
 
   useEffect(() => {
     if (!form.clienteId) return;
@@ -436,26 +483,35 @@ export default function FormCotizacion({
         form.fechaInicio <= maxDateNormal
       );
 
-  // Pricing: desde la cobertura seleccionada en BD (o fallback a PRECIO_MATRIZ)
-  const precioData = form.coberturaData
-    ? calcularPrecioData(form.coberturaData, form.formaPago, form.esGestor)
-    : (PRECIO_MATRIZ[form.esGestor ? "gestor" : "normal"][form.formaPago] ??
-      PRECIO_MATRIZ[form.esGestor ? "gestor" : "normal"]["CONTADO"]);
+  // Pricing: desde la cobertura seleccionada en BD (o fallback a PRECIO_MATRIZ).
+  // En oficinas con cobertura propia se usa SIEMPRE esa fila para el cálculo y
+  // esGestor se ignora — así el precio ya es correcto aunque el reconciliador
+  // aún no haya sincronizado form.coberturaData (evita 1 frame con el precio
+  // equivocado y cualquier emisión antes de que sincronice).
+  const esGestorEfectivo = cfgOficinaPropia ? false : form.esGestor;
+  const cobParaPrecio = cfgOficinaPropia
+    ? (coberturaPropiaOficina(oficinaIdUsuario, todasCoberturas) ??
+       form.coberturaData)
+    : form.coberturaData;
+  const precioData = cobParaPrecio
+    ? calcularPrecioData(cobParaPrecio, form.formaPago, esGestorEfectivo)
+    : (PRECIO_MATRIZ[esGestorEfectivo ? "gestor" : "normal"][form.formaPago] ??
+      PRECIO_MATRIZ[esGestorEfectivo ? "gestor" : "normal"]["CONTADO"]);
   const total = precioData.total;
   const primerPago = precioData.primerPago;
   const pagoSubs = precioData.pagoSubs;
   const nSubs = precioData.nSubs;
-  const derechosCob = form.coberturaData
+  const derechosCob = cobParaPrecio
     ? +(
-        parseFloat(form.coberturaData.prima_total) -
-        parseFloat(form.coberturaData.prima_neta) -
-        +(parseFloat(form.coberturaData.prima_neta) * 0.16).toFixed(2)
+        parseFloat(cobParaPrecio.prima_total) -
+        parseFloat(cobParaPrecio.prima_neta) -
+        +(parseFloat(cobParaPrecio.prima_neta) * 0.16).toFixed(2)
       ).toFixed(2)
     : DERECHOS;
   const subtotal = +(total / 1.16).toFixed(2);
   const iva = +(total - subtotal).toFixed(2);
-  const primaNeta = form.coberturaData
-    ? parseFloat(form.coberturaData.prima_neta)
+  const primaNeta = cobParaPrecio
+    ? parseFloat(cobParaPrecio.prima_neta)
     : +(subtotal - DERECHOS).toFixed(2);
 
   const fechaHoy = new Date().toLocaleDateString("es-MX", {
@@ -642,8 +698,8 @@ export default function FormCotizacion({
       const enLetras = numeroALetras(total);
       const poliza = await emitirPoliza({
         polizaId: cotizacionInicial?.polizaId ?? null,
-        coberturaId: form.coberturaId ?? null,
-        coberturaNombre: form.coberturaData?.nombre ?? null,
+        coberturaId: cobParaPrecio?.id ?? form.coberturaId ?? null,
+        coberturaNombre: cobParaPrecio?.nombre ?? form.coberturaData?.nombre ?? null,
         pagos: { primerPago, pagoSubs, nSubs },
         numeroManual:
           permitirNumManual && !esSubsecuente && numeroManual.trim()
@@ -772,14 +828,31 @@ export default function FormCotizacion({
                     const cobContado   = todasCoberturas.find(c => c.id === familia.contado);
                     const cobParciales = todasCoberturas.find(c => c.id === familia.parciales);
                     const cobGestor    = todasCoberturas.find(c => c.id === familia.gestor);
+                    // Oficina con cobertura propia (JIUTEPEC): un solo esquema,
+                    // 4 pagos iguales, sin Gestor.
+                    const propiaOficina =
+                      cfgOficinaPropia && cfgOficinaPropia.familiaRaiz === familia.raiz
+                        ? coberturaPropiaOficina(oficinaIdUsuario, todasCoberturas)
+                        : null;
                     const fmt = (n) => n != null
                       ? "$" + parseFloat(n).toLocaleString("es-MX", { minimumFractionDigits: 2 })
                       : "—";
+                    const cobInicial = propiaOficina ?? cobContado ?? cob;
+                    const tiles = propiaOficina
+                      ? [
+                          { label: "Contado",     precio: propiaOficina.prima_total, sub: "Un solo pago" },
+                          { label: "4 Parciales", precio: propiaOficina.prima_total, sub: "4 pagos iguales de " + fmt(+(propiaOficina.prima_total / 4).toFixed(2)) },
+                        ]
+                      : [
+                          { label: "Normal · Contado",        precio: cobContado?.prima_total,   sub: null },
+                          { label: "Normal · 4 Parciales",    precio: cobParciales?.prima_total, sub: "Pago 1: $799 · 3×$625" },
+                          { label: "Gestor · Contado o Parc.", precio: cobGestor?.prima_total,   sub: "4×$550" },
+                        ];
                     return (
                       <button
                         key={cob.id}
                         type="button"
-                        onClick={() => setForm(f => ({ ...f, coberturaId: familia.raiz, coberturaData: cobContado ?? cob }))}
+                        onClick={() => setForm(f => ({ ...f, coberturaId: cobInicial.id, coberturaData: cobInicial }))}
                         className={`w-full text-left rounded-2xl border-2 px-5 py-4 transition-all ${
                           sel ? "border-[#13193a] bg-[#13193a]/5" : "border-gray-200 bg-white hover:border-gray-300"
                         }`}
@@ -799,12 +872,8 @@ export default function FormCotizacion({
                             </span>
                           )}
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          {[
-                            { label: "Normal · Contado",        precio: cobContado?.prima_total,   sub: null },
-                            { label: "Normal · 4 Parciales",    precio: cobParciales?.prima_total, sub: "Pago 1: $799 · 3×$625" },
-                            { label: "Gestor · Contado o Parc.", precio: cobGestor?.prima_total,   sub: "4×$550" },
-                          ].map(({ label, precio, sub }) => (
+                        <div className={`grid grid-cols-1 gap-2 ${propiaOficina ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+                          {tiles.map(({ label, precio, sub }) => (
                             <div
                               key={label}
                               className={`rounded-xl px-3 py-2 border ${sel ? "border-[#13193a]/20 bg-white" : "border-gray-100 bg-gray-50"}`}
@@ -1358,7 +1427,7 @@ export default function FormCotizacion({
                   value={form.formaPago}
                   onChange={(e) => {
                     const newFp  = e.target.value;
-                    const nuevaCob = resolverCobertura(form.coberturaData, newFp, form.esGestor, todasCoberturas);
+                    const nuevaCob = resolverCobertura(form.coberturaData, newFp, form.esGestor, todasCoberturas, oficinaIdUsuario);
                     setForm(f => ({
                       ...f,
                       formaPago:     newFp,
@@ -1374,6 +1443,7 @@ export default function FormCotizacion({
                 </select>
               </div>
 
+              {!ocultarTipoCuota && (
               <div className="flex flex-col justify-end">
                 <label className={lblCls}>Tipo de cuota</label>
                 <div className="flex items-center gap-3 h-[38px]">
@@ -1381,7 +1451,7 @@ export default function FormCotizacion({
                     type="button"
                     onClick={() => {
                       const nextGestor = !form.esGestor;
-                      const nuevaCob   = resolverCobertura(form.coberturaData, form.formaPago, nextGestor, todasCoberturas);
+                      const nuevaCob   = resolverCobertura(form.coberturaData, form.formaPago, nextGestor, todasCoberturas, oficinaIdUsuario);
                       setForm(f => ({
                         ...f,
                         esGestor:      nextGestor,
@@ -1409,6 +1479,7 @@ export default function FormCotizacion({
                   </span>
                 </div>
               </div>
+              )}
 
               <p className="text-xs text-gray-400">
                 <span className="text-red-400 font-bold">*</span> Campos
@@ -1483,7 +1554,7 @@ export default function FormCotizacion({
               <div className="flex items-center justify-between px-5 py-3.5 bg-[#13193a]">
                 <div>
                   <p className="font-bold text-sm text-white">
-                    {form.coberturaData?.nombre ?? COBERTURA_BASICA.nombre}
+                    {cobParaPrecio?.nombre ?? form.coberturaData?.nombre ?? COBERTURA_BASICA.nombre}
                   </p>
                   <p className="text-xs mt-0.5 text-white/60">
                     Uso: SERVICIO PÚBLICO
@@ -1519,8 +1590,8 @@ export default function FormCotizacion({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {(form.coberturaData?.cobertura_rubros
-                      ? [...form.coberturaData.cobertura_rubros]
+                    {((cobParaPrecio ?? form.coberturaData)?.cobertura_rubros
+                      ? [...(cobParaPrecio ?? form.coberturaData).cobertura_rubros]
                           .sort((a, b) => a.orden - b.orden)
                           .filter((r) => !r.es_sublimite)
                       : COBERTURA_BASICA.coberturas.map((c) => ({
@@ -1581,13 +1652,15 @@ export default function FormCotizacion({
                   { l: "Vendedor", v: vendedorLabel },
                   { l: "Asegurado", v: clienteLabel },
                   { l: "Concesionario", v: concLabel },
-                  {
-                    l: "Tipo de cuota",
-                    v: form.esGestor ? "Gestor" : "Normal",
-                  },
+                  ...(ocultarTipoCuota
+                    ? []
+                    : [{
+                        l: "Tipo de cuota",
+                        v: form.esGestor ? "Gestor" : "Normal",
+                      }]),
                   {
                     l: "Cobertura",
-                    v: form.coberturaData?.nombre ?? COBERTURA_BASICA.nombre,
+                    v: cobParaPrecio?.nombre ?? form.coberturaData?.nombre ?? COBERTURA_BASICA.nombre,
                   },
                   { l: "Modalidad de pago", v: form.formaPago },
                   { l: "Inicio de vigencia", v: fechaInicioFmt },
@@ -1705,8 +1778,8 @@ export default function FormCotizacion({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {(form.coberturaData?.cobertura_rubros
-                      ? [...form.coberturaData.cobertura_rubros]
+                    {((cobParaPrecio ?? form.coberturaData)?.cobertura_rubros
+                      ? [...(cobParaPrecio ?? form.coberturaData).cobertura_rubros]
                           .sort((a, b) => a.orden - b.orden)
                           .filter((r) => !r.es_sublimite)
                       : COBERTURA_BASICA.coberturas.map((c) => ({
