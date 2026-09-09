@@ -807,6 +807,39 @@ export default function CompletarPolizaModal({
       if (error) throw error;
       onSaved(data);
     } catch (e) {
+      // El caso más común de error aquí es haber cambiado "¿A qué corte
+      // se registra esta póliza?" a un día cuyo corte ya está cerrado:
+      // la política RLS de polizas_cofisem (WITH CHECK … NOT
+      // corte_esta_cerrado(fecha_corte, oficina_id)) rechaza el UPDATE
+      // con un 403 / "new row violates row-level security policy". Ese
+      // mensaje crudo no le dice nada al operador — lo traducimos a un
+      // aviso claro en vez de volcarlo en el recuadro rojo del modal.
+      const corteDestino = datos.fecha_corte || row.fecha_corte;
+      const corteCambiado = corteDestino !== row.fecha_corte;
+      const esRls =
+        e?.code === "42501" ||
+        /row-level security|violates row-level/i.test(e?.message || "");
+      if (esRls && corteCambiado) {
+        const fmt = corteDestino.split("-").reverse().join("/");
+        await Swal.fire({
+          icon: "warning",
+          title: "Ese corte ya está cerrado",
+          html: `<p style="text-align:left; margin:0;">No se puede mover la póliza al corte del <strong>${fmt}</strong> porque ya fue cerrado. Elige un día cuyo corte siga abierto, o pide que reabran ese corte.</p>`,
+          confirmButtonText: "Entendido",
+          confirmButtonColor: "#1447e6",
+        });
+        return;
+      }
+      if (esRls) {
+        await Swal.fire({
+          icon: "warning",
+          title: "No se pudo guardar",
+          text: "No tienes permiso para guardar estos cambios, o el corte de esta póliza ya está cerrado.",
+          confirmButtonText: "Entendido",
+          confirmButtonColor: "#1447e6",
+        });
+        return;
+      }
       setModalError(e.message);
     } finally {
       setAccionGuardando(null);
