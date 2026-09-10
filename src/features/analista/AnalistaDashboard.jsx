@@ -22,6 +22,12 @@ function fmtCorta(str) {
     day: "2-digit", month: "short",
   });
 }
+// Póliza anulada: su adeudo desaparece del panel (el operador la canceló,
+// normalmente tras recibir el dinero por error). Las VENCIDAS NO se ocultan
+// a propósito: si el operador sí recibió el pago y la póliza se venció es
+// porque el analista nunca le picó "Aplicar" — tiene que verlo.
+const POLIZA_NO_COBRABLE = ["CANCELADA", "ANULADA"];
+
 function nombreCorto(pol) {
   const c = pol?.clientes;
   if (!c) return "—";
@@ -97,16 +103,7 @@ export default function AnalistaDashboard({ usuario }) {
           .order("fecha_fin", { ascending: true })
           .limit(8),
       ]);
-      // Un pago cuya póliza fue CANCELADA/ANULADA no cuenta para nada de este
-      // panel (KPIs "por aplicar"/"monto pendiente"/"aplicados", listas y
-      // gráfica): la póliza quedó anulada — normalmente porque el operador
-      // recibió el dinero, se equivocó y la canceló. Las VENCIDAS sí se
-      // conservan aquí (se muestran aparte en "Alertas de pago").
-      const VOID = ["CANCELADA", "ANULADA"];
-      const pagosVigentes = (pagosRes.data ?? []).filter(
-        (p) => !VOID.includes(p.polizas?.estatus),
-      );
-      setPagos(pagosVigentes);
+      setPagos(pagosRes.data ?? []);
       setAlertas(alertasRes.data ?? []);
     } catch (e) {
       console.error(e);
@@ -117,7 +114,20 @@ export default function AnalistaDashboard({ usuario }) {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  const pagosAdeudo = useMemo(() => pagos.filter(p => p.estatus === "ADEUDO"), [pagos]);
+  // Un adeudo cuya póliza está CANCELADA / ANULADA no cuenta para "Por
+  // aplicar", "Monto pendiente", la lista de pendientes ni las barras "por
+  // aplicar" de la gráfica. Las VENCIDAS SÍ siguen contando: son justo el
+  // error que el analista debe ver (pago recibido que nunca aplicó). Los
+  // pagos ya APLICADOS se conservan como historial: no se des-cuenta dinero.
+  const pagosAdeudo = useMemo(
+    () =>
+      pagos.filter(
+        (p) =>
+          p.estatus === "ADEUDO" &&
+          !POLIZA_NO_COBRABLE.includes(p.polizas?.estatus),
+      ),
+    [pagos],
+  );
   const pagosPagado = useMemo(() => pagos.filter(p => p.estatus === "PAGADO"), [pagos]);
 
   const nAdeudo    = pagosAdeudo.length;

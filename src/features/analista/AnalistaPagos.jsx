@@ -120,6 +120,16 @@ export default function AnalistaPagos({ usuario }) {
   const filtrados = useMemo(() => {
     const b = busqueda.toLowerCase();
     return pagos.filter(p => {
+      // Un adeudo de póliza CANCELADA / ANULADA se saca de la cola: el
+      // operador canceló la póliza (normalmente tras recibir el dinero por
+      // error). Las VENCIDAS SÍ se dejan visibles (con "Aplicar"
+      // deshabilitado): son el error que el analista debe ver — recibió el
+      // pago y nunca lo aplicó, y la póliza se venció. Los ya APLICADOS se
+      // conservan como historial.
+      if (
+        p.estatus === "ADEUDO" &&
+        ["CANCELADA", "ANULADA"].includes(p.estatusPoliza)
+      ) return false;
       const mb = p.poliza.toLowerCase().includes(b) || p.asegurado.toLowerCase().includes(b);
       const mo = filtroOficina === "Todas" || p.oficina   === filtroOficina;
       const mf = filtroForma   === "Todas" || p.formaPago === filtroForma;
