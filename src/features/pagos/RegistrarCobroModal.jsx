@@ -145,6 +145,10 @@ export default function RegistrarCobroModal({
   if (!row) return null;
   const p = row.polizas_cofisem ?? {};
   const esGaman = !!row.pago_gaman_id;
+  // Editar un cobro ya registrado (no una fila virtual, y ya marcado como
+  // recibido). Los cobros ya APLICADOS por el analista quedan bloqueados —
+  // esos no se abren para editar desde ningún lado.
+  const esEdicion = !row._virtual && row.estatus === "RECIBIDO";
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const chk = faltantes(form);
   const falta = (k) => intento && chk.detalle[k];
@@ -187,6 +191,22 @@ export default function RegistrarCobroModal({
     }
   }
 
+  // El "corte" al que pertenece un cobro es su fecha_recibido + la oficina.
+  // Igual que una póliza: no se puede tocar un cobro que ya cayó en un corte
+  // cerrado, ni mandarlo (cambiando la fecha) a un corte cerrado. Devuelve la
+  // fecha (YYYY-MM-DD) del primer corte cerrado que estorbe, o null.
+  async function corteCerradoQueEstorba(oficinaId, fechas) {
+    const lista = [...new Set(fechas.filter(Boolean))];
+    if (!lista.length || !oficinaId) return null;
+    const { data, error: err } = await supabase
+      .from("corte_efectivo_entrega")
+      .select("fecha_corte, cerrado")
+      .eq("oficina_id", oficinaId)
+      .in("fecha_corte", lista);
+    if (err) return null; // fallo de lectura: no bloquear aquí, la BD igual valida
+    return (data ?? []).find((c) => c.cerrado)?.fecha_corte ?? null;
+  }
+
   async function guardar(e) {
     e.preventDefault();
     if (guardando) return;
@@ -197,6 +217,30 @@ export default function RegistrarCobroModal({
         icon: "warning",
         title: "Todavía no se puede registrar",
         html: `<p style="text-align:left; margin:0 0 8px;">Falta lo siguiente:</p><ul style="text-align:left; margin:0; padding-left:1.2em;">${chk.mensajes.map((m) => `<li>${m}</li>`).join("")}</ul>`,
+        confirmButtonText: "Entendido",
+        confirmButtonColor: "#1447e6",
+      });
+      return;
+    }
+    // Guarda contra cortes cerrados: el de origen (si se está editando un
+    // cobro que ya está en un corte) y el de destino (la fecha de recibido).
+    const oficinaId =
+      row.oficina_id ?? p.oficina_id ?? usuario?.oficina_id ?? null;
+    const fechaDestino = form.fecha_recibido || hoyISO();
+    const fechaOrigen = esEdicion ? row.fecha_recibido : null;
+    const cerrado = await corteCerradoQueEstorba(oficinaId, [
+      fechaOrigen,
+      fechaDestino,
+    ]);
+    if (cerrado) {
+      const f = cerrado.split("-").reverse().join("/");
+      const esOrigen = esEdicion && cerrado === fechaOrigen;
+      await Swal.fire({
+        icon: "warning",
+        title: "Ese corte ya está cerrado",
+        html: esOrigen
+          ? `<p style="text-align:left;margin:0;">Este cobro está en el corte del <strong>${f}</strong>, que ya fue cerrado. No se puede modificar un cobro que quedó en un corte cerrado.</p>`
+          : `<p style="text-align:left;margin:0;">No se puede registrar el cobro en el corte del <strong>${f}</strong> porque ya fue cerrado. Elige una fecha cuyo corte siga abierto, o pide que reabran ese corte.</p>`,
         confirmButtonText: "Entendido",
         confirmButtonColor: "#1447e6",
       });
@@ -260,6 +304,21 @@ export default function RegistrarCobroModal({
       // veces: pendiente el día de emisión, cobrada el día del pago.
       onSaved(data);
     } catch (e) {
+      // La RLS de pagos_cofisem rechaza el UPDATE si el cobro ya fue APLICADO
+      // por el analista, o si quien edita no es la encargada de la oficina.
+      const esRls =
+        e?.code === "42501" ||
+        /row-level security|violates row-level/i.test(e?.message || "");
+      if (esRls) {
+        await Swal.fire({
+          icon: "warning",
+          title: "Ya no se puede editar este cobro",
+          text: "El cobro ya fue aplicado por el analista, o no tienes permiso para editarlo en esta oficina.",
+          confirmButtonText: "Entendido",
+          confirmButtonColor: "#1447e6",
+        });
+        return;
+      }
       setError(e.message);
     } finally {
       setGuardando(false);
@@ -295,7 +354,7 @@ export default function RegistrarCobroModal({
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
           <p className="text-sm font-bold text-[#1447e6]">
-            Registrar cobro de cuota
+            {esEdicion ? "Editar cobro de cuota" : "Registrar cobro de cuota"}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
             Póliza{" "}
@@ -522,11 +581,15 @@ export default function RegistrarCobroModal({
               disabled={guardando}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50"
             >
-              {guardando ? "Guardando…" : "Registrar cobro"}
+              {guardando
+                ? "Guardando…"
+                : esEdicion
+                  ? "Guardar cambios"
+                  : "Registrar cobro"}
             </button>
           </div>
 
-          <div className="pt-1">
+          <div className="pt-1" hidden={esEdicion}>
             {!perdidaAbierto ? (
               <button
                 type="button"

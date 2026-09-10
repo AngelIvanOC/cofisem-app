@@ -414,7 +414,16 @@ export default function CorteOperador({ usuario }) {
 
   function handleCuotaGuardada(data) {
     setCuotasDia((prev) =>
-      prev.map((c) => (c.id === data.id ? { ...c, ...data } : c)),
+      prev
+        .map((c) => (c.id === data.id ? { ...c, ...data } : c))
+        // Si al editar el cobro se le cambió la fecha de recibido a otro día,
+        // ya pertenece al corte de esa fecha y deja de aparecer en este.
+        .filter(
+          (c) =>
+            c.id !== data.id ||
+            !data.fecha_recibido ||
+            data.fecha_recibido === fechaCorte,
+        ),
     );
     setModalCuota(null);
     setErrorMsg(null);
@@ -1344,6 +1353,27 @@ export default function CorteOperador({ usuario }) {
                             {r.num_cuota_pago === 1
                               ? "Poner al corriente"
                               : "Registrar cobro"}
+                          </button>
+                        ) : r._cuotaEstatus === "RECIBIDO" &&
+                          !r._cuotaRaw?.pago_gaman_id ? (
+                          // Cobro propio (no traído de GAMAN) ya registrado:
+                          // mientras el corte no esté cerrado se puede reabrir
+                          // para corregir monto / forma de pago / fecha. Los
+                          // cobros de GAMAN y los ya APLICADOS no se tocan.
+                          <button
+                            type="button"
+                            onClick={() =>
+                              !corteCerrado && setModalCuota(r._cuotaRaw)
+                            }
+                            disabled={corteCerrado}
+                            title={
+                              corteCerrado
+                                ? "Corte cerrado"
+                                : "Editar este cobro"
+                            }
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-bold hover:bg-emerald-100 disabled:opacity-50 disabled:hover:bg-emerald-50 transition-colors"
+                          >
+                            ✓ Cobrado
                           </button>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-bold">

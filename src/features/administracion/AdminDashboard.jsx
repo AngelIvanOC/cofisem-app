@@ -140,8 +140,12 @@ export default function AdminDashboard({ usuario }) {
           .in("estatus", ["VIGENTE", "POR VENCER"])
           .gte("fecha_fin", hoyISO).lte("fecha_fin", en7),
 
-        supabase.from("pagos").select("id", { count: "exact", head: true })
-          .in("estatus", ["PENDIENTE", "ADEUDO"]),
+        // "Por cobrar" NO incluye cuotas de pólizas canceladas/anuladas: esas
+        // pólizas quedaron sin efecto (normalmente el operador recibió el pago,
+        // se equivocó y la canceló) — su adeudo no es cobrable.
+        supabase.from("pagos").select("id, polizas!inner(estatus)", { count: "exact", head: true })
+          .in("estatus", ["PENDIENTE", "ADEUDO"])
+          .not("polizas.estatus", "in", "(CANCELADA,ANULADA)"),
 
         supabase.from("clientes").select("id", { count: "exact", head: true })
           .gte("created_at", `${inicioMes}T00:00:00${TZ_OFFSET}`),
@@ -157,7 +161,8 @@ export default function AdminDashboard({ usuario }) {
           .order("created_at", { ascending: false }),
 
         supabase.from("pagos")
-          .select("monto, estatus, polizas(oficina_id, oficinas(nombre))")
+          .select("monto, estatus, polizas!inner(oficina_id, estatus, oficinas(nombre))")
+          .not("polizas.estatus", "in", "(CANCELADA,ANULADA)")
           .gte("fecha_vencimiento", inicioMes).lte("fecha_vencimiento", finMes),
 
         supabase.from("oficinas").select("id, nombre").order("nombre"),

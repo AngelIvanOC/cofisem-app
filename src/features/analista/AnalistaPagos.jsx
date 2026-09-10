@@ -218,7 +218,11 @@ export default function AnalistaPagos({ usuario }) {
                   </td>
                   <td className="px-4 py-1">
                     {p.estatus === "ADEUDO" && (() => {
-                      const bloq = ['VENCIDA','ANULADA'].includes(p.estatusPoliza);
+                      // CANCELADA va incluida: una póliza cancelada (aunque el
+                      // operador ya hubiera recibido el dinero antes de cancelarla)
+                      // no debe poder aplicarse — mismo criterio que Admin y
+                      // operador (ESTATUS_BLOQUEADOS).
+                      const bloq = ['CANCELADA','VENCIDA','ANULADA'].includes(p.estatusPoliza);
                       return (
                         <button
                           onClick={() => !bloq && aplicar(p.id)}

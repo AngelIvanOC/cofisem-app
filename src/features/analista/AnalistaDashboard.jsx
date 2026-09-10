@@ -97,7 +97,16 @@ export default function AnalistaDashboard({ usuario }) {
           .order("fecha_fin", { ascending: true })
           .limit(8),
       ]);
-      setPagos(pagosRes.data ?? []);
+      // Un pago cuya póliza fue CANCELADA/ANULADA no cuenta para nada de este
+      // panel (KPIs "por aplicar"/"monto pendiente"/"aplicados", listas y
+      // gráfica): la póliza quedó anulada — normalmente porque el operador
+      // recibió el dinero, se equivocó y la canceló. Las VENCIDAS sí se
+      // conservan aquí (se muestran aparte en "Alertas de pago").
+      const VOID = ["CANCELADA", "ANULADA"];
+      const pagosVigentes = (pagosRes.data ?? []).filter(
+        (p) => !VOID.includes(p.polizas?.estatus),
+      );
+      setPagos(pagosVigentes);
       setAlertas(alertasRes.data ?? []);
     } catch (e) {
       console.error(e);

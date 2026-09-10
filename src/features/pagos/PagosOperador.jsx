@@ -792,7 +792,7 @@ function ModalCuotasPoliza({
                           )}
                         </>
                       ) : (
-                        c.estatus === "PENDIENTE" && (
+                        c.estatus === "PENDIENTE" ? (
                           <>
                             {c.fecha_vencimiento > HOY_ISO &&
                               (c.fecha_adelantado === HOY_ISO ? (
@@ -844,7 +844,20 @@ function ModalCuotasPoliza({
                                 : "Registrar cobro"}
                             </button>
                           </>
-                        )
+                        ) : c.estatus === "RECIBIDO" ? (
+                          // Cobro propio ya registrado: se puede reabrir para
+                          // corregir monto / forma de pago / fecha mientras su
+                          // corte (fecha de recibido + oficina) no esté cerrado.
+                          // Los ya APLICADOS por el analista no traen este botón.
+                          <button
+                            type="button"
+                            onClick={() => onMarcarRecibido(c)}
+                            title="Corregir monto, forma de pago o fecha de este cobro"
+                            className="px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold whitespace-nowrap"
+                          >
+                            Editar cobro
+                          </button>
+                        ) : null
                       ))}
                   </div>
                 </div>
