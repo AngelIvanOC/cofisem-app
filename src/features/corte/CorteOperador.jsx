@@ -25,7 +25,10 @@ import { exportarCorteExcel } from "../../services/corteExport";
 import { fetchEndososManualesDia } from "../../services/endososCofisem";
 import { verComprobantePago } from "../../services/comprobantesPagoCofisem";
 import { hoyISO } from "../../utils/fecha";
-import CompletarPolizaModal, { CompletarBadge } from "./CompletarPolizaModal";
+import CompletarPolizaModal, {
+  CompletarBadge,
+  FotosCarrusel,
+} from "./CompletarPolizaModal";
 import RegistrarCobroModal from "../pagos/RegistrarCobroModal";
 
 const DENOMINACIONES = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.5];
@@ -102,6 +105,7 @@ export default function CorteOperador({ usuario }) {
   const [modalRow, setModalRow] = useState(null);
   const [modalCuota, setModalCuota] = useState(null);
   const [carruselIdentifRow, setCarruselIdentifRow] = useState(null);
+  const [carruselFotosRow, setCarruselFotosRow] = useState(null);
 
   const [entregaEfectivo, setEntregaEfectivo] = useState(null);
   const [observaciones, setObservaciones] = useState("");
@@ -1310,14 +1314,22 @@ export default function CorteOperador({ usuario }) {
                         key={j}
                         className="px-3 py-2.5 text-center bg-amber-50/20"
                       >
-                        {path ? (
+                        {(Array.isArray(path) ? path.length > 0 : !!path) ? (
                           <button
                             type="button"
                             onClick={() =>
-                              j === 3 ? setCarruselIdentifRow(r) : verDoc(path)
+                              j === 0
+                                ? setCarruselFotosRow(r)
+                                : j === 3
+                                  ? setCarruselIdentifRow(r)
+                                  : verDoc(path)
                             }
                             title={
-                              j === 3 ? "Ver identificación" : "Ver documento"
+                              j === 0
+                                ? "Ver fotos del vehículo"
+                                : j === 3
+                                  ? "Ver identificación"
+                                  : "Ver documento"
                             }
                             className="text-amber-600 hover:text-amber-700 font-bold inline-flex"
                           >
@@ -1734,6 +1746,18 @@ export default function CorteOperador({ usuario }) {
       <IdentificacionCarrusel
         row={carruselIdentifRow}
         onClose={() => setCarruselIdentifRow(null)}
+      />
+
+      <FotosCarrusel
+        paths={
+          Array.isArray(carruselFotosRow?.fotos_url)
+            ? carruselFotosRow.fotos_url
+            : carruselFotosRow?.fotos_url
+              ? [carruselFotosRow.fotos_url]
+              : []
+        }
+        open={!!carruselFotosRow}
+        onClose={() => setCarruselFotosRow(null)}
       />
 
       <RegistrarCobroModal

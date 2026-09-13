@@ -238,7 +238,11 @@ function FilaPago({ r, i }) {
     telefono: r.telefono || "—",
     observaciones:
       (r._cuotaPorCobrar ? "• POR COBRAR — " : "") + (r.observaciones || "—"),
-    fotos: r.fotos_url || r.fotos_verificado ? "XXX" : "—",
+    fotos:
+      (Array.isArray(r.fotos_url) ? r.fotos_url.length > 0 : !!r.fotos_url) ||
+      r.fotos_verificado
+        ? "XXX"
+        : "—",
     factura: marca(r.factura_url),
     tCirc: marca(r.t_circ_url),
     identif: marca(r.identif_url),

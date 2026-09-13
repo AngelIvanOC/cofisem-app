@@ -8,7 +8,15 @@
 // ============================================================
 import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
-import { Paperclip, Lock, FileSignature } from "lucide-react";
+import {
+  Paperclip,
+  Lock,
+  FileSignature,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
+  X,
+} from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import {
   subirComprobante,
@@ -18,6 +26,7 @@ import {
 import {
   subirDocumento,
   verDocumento,
+  getDocumentoSignedUrl,
   MAX_DOCUMENTO_BYTES,
 } from "../../services/documentacionPoliza";
 import { obtenerPrimaGaman } from "../../services/primaGaman";
@@ -102,7 +111,7 @@ const VACIO = {
   cheque: "",
   tdc: "",
   autorizacion: "",
-  fotos_path: null,
+  fotos_path: [],
   factura_path: null,
   t_circ_path: null,
   identif_path: null,
@@ -126,8 +135,11 @@ const VACIO = {
 // se verificó en persona, o no fue posible tomarla) — cuenta como
 // equivalente a tener fotos_path para efectos de completitud, siempre que
 // venga acompañado de una nota explicando cómo/dónde se verificó.
+// fotos_path es un arreglo (se pueden subir varias fotos apiladas) — el
+// `Array.isArray` es solo defensivo por si algún registro viejo todavía
+// trae el string suelto de antes de la migración a fotos_url text[].
 const fotosOk = (f) =>
-  !!f.fotos_path ||
+  (Array.isArray(f.fotos_path) ? f.fotos_path.length > 0 : !!f.fotos_path) ||
   (f.fotos_verificado &&
     !!(f.fotos_verificado_nota && f.fotos_verificado_nota.trim()));
 
@@ -150,11 +162,13 @@ const lblModal =
 //     cobro inmediato, pero ya es una respuesta completa, no un dato
 //     faltante.
 //   - Identificación: siempre obligatoria. Además, mínimo uno de
-//     {Fotos, Factura, T. Circulación, Póliza anterior} — "Otro" no
-//     cuenta para este mínimo, es un extra sin peso. Si la cobertura es
-//     Amplia o Limitada, Fotos deja de ser opcional dentro de ese grupo:
-//     se vuelve obligatoria aparte, y el mínimo se exige sobre
-//     {Factura, T. Circulación, Póliza anterior}.
+//     {Fotos, Factura, T. Circulación, Póliza anterior, Otro} — "Otro" sí
+//     cuenta para este mínimo: es el cajón para cuando el documento que se
+//     tiene no encaja en ninguna categoría de arriba, así que debe ser
+//     una respuesta válida igual que las demás. Si la cobertura es Amplia
+//     o Limitada, Fotos deja de ser opcional dentro de ese grupo: se
+//     vuelve obligatoria aparte, y el mínimo se exige sobre
+//     {Factura, T. Circulación, Póliza anterior, Otro}.
 //   - Autorización solo si se pagó con T. Crédito/Déb.
 //   - Comprobante adjunto para cada forma de pago que sí se usó.
 //   - Vendedor, Teléfono y Observaciones quedan opcionales a propósito:
@@ -180,8 +194,8 @@ export function faltantesCompletado(f, { registroParcial = false } = {}) {
   const amplLim = esAmpliaOLimitada(f.cobertura);
   const esMoral = f.tipo_persona === "MORAL";
   const grupoMinimo = amplLim
-    ? [f.factura_path, f.t_circ_path, f.pol_ant_path]
-    : [fotosOk(f), f.factura_path, f.t_circ_path, f.pol_ant_path];
+    ? [f.factura_path, f.t_circ_path, f.pol_ant_path, f.otro_path]
+    : [fotosOk(f), f.factura_path, f.t_circ_path, f.pol_ant_path, f.otro_path];
 
   const detalle = {
     folio: !(f.folio && f.folio.trim()),
@@ -240,8 +254,8 @@ export function faltantesCompletado(f, { registroParcial = false } = {}) {
     fotosVerificadoNota:
       "Nota que explique dónde/cómo se verificaron las fotos del vehículo",
     documentoMinimo: amplLim
-      ? "Mínimo un documento: Factura, T. Circulación o Póliza anterior"
-      : "Mínimo un documento: Fotos, Factura, T. Circulación o Póliza anterior",
+      ? "Mínimo un documento: Factura, T. Circulación, Póliza anterior u Otro"
+      : "Mínimo un documento: Fotos, Factura, T. Circulación, Póliza anterior u Otro",
     actaConstitutiva: "Acta constitutiva (obligatoria por ser persona moral)",
     poderes: "Poderes (obligatorio por ser persona moral)",
     comprobanteDomicilio:
@@ -348,41 +362,233 @@ export function ComprobanteField({
   );
 }
 
+const esPdfPath = (path) => /\.pdf$/i.test(path || "");
+
+// Miniatura de "Fotos del vehículo": la última foto subida al frente, con
+// 1-2 tarjetas asomando detrás para dar la sensación de pila cuando hay
+// más de una — y una insignia con el total. Un clic abre el carrusel con
+// todas. Exportado — también se usa en /polizas y en la tabla de /corte.
+export function FotosStackThumb({ paths, onClick, size = "w-11 h-11" }) {
+  const [url, setUrl] = useState(null);
+  const top = paths[paths.length - 1];
+  const esPdf = esPdfPath(top);
+
+  useEffect(() => {
+    let vivo = true;
+    setUrl(null);
+    if (!top || esPdf) return;
+    getDocumentoSignedUrl(top)
+      .then((u) => {
+        if (vivo) setUrl(u);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [top, esPdf]);
+
+  if (!top) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Ver ${paths.length} foto${paths.length > 1 ? "s" : ""}`}
+      className={`relative shrink-0 ${size}`}
+    >
+      {paths.length > 2 && (
+        <span className="absolute inset-0 translate-x-1.5 translate-y-1.5 rotate-3 rounded-lg bg-white border border-gray-200 shadow-sm" />
+      )}
+      {paths.length > 1 && (
+        <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 -rotate-2 rounded-lg bg-white border border-gray-200 shadow-sm" />
+      )}
+      <span className="absolute inset-0 rounded-lg bg-white border border-gray-200 shadow overflow-hidden flex items-center justify-center">
+        {esPdf ? (
+          <FileText className="w-4 h-4 text-gray-400" />
+        ) : url ? (
+          <img src={url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <span className="w-3 h-3 rounded-full border-2 border-gray-300 border-t-transparent animate-spin" />
+        )}
+      </span>
+      {paths.length > 1 && (
+        <span className="absolute -bottom-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#1447e6] text-white text-[9px] font-bold flex items-center justify-center leading-none">
+          {paths.length}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// Carrusel de todas las fotos del vehículo — se abre al picar la miniatura
+// apilada. `onEliminar(indice)` es opcional: solo se ofrece "Eliminar" en
+// el modal de captura, no en la vista de solo lectura de /corte.
+export function FotosCarrusel({ paths, open, onClose, onEliminar }) {
+  const [slides, setSlides] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [indice, setIndice] = useState(0);
+
+  useEffect(() => {
+    if (!open) return;
+    let vivo = true;
+    setCargando(true);
+    setIndice(0);
+    Promise.all(
+      (paths || []).map(async (p) => ({
+        path: p,
+        url: await getDocumentoSignedUrl(p),
+      })),
+    ).then((res) => {
+      if (vivo) {
+        setSlides(res);
+        setCargando(false);
+      }
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [open, paths]);
+
+  if (!open) return null;
+  const actual = slides[indice];
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+          <p className="text-sm font-bold text-[#1447e6]">
+            Fotos del vehículo
+            {slides.length > 1 ? ` — ${indice + 1}/${slides.length}` : ""}
+          </p>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="relative h-96 bg-gray-50 flex items-center justify-center">
+          {cargando ? (
+            <span className="text-xs text-gray-400">Cargando…</span>
+          ) : actual ? (
+            esPdfPath(actual.path) ? (
+              <iframe
+                src={actual.url}
+                title={`Foto ${indice + 1}`}
+                className="w-full h-full"
+              />
+            ) : (
+              <img
+                src={actual.url}
+                alt={`Foto ${indice + 1}`}
+                className="w-full h-full object-contain"
+              />
+            )
+          ) : (
+            <span className="text-xs text-gray-400">Sin fotos</span>
+          )}
+          {slides.length > 1 && !cargando && (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  setIndice((i) => (i === 0 ? slides.length - 1 : i - 1))
+                }
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow flex items-center justify-center text-gray-600 hover:bg-white"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setIndice((i) => (i === slides.length - 1 ? 0 : i + 1))
+                }
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow flex items-center justify-center text-gray-600 hover:bg-white"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+        {slides.length > 1 && (
+          <div className="flex items-center justify-center gap-1.5 py-3">
+            {slides.map((s, i) => (
+              <button
+                key={s.path}
+                type="button"
+                onClick={() => setIndice(i)}
+                className={`w-2 h-2 rounded-full transition-colors ${i === indice ? "bg-[#1447e6]" : "bg-gray-300"}`}
+              />
+            ))}
+          </div>
+        )}
+        {onEliminar && actual && (
+          <div className="px-5 pb-4 flex justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                onEliminar(indice);
+                setIndice((i) => Math.max(0, i - 1));
+              }}
+              className="text-[11px] font-bold text-red-500 hover:text-red-600"
+            >
+              Eliminar esta foto
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Variante de ComprobanteField solo para "Fotos del vehículo": mismo diseño
 // que cualquier otro documento, pero con un switch (foquito) a la izquierda
 // del botón "Subir" — al activarlo se reemplaza el botón de subida por una
 // nota obligatoria (verificado en persona, o por qué no se pudo tomar la
-// foto), sin exigir el archivo. Exportado — también se usa en /polizas.
+// foto), sin exigir el archivo. Acepta selección múltiple: cada foto que
+// se sube se apila con las anteriores en vez de reemplazarlas. Exportado —
+// también se usa en /polizas.
 export function FotosVehiculoField({
-  path,
+  paths = [],
   verificado,
   nota,
   subiendo,
-  onFile,
-  onVer,
+  onFiles,
+  onVerCarrusel,
   onToggleVerificado,
   onNotaChange,
   obligatorio = true,
   notaFalta = false,
 }) {
+  const tienePaths = paths.length > 0;
   return (
     <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/70 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <Paperclip className="w-4 h-4 shrink-0 text-gray-400" />
+          {tienePaths ? (
+            <FotosStackThumb paths={paths} onClick={onVerCarrusel} />
+          ) : (
+            <Paperclip className="w-4 h-4 shrink-0 text-gray-400" />
+          )}
           <div className="min-w-0">
             <p className="text-xs font-bold text-gray-600">
               Fotos del vehículo
             </p>
             <p
-              className={`text-[11px] ${verificado || path ? "text-emerald-600 font-semibold" : obligatorio ? "text-amber-600" : "text-gray-400"}`}
+              className={`text-[11px] ${verificado || tienePaths ? "text-emerald-600 font-semibold" : obligatorio ? "text-amber-600" : "text-gray-400"}`}
             >
               {verificado
                 ? "✓ Verificado sin foto"
                 : subiendo
                   ? "Subiendo…"
-                  : path
-                    ? "✓ Comprobante adjunto"
+                  : tienePaths
+                    ? `✓ ${paths.length} foto${paths.length > 1 ? "s" : ""} adjunta${paths.length > 1 ? "s" : ""}`
                     : obligatorio
                       ? "Obligatorio — sube foto o PDF"
                       : "Opcional — sube foto o PDF"}
@@ -390,15 +596,6 @@ export function FotosVehiculoField({
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {!verificado && path && !subiendo && (
-            <button
-              type="button"
-              onClick={onVer}
-              className="text-xs font-bold text-[#1447e6] underline underline-offset-2"
-            >
-              Ver
-            </button>
-          )}
           <button
             type="button"
             onClick={() => onToggleVerificado(!verificado)}
@@ -414,22 +611,23 @@ export function FotosVehiculoField({
               className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors whitespace-nowrap ${
                 subiendo
                   ? "bg-gray-200 text-gray-400 cursor-wait"
-                  : path
+                  : tienePaths
                     ? "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
                     : "bg-[#1447e6] text-white hover:bg-[#0f36b3]"
               }`}
             >
-              {subiendo ? "..." : path ? "Cambiar" : "Subir"}
+              {subiendo ? "..." : tienePaths ? "Agregar más" : "Subir"}
               <input
                 type="file"
                 accept="image/*,application/pdf"
                 capture="environment"
+                multiple
                 className="hidden"
                 disabled={subiendo}
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
+                  const files = e.target.files;
                   e.target.value = "";
-                  if (f) onFile(f);
+                  if (files?.length) onFiles(files);
                 }}
               />
             </label>
@@ -477,6 +675,7 @@ export default function CompletarPolizaModal({
   const [gamanLoading, setGamanLoading] = useState(false);
   const [endosoAbierto, setEndosoAbierto] = useState(false);
   const [coberturasGaman, setCoberturasGaman] = useState([]); // nombres reales, cuando esGaman
+  const [carruselFotosAbierto, setCarruselFotosAbierto] = useState(false);
 
   // Póliza real de GAMAN (no capturada a mano en COFISEM): las primas se
   // leen de GAMAN y ya no se pueden editar aquí — ver services/primaGaman.js.
@@ -574,7 +773,11 @@ export default function CompletarPolizaModal({
       cheque: row.cheque || "",
       tdc: row.tdc || "",
       autorizacion: row.autorizacion ?? "",
-      fotos_path: row.fotos_url ?? null,
+      fotos_path: Array.isArray(row.fotos_url)
+        ? row.fotos_url
+        : row.fotos_url
+          ? [row.fotos_url]
+          : [],
       factura_path: row.factura_url ?? null,
       t_circ_path: row.t_circ_url ?? null,
       identif_path: row.identif_url ?? null,
@@ -667,6 +870,44 @@ export default function CompletarPolizaModal({
     } finally {
       setSubiendoDocumento(null);
     }
+  }
+
+  // A diferencia de handleDocumentoChange() (un archivo reemplaza al
+  // anterior), aquí cada foto se apila con las que ya había — por eso cada
+  // una sube a su propia ruta (con un id único) en vez de compartir un
+  // basePath fijo que se sobrescribiría.
+  async function handleFotosChange(files) {
+    const lista = Array.from(files || []);
+    if (!lista.length) return;
+    const grande = lista.find((f) => f.size > MAX_DOCUMENTO_BYTES);
+    if (grande) {
+      setModalError("El archivo es muy grande (máx. 8 MB).");
+      return;
+    }
+    setModalError(null);
+    setSubiendoDocumento("fotos");
+    try {
+      const nuevas = [];
+      for (const file of lista) {
+        const id =
+          crypto.randomUUID?.() ??
+          `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const basePath = `${usuario?.oficina_id ?? "sin-oficina"}/${hoyIso}/${row.id}/fotos/${id}`;
+        nuevas.push(await subirDocumento(basePath, file));
+      }
+      setForm((f) => ({ ...f, fotos_path: [...f.fotos_path, ...nuevas] }));
+    } catch (e) {
+      setModalError("No se pudo subir una de las fotos: " + e.message);
+    } finally {
+      setSubiendoDocumento(null);
+    }
+  }
+
+  function handleEliminarFoto(indice) {
+    setForm((f) => ({
+      ...f,
+      fotos_path: f.fotos_path.filter((_, i) => i !== indice),
+    }));
   }
 
   async function handleEndosoChange(file) {
@@ -1471,8 +1712,8 @@ export default function CompletarPolizaModal({
               <p className="text-[11px] text-gray-400 mb-3">
                 Identificación siempre obligatoria.{" "}
                 {esAmpliaOLimitada(form.cobertura)
-                  ? "Cobertura amplia/limitada: fotos también obligatorias (o marca Verificado con una nota), y mínimo una de Factura, T. Circulación o Póliza anterior."
-                  : "Mínimo una de Fotos, Factura, T. Circulación o Póliza anterior."}
+                  ? "Cobertura amplia/limitada: fotos también obligatorias (o marca Verificado con una nota), y mínimo una de Factura, T. Circulación, Póliza anterior u Otro."
+                  : "Mínimo una de Fotos, Factura, T. Circulación, Póliza anterior u Otro."}
                 {esMoral &&
                   " Por ser persona moral, también son obligatorios Acta constitutiva, Poderes, Comprobante de domicilio y Constancia de situación fiscal."}
               </p>
@@ -1493,12 +1734,12 @@ export default function CompletarPolizaModal({
                   obligatorio={false}
                 />
                 <FotosVehiculoField
-                  path={form.fotos_path}
+                  paths={form.fotos_path}
                   verificado={form.fotos_verificado}
                   nota={form.fotos_verificado_nota}
                   subiendo={subiendoDocumento === "fotos"}
-                  onFile={(f) => handleDocumentoChange("fotos", f)}
-                  onVer={() => handleVerDocumento(form.fotos_path)}
+                  onFiles={handleFotosChange}
+                  onVerCarrusel={() => setCarruselFotosAbierto(true)}
                   onToggleVerificado={(v) => setF("fotos_verificado", v)}
                   onNotaChange={(v) => setF("fotos_verificado_nota", v)}
                   obligatorio={esAmpliaOLimitada(form.cobertura)}
@@ -1673,6 +1914,12 @@ export default function CompletarPolizaModal({
           </div>
         </form>
       </div>
+      <FotosCarrusel
+        paths={form.fotos_path}
+        open={carruselFotosAbierto}
+        onClose={() => setCarruselFotosAbierto(false)}
+        onEliminar={handleEliminarFoto}
+      />
     </div>
   );
 }

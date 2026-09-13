@@ -13,6 +13,7 @@ import { supabase } from "../../supabaseClient";
 import CompletarPolizaModal, {
   ComprobanteField,
   FotosVehiculoField,
+  FotosCarrusel,
   evaluarCompletado,
 } from "../corte/CompletarPolizaModal";
 import {
@@ -179,7 +180,7 @@ const FORM_VACIO = {
   cheque: "",
   tdc: "",
   autorizacion: "",
-  fotos_path: null,
+  fotos_path: [],
   factura_path: null,
   t_circ_path: null,
   identif_path: null,
@@ -269,6 +270,7 @@ export default function PoliciasDia({ usuario }) {
   const [modalEndososRow, setModalEndososRow] = useState(null); // endosos manuales de la póliza
   const [subiendoComprobante, setSubiendoComprobante] = useState(null); // 'tdc' | 'cheque' | null
   const [subiendoDocumento, setSubiendoDocumento] = useState(null); // 'fotos' | 'factura' | ... | null
+  const [carruselFotosAbierto, setCarruselFotosAbierto] = useState(false);
   const [corteInfo, setCorteInfo] = useState(null);
   const [fechaCorteSel, setFechaCorteSel] = useState(HOY_ISO);
   const [corteDestinoInfo, setCorteDestinoInfo] = useState(null);
@@ -552,6 +554,44 @@ export default function PoliciasDia({ usuario }) {
     }
   }
 
+  // Igual criterio que handleFotosChange() en CompletarPolizaModal.jsx:
+  // cada foto se apila con las anteriores, así que cada una sube a su
+  // propia ruta en vez de compartir un basePath fijo que la reemplazaría.
+  async function handleFotosChange(files) {
+    const lista = Array.from(files || []);
+    if (!lista.length) return;
+    const grande = lista.find((f) => f.size > MAX_DOCUMENTO_BYTES);
+    if (grande) {
+      setErrorMsg("El archivo es muy grande (máx. 8 MB).");
+      return;
+    }
+    setErrorMsg(null);
+    setSubiendoDocumento("fotos");
+    try {
+      const uuid = getCompUuid("fotos");
+      const nuevas = [];
+      for (const file of lista) {
+        const id =
+          crypto.randomUUID?.() ??
+          `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const basePath = `${usuario?.oficina_id ?? "sin-oficina"}/${HOY_ISO}/nueva-${uuid}/fotos/${id}`;
+        nuevas.push(await subirDocumento(basePath, file));
+      }
+      setForm((f) => ({ ...f, fotos_path: [...f.fotos_path, ...nuevas] }));
+    } catch (e) {
+      setErrorMsg("No se pudo subir una de las fotos: " + e.message);
+    } finally {
+      setSubiendoDocumento(null);
+    }
+  }
+
+  function handleEliminarFoto(indice) {
+    setForm((f) => ({
+      ...f,
+      fotos_path: f.fotos_path.filter((_, i) => i !== indice),
+    }));
+  }
+
   async function handleVerDocumento(path) {
     try {
       await verDocumento(path);
@@ -671,7 +711,7 @@ export default function PoliciasDia({ usuario }) {
             tdc: n(form.tdc),
             comprobante_tdc_url: form.comprobante_tdc_path,
             comprobante_cheque_url: form.comprobante_cheque_path,
-            fotos_url: null,
+            fotos_url: [],
             factura_url: null,
             t_circ_url: null,
             identif_url: null,
@@ -818,7 +858,7 @@ export default function PoliciasDia({ usuario }) {
       ]);
 
       const docsPaths = [
-        p.fotos_url,
+        ...(Array.isArray(p.fotos_url) ? p.fotos_url : [p.fotos_url]),
         p.factura_url,
         p.t_circ_url,
         p.identif_url,
@@ -1636,8 +1676,8 @@ export default function PoliciasDia({ usuario }) {
                 Opcional por ahora — puedes dejarla pendiente y subirla después,
                 pero para cerrar el corte se exige identificación
                 {esAmpliaOLimitada(form.cobertura)
-                  ? ", fotos del vehículo (cobertura amplia/limitada) y al menos una de Factura, T. Circulación o Póliza anterior."
-                  : " y al menos una de Fotos, Factura, T. Circulación o Póliza anterior."}
+                  ? ", fotos del vehículo (cobertura amplia/limitada) y al menos una de Factura, T. Circulación, Póliza anterior u Otro."
+                  : " y al menos una de Fotos, Factura, T. Circulación, Póliza anterior u Otro."}
                 {esPersonaMoral(form.tipo_persona) &&
                   " Por ser persona moral, también se exigen Acta constitutiva, Poderes, Comprobante de domicilio y Constancia de situación fiscal."}
               </p>
@@ -1659,12 +1699,12 @@ export default function PoliciasDia({ usuario }) {
                   obligatorio={false}
                 />
                 <FotosVehiculoField
-                  path={form.fotos_path}
+                  paths={form.fotos_path}
                   verificado={form.fotos_verificado}
                   nota={form.fotos_verificado_nota}
                   subiendo={subiendoDocumento === "fotos"}
-                  onFile={(f) => handleDocumentoChange("fotos", f)}
-                  onVer={() => handleVerDocumento(form.fotos_path)}
+                  onFiles={handleFotosChange}
+                  onVerCarrusel={() => setCarruselFotosAbierto(true)}
                   onToggleVerificado={(v) => setF("fotos_verificado", v)}
                   onNotaChange={(v) => setF("fotos_verificado_nota", v)}
                   obligatorio={false}
@@ -1840,6 +1880,13 @@ export default function PoliciasDia({ usuario }) {
             oficina={oficina}
           />
         )}
+
+        <FotosCarrusel
+          paths={form.fotos_path}
+          open={carruselFotosAbierto}
+          onClose={() => setCarruselFotosAbierto(false)}
+          onEliminar={handleEliminarFoto}
+        />
       </div>
     );
 

@@ -232,7 +232,7 @@ function valorColumna(r, col, index) {
     case "fecha":
       return raw ? fechaComoExcel(raw) : "";
     case "doc":
-      return raw ? "XXX" : "-";
+      return (Array.isArray(raw) ? raw.length > 0 : !!raw) ? "XXX" : "-";
     case "num":
       return col.key === "num_cuota_pago" ? raw ?? 1 : raw ?? "";
     default:
