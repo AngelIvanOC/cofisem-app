@@ -728,6 +728,17 @@ function ModalCuotasPoliza({
                             </p>
                           </>
                         )}
+                        {/* Folio del cobro de esta cuota — es con el que la
+                            empresa la ubica en el corte de su día, distinto
+                            al folio con el que se registró la póliza. */}
+                        {c.folio && (
+                          <>
+                            <span className="text-gray-300">·</span>
+                            <p className="text-xs font-mono font-bold text-[#1447e6]">
+                              {c.folio}
+                            </p>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

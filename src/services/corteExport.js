@@ -193,7 +193,8 @@ function comisionAFila(c) {
     aseguradora: pc.aseguradora,
     numero_poliza: pc.numero_poliza,
     fecha_emision: c?.fecha_pago,
-    folio: pc.folio,
+    // Folio del VALE, no el de la póliza — son movimientos distintos.
+    folio: c?.folio,
     vendedor_nombre: pc.vendedor_nombre,
     asegurado_nombre: pc.asegurado_nombre,
     prima_primer_pago: -n(c?.monto),
@@ -203,13 +204,16 @@ function comisionAFila(c) {
 // Columnas que sí aplican a una fila de nota de endoso (tipo A/C) — el resto
 // se deja en blanco porque una nota no es una póliza ni un cobro, solo
 // informa qué póliza tuvo un endoso, cuándo y por qué (sin tocar primas).
-const CLAVES_NOTA = new Set(["no", "no2", "numero_poliza", "fecha_emision", "observaciones"]);
+const CLAVES_NOTA = new Set(["no", "no2", "numero_poliza", "fecha_emision", "folio", "observaciones"]);
 
 function notaAFila(nt) {
   return {
     _esNota: true,
     numero_poliza: nt?.polizas?.constancia || nt?.polizas?.numero_poliza,
     fecha_emision: nt?.cambiado_at,
+    // Los endosos manuales de COFISEM llevan folio propio; los endosos
+    // A/C que vienen de polizas_historial (GAMAN) no tienen, quedan vacíos.
+    folio: nt?.folio,
     observaciones: nt?.notas,
   };
 }

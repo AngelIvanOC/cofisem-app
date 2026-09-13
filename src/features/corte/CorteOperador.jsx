@@ -55,6 +55,10 @@ function cuotaARow(c) {
   return {
     ...p,
     id: `cuota-${c.id}`,
+    // El folio de la PÓLIZA viene en el spread de `p`; se pisa con el de
+    // ESTE cobro. Son movimientos distintos y cada uno cae en el corte de
+    // su propio día — arrastrar el de la póliza era el bug que se corrige.
+    folio: c.folio ?? null,
     _esCuotaSubsecuente: true,
     // Cuota 1 que se cobra en un corte posterior al de su emisión: quedó
     // como "pól. pend. pago" y el cliente pagó días después.
@@ -325,7 +329,7 @@ export default function CorteOperador({ usuario }) {
       let query = supabase
         .from("comisiones_cofisem")
         .select(
-          "id, monto, fecha_pago, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, folio, vendedor_nombre, asegurado_nombre, creado_por, oficina_id)",
+          "id, folio, monto, fecha_pago, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, creado_por, oficina_id)",
         )
         .eq("fecha_pago", fechaCorte);
       if (usuario?.oficina_id)
@@ -1091,7 +1095,7 @@ export default function CorteOperador({ usuario }) {
                         —
                       </td>
                       <td className="px-3 py-2.5 text-center font-mono text-red-400/80">
-                        {pc.folio || "—"}
+                        {c.folio || "—"}
                       </td>
                       <td className="px-3 py-2.5 text-center text-red-500/80 whitespace-nowrap">
                         {pc.vendedor_nombre || "—"}
@@ -1156,7 +1160,12 @@ export default function CorteOperador({ usuario }) {
                     <td className="px-3 py-2.5 text-center text-gray-400 whitespace-nowrap">
                       {fmt(new Date(nt.cambiado_at).toLocaleDateString("en-CA"))}
                     </td>
-                    <td colSpan={15} className="px-3 py-2.5 text-left italic text-gray-500">
+                    <td className="px-3 py-2.5 text-center text-gray-300">—</td>
+                    <td className="px-3 py-2.5 text-center text-gray-300">—</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-500">
+                      {nt.folio || "—"}
+                    </td>
+                    <td colSpan={12} className="px-3 py-2.5 text-left italic text-gray-500">
                       {nt.notas}
                       {nt._esManual && nt.archivo_url && (
                         <button

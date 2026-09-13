@@ -67,7 +67,7 @@ export default function Comisiones({ usuario }) {
       let query = supabase
         .from("polizas_cofisem")
         .select(
-          "id, aseguradora, numero_poliza, fecha_emision, vendedor_id, vendedor_nombre, asegurado_nombre, comisiones_cofisem(id, monto, fecha_pago, comprobante_url)",
+          "id, aseguradora, numero_poliza, fecha_emision, vendedor_id, vendedor_nombre, asegurado_nombre, comisiones_cofisem(id, monto, fecha_pago, comprobante_url, folio)",
         )
         .not("vendedor_id", "is", null)
         .neq("vendedor_id", 1)
@@ -360,6 +360,11 @@ export default function Comisiones({ usuario }) {
 // tenía la tabla antes: monto, fecha de pago y comprobante opcional.
 function ModalVale({ poliza, usuario, onClose, onSaved }) {
   const [valor, setValor] = useState("");
+  // Folio propio del vale — el vale es un movimiento aparte del registro
+  // de la póliza y cae en el corte de su fecha_pago, así que lleva su
+  // propio folio (ver migracion_folio_por_transaccion.sql).
+  const [folio, setFolio] = useState("");
+  const [intento, setIntento] = useState(false);
   const [fechaPago, setFechaPago] = useState(hoyISO());
   const [comprobante, setComprobante] = useState(null);
   const [subiendo, setSubiendo] = useState(false);
@@ -370,6 +375,8 @@ function ModalVale({ poliza, usuario, onClose, onSaved }) {
     if (!poliza) return;
     const c = comisionDe(poliza);
     setValor(c?.monto || "");
+    setFolio(c?.folio ?? "");
+    setIntento(false);
     setFechaPago(c?.fecha_pago || hoyISO());
     setComprobante(c?.comprobante_url ?? null);
     setError(null);
@@ -396,6 +403,11 @@ function ModalVale({ poliza, usuario, onClose, onSaved }) {
   }
 
   async function guardar() {
+    if (!folio.trim()) {
+      setIntento(true);
+      setError("Captura el folio del vale — con él se ubica este movimiento en el corte.");
+      return;
+    }
     setGuardando(true);
     setError(null);
     try {
@@ -404,6 +416,7 @@ function ModalVale({ poliza, usuario, onClose, onSaved }) {
         .upsert(
           {
             poliza_cofisem_id: poliza.id,
+            folio: folio.trim(),
             monto: n(valor),
             fecha_pago: fechaPago || hoyISO(),
             comprobante_url: comprobante,
@@ -460,6 +473,22 @@ function ModalVale({ poliza, usuario, onClose, onSaved }) {
               {error}
             </div>
           )}
+
+          <div>
+            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+              Folio del vale{" "}
+              <span className={intento && !folio.trim() ? "text-red-500" : "text-gray-300"}>*</span>
+            </label>
+            <input
+              value={folio}
+              onChange={(e) => setFolio(e.target.value.toUpperCase())}
+              placeholder="Ej. EZ43134"
+              className={`w-full px-3 py-2.5 rounded-xl border bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] ${intento && !folio.trim() ? "border-red-300 ring-2 ring-red-100" : "border-gray-200"}`}
+            />
+            <p className="text-[11px] text-gray-400 mt-1">
+              Distinto al de la póliza — identifica este vale en el corte.
+            </p>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>

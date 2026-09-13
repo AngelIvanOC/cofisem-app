@@ -12,7 +12,7 @@ import { PAGOS_COMPROBANTE_BUCKET } from "./comprobantesPagoCofisem";
 export async function fetchEndososPoliza(polizaCofisemId) {
   const { data, error } = await supabase
     .from("endosos_cofisem")
-    .select("id, poliza_cofisem_id, fecha_endoso, descripcion, archivo_url, oficina_id, creado_por, created_at")
+    .select("id, poliza_cofisem_id, folio, fecha_endoso, descripcion, archivo_url, oficina_id, creado_por, created_at")
     .eq("poliza_cofisem_id", polizaCofisemId)
     .order("fecha_endoso", { ascending: false })
     .order("id", { ascending: false });
@@ -20,25 +20,28 @@ export async function fetchEndososPoliza(polizaCofisemId) {
   return data ?? [];
 }
 
-export async function crearEndosoCofisem({ polizaCofisemId, fechaEndoso, descripcion, archivoUrl, oficinaId, creadoPor }) {
+export async function crearEndosoCofisem({ polizaCofisemId, folio, fechaEndoso, descripcion, archivoUrl, oficinaId, creadoPor }) {
   const { data, error } = await supabase
     .from("endosos_cofisem")
     .insert({
       poliza_cofisem_id: polizaCofisemId,
+      // Folio propio del endoso — no se hereda el de la póliza.
+      folio:             folio || null,
       fecha_endoso:      fechaEndoso,
       descripcion:       descripcion || null,
       archivo_url:       archivoUrl || null,
       oficina_id:        oficinaId ?? null,
       creado_por:        creadoPor ?? null,
     })
-    .select("id, poliza_cofisem_id, fecha_endoso, descripcion, archivo_url, oficina_id, creado_por, created_at")
+    .select("id, poliza_cofisem_id, folio, fecha_endoso, descripcion, archivo_url, oficina_id, creado_por, created_at")
     .single();
   if (error) throw error;
   return data;
 }
 
-export async function actualizarEndosoCofisem(id, { fechaEndoso, descripcion, archivoUrl }) {
+export async function actualizarEndosoCofisem(id, { folio, fechaEndoso, descripcion, archivoUrl }) {
   const patch = {};
+  if (folio !== undefined) patch.folio = folio || null;
   if (fechaEndoso !== undefined) patch.fecha_endoso = fechaEndoso;
   if (descripcion !== undefined) patch.descripcion = descripcion || null;
   if (archivoUrl !== undefined) patch.archivo_url = archivoUrl || null;
@@ -64,7 +67,7 @@ export async function eliminarEndosoCofisem(id, archivoUrl) {
 export async function fetchEndososManualesDia(fechaCorte, oficinaId) {
   let query = supabase
     .from("endosos_cofisem")
-    .select("id, fecha_endoso, descripcion, archivo_url, polizas_cofisem!inner(numero_poliza, folio, oficina_id)")
+    .select("id, folio, fecha_endoso, descripcion, archivo_url, polizas_cofisem!inner(numero_poliza, oficina_id)")
     .eq("fecha_endoso", fechaCorte);
   if (oficinaId) query = query.eq("polizas_cofisem.oficina_id", oficinaId);
   const { data, error } = await query;
@@ -73,8 +76,11 @@ export async function fetchEndososManualesDia(fechaCorte, oficinaId) {
     id: `endoso-man-${row.id}`,
     _esManual: true,
     archivo_url: row.archivo_url ?? null,
+    // Folio DEL ENDOSO (no el de la póliza) — es lo que se muestra en la
+    // columna Folio del corte para esta nota.
+    folio: row.folio ?? null,
     polizas: {
-      numero_poliza: row.polizas_cofisem?.numero_poliza ?? row.polizas_cofisem?.folio ?? "—",
+      numero_poliza: row.polizas_cofisem?.numero_poliza ?? "—",
       constancia: null,
       oficina_id: row.polizas_cofisem?.oficina_id ?? null,
     },

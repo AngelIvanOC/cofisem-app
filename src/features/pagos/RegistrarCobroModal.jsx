@@ -37,6 +37,7 @@ const lbl =
   "block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5";
 
 const VACIO = {
+  folio: "",
   prima_total: "",
   prima_neta: "",
   fecha_recibido: "",
@@ -55,12 +56,14 @@ const VACIO = {
 // verificó cuando se registró la póliza).
 function faltantes(f) {
   const detalle = {
+    folio: !(f.folio && f.folio.trim()),
     pago: !(n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0),
     autorizacion: n(f.tdc) > 0 && !(f.autorizacion && f.autorizacion.trim()),
     comprobanteTdc: n(f.tdc) > 0 && !f.comprobante_tdc_path,
     comprobanteCheque: n(f.cheque) > 0 && !f.comprobante_cheque_path,
   };
   const labels = {
+    folio: "Folio de este cobro",
     pago: "Marca al menos una forma de pago (Efectivo, Cheque/Dep. o T. Crédito/Déb.)",
     autorizacion:
       "Autorización (obligatoria porque se pagó con T. Crédito/Déb.)",
@@ -98,6 +101,7 @@ export default function RegistrarCobroModal({
     const saldoCuota1 =
       row.num_cuota === 1 ? n(row.polizas_cofisem?.pol_pend_pago) : 0;
     setForm({
+      folio: row.folio ?? "",
       prima_total: row.prima_total || (saldoCuota1 > 0 ? saldoCuota1 : ""),
       prima_neta: row.prima_neta || "",
       fecha_recibido: row.fecha_recibido || hoyISO(),
@@ -249,6 +253,10 @@ export default function RegistrarCobroModal({
     setGuardando(true);
     try {
       const campos = {
+        // Folio propio de ESTE cobro — no se hereda el de la póliza: son
+        // dos movimientos distintos, en cortes distintos (ver
+        // migracion_folio_por_transaccion.sql).
+        folio: form.folio.trim() || null,
         prima_total: n(form.prima_total),
         prima_neta: n(form.prima_neta),
         fecha_recibido: form.fecha_recibido || hoyISO(),
@@ -382,6 +390,22 @@ export default function RegistrarCobroModal({
             Los datos de la póliza ({p.aseguradora || "—"},{" "}
             {p.forma_pago || "—"}) ya están registrados — aquí solo se captura
             cómo se pagó esta cuota.
+          </div>
+
+          <div className="sm:max-w-xs">
+            <label className={lbl}>
+              Folio de este cobro{" "}
+              <span className={falta("folio") ? "text-red-500" : "text-gray-300"}>*</span>
+            </label>
+            <input
+              value={form.folio}
+              onChange={(e) => setF("folio", e.target.value.toUpperCase())}
+              placeholder="Ej. EZ43134"
+              className={campoCls("folio")}
+            />
+            <p className="text-[11px] text-gray-400 mt-1">
+              Distinto al de la póliza — con este folio se ubica este cobro en el corte del día.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

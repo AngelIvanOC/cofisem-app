@@ -185,7 +185,8 @@ function FilaComision({ c }) {
     fEmision: fmtFecha(c.fecha_pago),
     vigInicio: "—",
     vigFin: "—",
-    folio: pc.folio || "—",
+    // Folio del VALE, no el de la póliza.
+    folio: c.folio || "—",
     vendedor: pc.vendedor_nombre || "—",
     asegurado: pc.asegurado_nombre || "—",
     primaAnual: "—",
@@ -286,10 +287,15 @@ const tdNotaBold = { fontFamily: "Helvetica-Bold", fontSize: 6.5, color: "#6b728
 // Nota de endoso (tipo A/C) — informativa, en gris, no aporta a ningún
 // total. No usa las columnas de COLS_POLIZA una a una: la póliza/fecha van
 // en las primeras celdas y el resto del ancho se dedica al texto de la nota.
+// COLS_POLIZA: 0 No · 1 Aseguradora · 2 Póliza · 3 F.Emisión · 4-5 Vigencia ·
+// 6 Folio · 7+ el resto. La nota agrupa columnas, pero el Folio se
+// respeta en su lugar para que el endoso se ubique igual que cualquier
+// otro movimiento del corte.
 function FilaNota({ nt }) {
   const anchoPoliza = COLS_POLIZA[0].w + COLS_POLIZA[1].w + COLS_POLIZA[2].w;
-  const anchoFecha = COLS_POLIZA[3].w;
-  const anchoNota = COLS_POLIZA.slice(4).reduce((s, c) => s + c.w, 0);
+  const anchoFecha = COLS_POLIZA[3].w + COLS_POLIZA[4].w + COLS_POLIZA[5].w;
+  const anchoFolio = COLS_POLIZA[6].w;
+  const anchoNota = COLS_POLIZA.slice(7).reduce((s, c) => s + c.w, 0);
   return (
     <Fila
       style={{
@@ -307,6 +313,11 @@ function FilaNota({ nt }) {
       <View style={{ width: anchoFecha, paddingHorizontal: 3, paddingVertical: 3, justifyContent: "center" }}>
         <Text style={[tdNota, { textAlign: "center" }]} wrap={false}>
           {nt.cambiado_at ? fmtFecha(nt.cambiado_at.slice(0, 10)) : "—"}
+        </Text>
+      </View>
+      <View style={{ width: anchoFolio, paddingHorizontal: 3, paddingVertical: 3, justifyContent: "center" }}>
+        <Text style={[tdNotaBold, { textAlign: "center" }]} wrap={false}>
+          {nt.folio || "—"}
         </Text>
       </View>
       <View style={{ width: anchoNota, paddingHorizontal: 3, paddingVertical: 3, justifyContent: "center" }}>

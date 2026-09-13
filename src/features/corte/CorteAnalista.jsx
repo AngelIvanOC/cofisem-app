@@ -62,6 +62,10 @@ function cuotaARow(c) {
   return {
     ...p,
     id: `cuota-${c.id}`,
+    // El folio de la PÓLIZA viene en el spread de `p`; se pisa con el de
+    // ESTE cobro. Son movimientos distintos y cada uno cae en el corte de
+    // su propio día — arrastrar el de la póliza era el bug que se corrige.
+    folio: c.folio ?? null,
     _esCuotaSubsecuente: true,
     _esPagoTardio: c.num_cuota === 1,
     num_cuota_pago: c.num_cuota,
@@ -227,7 +231,7 @@ export default function CorteAnalista({ usuario }) {
         supabase
           .from("comisiones_cofisem")
           .select(
-            "id, monto, fecha_pago, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, folio, vendedor_nombre, asegurado_nombre, oficina_id)",
+            "id, folio, monto, fecha_pago, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, oficina_id)",
           )
           .eq("fecha_pago", fecha),
       ]);
@@ -726,7 +730,7 @@ export default function CorteAnalista({ usuario }) {
                                     {pc.numero_poliza || "—"}
                                     <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-200/50 text-red-600 align-middle whitespace-nowrap">comisión</span>
                                   </td>
-                                  <td className="px-3 py-2.5 font-mono text-red-400/80">{pc.folio || "—"}</td>
+                                  <td className="px-3 py-2.5 font-mono text-red-400/80">{c.folio || "—"}</td>
                                   <td className="px-3 py-2.5 text-red-500/80 whitespace-nowrap">{pc.asegurado_nombre || "—"}</td>
                                   <td className="px-3 py-2.5 text-red-500/80 whitespace-nowrap">{pc.vendedor_nombre || "—"}</td>
                                   <td className="px-3 py-2.5 text-red-300">—</td>
@@ -762,10 +766,11 @@ export default function CorteAnalista({ usuario }) {
                                     endoso
                                   </span>
                                 </td>
+                                <td className="px-3 py-2.5 font-mono text-gray-500">{nt.folio || "—"}</td>
                                 <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">
                                   {fmt(new Date(nt.cambiado_at).toLocaleDateString("en-CA"))}
                                 </td>
-                                <td colSpan={14} className="px-3 py-2.5 text-gray-500 italic">
+                                <td colSpan={13} className="px-3 py-2.5 text-gray-500 italic">
                                   {nt.notas}
                                   {nt._esManual && nt.archivo_url && (
                                     <button

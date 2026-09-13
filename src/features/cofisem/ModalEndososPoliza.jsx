@@ -32,6 +32,10 @@ export default function ModalEndososPoliza({ poliza, usuario, corteCerrado, onCl
   const recargar = () => setVersion((v) => v + 1);
 
   const [fecha, setFecha] = useState(hoyISO());
+  // Folio propio del endoso — el endoso sale como nota en el corte de su
+  // fecha, así que se ubica por su propio folio, no por el de la póliza.
+  const [folio, setFolio] = useState("");
+  const [intento, setIntento] = useState(false);
   const [descripcion, setDescripcion] = useState("");
   const [archivoPath, setArchivoPath] = useState(null);
   const [subiendo, setSubiendo] = useState(false);
@@ -71,6 +75,11 @@ export default function ModalEndososPoliza({ poliza, usuario, corteCerrado, onCl
 
   async function handleCrear() {
     if (guardando) return;
+    if (!folio.trim()) {
+      setIntento(true);
+      setError("Captura el folio del endoso — con él se ubica en el corte.");
+      return;
+    }
     if (!descripcion.trim() && !archivoPath) {
       setError("Agrega una descripción o un archivo.");
       return;
@@ -80,6 +89,7 @@ export default function ModalEndososPoliza({ poliza, usuario, corteCerrado, onCl
     try {
       await crearEndosoCofisem({
         polizaCofisemId: poliza.id,
+        folio: folio.trim(),
         fechaEndoso: fecha || hoyISO(),
         descripcion: descripcion.trim(),
         archivoUrl: archivoPath,
@@ -88,6 +98,8 @@ export default function ModalEndososPoliza({ poliza, usuario, corteCerrado, onCl
       });
       setDescripcion("");
       setArchivoPath(null);
+      setFolio("");
+      setIntento(false);
       setFecha(hoyISO());
       recargar();
     } catch (e) {
@@ -151,7 +163,10 @@ export default function ModalEndososPoliza({ poliza, usuario, corteCerrado, onCl
                 {lista.map((e) => (
                   <div key={e.id} className="rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2.5 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-gray-600">{fmtFecha(e.fecha_endoso)}</p>
+                      <p className="text-xs font-bold text-gray-600">
+                        {fmtFecha(e.fecha_endoso)}
+                        {e.folio && <span className="ml-2 font-mono text-[#1447e6]">{e.folio}</span>}
+                      </p>
                       {e.descripcion && <p className="text-xs text-gray-500 mt-0.5 break-words">{e.descripcion}</p>}
                       {e.archivo_url && (
                         <button onClick={() => verComprobantePago(e.archivo_url)}
@@ -175,6 +190,16 @@ export default function ModalEndososPoliza({ poliza, usuario, corteCerrado, onCl
           {!corteCerrado && (
             <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
               <p className={lbl}>Nuevo endoso</p>
+              <div>
+                <label className={lbl}>
+                  Folio del endoso{" "}
+                  <span className={intento && !folio.trim() ? "text-red-500" : "text-gray-300"}>*</span>
+                </label>
+                <input value={folio} onChange={(ev) => setFolio(ev.target.value.toUpperCase())}
+                  placeholder="Ej. EZ43134"
+                  className={`w-full px-3 py-2 rounded-xl border bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] ${intento && !folio.trim() ? "border-red-300 ring-2 ring-red-100" : "border-gray-200"}`} />
+                <p className="text-[10px] text-gray-400 mt-1">Distinto al de la póliza — identifica este endoso en el corte.</p>
+              </div>
               <div>
                 <label className={lbl}>Fecha del endoso</label>
                 <input type="date" value={fecha} onChange={(ev) => setFecha(ev.target.value)}

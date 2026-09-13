@@ -1129,10 +1129,13 @@ export default function PoliciasDia({ usuario }) {
                 />
               </div>
               <div>
-                <label className={lblCls}>Folio</label>
+                <label className={lblCls}>
+                  Folio <span className="text-red-400">*</span>
+                </label>
                 <input
                   value={form.folio}
                   onChange={(e) => setF("folio", e.target.value.toUpperCase())}
+                  required
                   placeholder="Ej. T0455"
                   className={inpCls}
                 />
