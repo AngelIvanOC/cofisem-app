@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { INP, LBL } from "../constants/estilos";
-import { getTodasMarcas, getTiposPorMarca } from "../../../services/vehiculos";
+import { getTodasMarcas, getTiposPorMarca, CLASE_AUTO } from "../../../services/vehiculos";
+import SwitchClaseVehiculo from "../../../shared/components/SwitchClaseVehiculo";
 
 // Colores más comunes en vehículos — lista fija, no viene de catálogo.
 const COLORES_COMUNES = [
@@ -92,16 +93,24 @@ export default function TerceroCard({
     [tercero.id, onChange],
   );
 
+  // Auto o moto — decide de qué catálogo AMIS salen marcas y modelos
+  // (vehiculos_amis vs motos_amis). El valor viaja al siniestro
+  // (siniestros_terceros.vehiculo_clase) para que el ajustador abra el
+  // mismo catálogo al continuar el caso.
+  const clase = tercero.vehiculoClase || CLASE_AUTO;
+
   // Modo manual (independiente de año) — mismas marcas que ya usa el
   // resto de la app para vehículos de terceros (ver getTodasMarcas en
-  // services/vehiculos.js). No se relaciona con un id de vehiculos_amis,
+  // services/vehiculos.js). No se relaciona con un id del catálogo,
   // solo se usa como fuente de texto para las opciones del select.
   const [marcas, setMarcas] = useState([]);
   useEffect(() => {
-    getTodasMarcas()
-      .then(setMarcas)
-      .catch(() => {});
-  }, []);
+    let cancelado = false;
+    getTodasMarcas(clase)
+      .then((m) => { if (!cancelado) setMarcas(m); })
+      .catch(() => { if (!cancelado) setMarcas([]); });
+    return () => { cancelado = true; };
+  }, [clase]);
 
   // Modelos disponibles para la marca seleccionada — sin filtro de año.
   const [modelos, setModelos] = useState([]);
@@ -110,10 +119,22 @@ export default function TerceroCard({
       setModelos([]);
       return;
     }
-    getTiposPorMarca(tercero.vehiculoDesc)
-      .then(setModelos)
-      .catch(() => setModelos([]));
-  }, [tercero.vehiculoDesc]);
+    let cancelado = false;
+    getTiposPorMarca(tercero.vehiculoDesc, clase)
+      .then((m) => { if (!cancelado) setModelos(m); })
+      .catch(() => { if (!cancelado) setModelos([]); });
+    return () => { cancelado = true; };
+  }, [tercero.vehiculoDesc, clase]);
+
+  // Cambiar de auto a moto (o al revés) invalida marca y modelo ya
+  // capturados: los dos catálogos no comparten marcas. El `key` de los
+  // selects también depende de la clase, para que CampoSelectOtro
+  // reinicie su modo manual/catálogo.
+  const cambiarClase = (nueva) => {
+    set("vehiculoClase", nueva);
+    set("vehiculoDesc", "");
+    set("vehiculoModelo", "");
+  };
 
   return (
     <div className="border border-gray-200 rounded-2xl overflow-hidden">
@@ -150,36 +171,42 @@ export default function TerceroCard({
         )}
       </div>
 
-      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <CampoSelectOtro
-          label="Marca"
-          value={tercero.vehiculoDesc}
-          options={marcas}
-          onChange={(v) => set("vehiculoDesc", v)}
-          placeholder="Marca"
-        />
-        <CampoSelectOtro
-          label="Modelo"
-          value={tercero.vehiculoModelo}
-          options={modelos}
-          onChange={(v) => set("vehiculoModelo", v)}
-          placeholder="Modelo"
-        />
-        <CampoSelectOtro
-          label="Color"
-          value={tercero.vehiculoColor}
-          options={COLORES_COMUNES}
-          onChange={(v) => set("vehiculoColor", v)}
-          placeholder="Color"
-        />
-        <div>
-          <label className={LBL}>Placas</label>
-          <input
-            value={tercero.vehiculoPlacas}
-            onChange={(e) => set("vehiculoPlacas", e.target.value)}
-            placeholder="Placas"
-            className={INP}
+      <div className="p-4 space-y-3">
+        <SwitchClaseVehiculo value={clase} onChange={cambiarClase} />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <CampoSelectOtro
+            key={`marca-${clase}`}
+            label="Marca"
+            value={tercero.vehiculoDesc}
+            options={marcas}
+            onChange={(v) => set("vehiculoDesc", v)}
+            placeholder="Marca"
           />
+          <CampoSelectOtro
+            key={`modelo-${clase}`}
+            label="Modelo"
+            value={tercero.vehiculoModelo}
+            options={modelos}
+            onChange={(v) => set("vehiculoModelo", v)}
+            placeholder="Modelo"
+          />
+          <CampoSelectOtro
+            label="Color"
+            value={tercero.vehiculoColor}
+            options={COLORES_COMUNES}
+            onChange={(v) => set("vehiculoColor", v)}
+            placeholder="Color"
+          />
+          <div>
+            <label className={LBL}>Placas</label>
+            <input
+              value={tercero.vehiculoPlacas}
+              onChange={(e) => set("vehiculoPlacas", e.target.value)}
+              placeholder="Placas"
+              className={INP}
+            />
+          </div>
         </div>
       </div>
     </div>

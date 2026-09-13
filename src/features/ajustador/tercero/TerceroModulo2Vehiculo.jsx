@@ -4,30 +4,36 @@
 // (catálogo AMIS opcional) + fotos (vehículo, número de serie).
 // ============================================================
 import { useState, useEffect } from "react";
-import { CarFront, Hash } from "lucide-react";
+import { CarFront, Motorbike, Hash } from "lucide-react";
 import { Campo, PanelHeader, Seccion } from "../shared";
 import { BtnEvidencia, useEvidencias } from "../EvidenciaUI";
-import { getTodasMarcas, getTiposPorMarca } from "../../../services/vehiculos";
+import { getTodasMarcas, getTiposPorMarca, CLASE_AUTO } from "../../../services/vehiculos";
+import SwitchClaseVehiculo from "../../../shared/components/SwitchClaseVehiculo";
 
 // Selects Marca → Submarca del catálogo AMIS (modo manual, sin año — el
 // vehículo de un tercero no está ligado a ninguna póliza GAMAN).
-function SelectVehiculoAmis({ marca, submarca, onMarca, onSubmarca }) {
+// `clase` decide la tabla: "auto" → vehiculos_amis, "moto" → motos_amis.
+function SelectVehiculoAmis({ clase, marca, submarca, onMarca, onSubmarca }) {
   const [marcas,    setMarcas]    = useState([]);
   const [submarcas, setSubmarcas] = useState([]);
   const [submarcasDe, setSubmarcasDe] = useState(null);
 
   useEffect(() => {
-    getTodasMarcas().then(setMarcas).catch(() => setMarcas([]));
-  }, []);
+    let cancelado = false;
+    getTodasMarcas(clase)
+      .then((m) => { if (!cancelado) setMarcas(m); })
+      .catch(() => { if (!cancelado) setMarcas([]); });
+    return () => { cancelado = true; };
+  }, [clase]);
 
   useEffect(() => {
     if (!marca) return;
     let cancelado = false;
-    getTiposPorMarca(marca)
+    getTiposPorMarca(marca, clase)
       .then((s) => { if (!cancelado) { setSubmarcas(s); setSubmarcasDe(marca); } })
       .catch(() => { if (!cancelado) { setSubmarcas([]); setSubmarcasDe(marca); } });
     return () => { cancelado = true; };
-  }, [marca]);
+  }, [marca, clase]);
 
   const opcionesSubmarca = submarcasDe === marca ? submarcas : [];
 
@@ -61,15 +67,30 @@ export default function TerceroModulo2Vehiculo({ siniestro, datos, onDatos, onGu
   const veh = useEvidencias(sid, num, afId, "vehiculo");
   const serie = useEvidencias(sid, num, afId, "numero_serie");
 
+  // Auto o moto — llega precargado con lo que eligió cabina al levantar
+  // el reporte (siniestros_terceros.vehiculo_clase); el ajustador puede
+  // corregirlo si el dato de cabina estaba mal. Cambiarlo limpia la
+  // marca/submarca porque los dos catálogos no comparten marcas.
+  const clase = datos.vehiculoClase || CLASE_AUTO;
+  const cambiarClase = (nueva) => {
+    if (nueva === clase) return;
+    onDatos("vehiculoClase", nueva);
+    onDatos("vehiculoMarca", "");
+    onDatos("vehiculoSubmarca", "");
+    onDatos("vehiculo", "");
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
-      <PanelHeader titulo="Vehículo" subtitulo="Tercero · Módulo 2 de 5" onVolver={onVolver} />
+      <PanelHeader titulo={clase === "moto" ? "Motocicleta" : "Vehículo"} subtitulo="Tercero · Módulo 2 de 5" onVolver={onVolver} />
       <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 space-y-4">
 
-        <Seccion titulo="Datos del vehículo afectado">
+        <Seccion titulo={clase === "moto" ? "Datos de la motocicleta afectada" : "Datos del vehículo afectado"}>
           <div className="space-y-3">
-            <Campo label="Descripción del vehículo (marca / submarca)" placeholder="Ej. Nissan Versa" value={datos.vehiculo} onChange={(v) => onDatos("vehiculo", v)} />
+            <SwitchClaseVehiculo value={clase} onChange={cambiarClase} />
+            <Campo label="Descripción del vehículo (marca / submarca)" placeholder={clase === "moto" ? "Ej. Italika FT150" : "Ej. Nissan Versa"} value={datos.vehiculo} onChange={(v) => onDatos("vehiculo", v)} />
             <SelectVehiculoAmis
+              clase={clase}
               marca={datos.vehiculoMarca}
               submarca={datos.vehiculoSubmarca}
               onMarca={(v) => { onDatos("vehiculoMarca", v); onDatos("vehiculoSubmarca", ""); onDatos("vehiculo", v); }}
@@ -104,7 +125,9 @@ export default function TerceroModulo2Vehiculo({ siniestro, datos, onDatos, onGu
 
         <Seccion titulo="Fotos">
           <div className="grid grid-cols-2 gap-3">
-            <BtnEvidencia label="Vehículo" icon={<CarFront className="w-4 h-4 text-gray-400" />} items={veh.items} onAdd={veh.agregar} onRemove={veh.eliminar} />
+            <BtnEvidencia label={clase === "moto" ? "Motocicleta" : "Vehículo"}
+              icon={clase === "moto" ? <Motorbike className="w-4 h-4 text-gray-400" /> : <CarFront className="w-4 h-4 text-gray-400" />}
+              items={veh.items} onAdd={veh.agregar} onRemove={veh.eliminar} />
             <BtnEvidencia label="Núm. de serie" icon={<Hash className="w-4 h-4 text-gray-400" />} items={serie.items} onAdd={serie.agregar} onRemove={serie.eliminar}
               guiaCamara={{ titulo: "Número de serie (VIN)", instructivo: "Encuadra los 17 caracteres del número de serie dentro del recuadro" }} />
           </div>

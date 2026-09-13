@@ -64,6 +64,9 @@ export const AJUSTADORES_FORM = [
 
 export const TERCERO_VACIO = () => ({
   id: Date.now() + Math.random(),
+  // "auto" | "moto" — catálogo AMIS del que se llenan marca y modelo
+  // (ver SwitchClaseVehiculo / services/vehiculos.js).
+  vehiculoClase: "auto",
   vehiculoDesc: "",
   vehiculoTipo: "",
   vehiculoColor: "",

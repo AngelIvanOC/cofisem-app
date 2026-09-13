@@ -7,7 +7,7 @@
 // botón "+ Agregar tercero" ahora viven en el Hub).
 // ============================================================
 import { useState } from "react";
-import { IdCard, CarFront, Wrench, HeartPulse, Truck } from "lucide-react";
+import { IdCard, CarFront, Motorbike, Wrench, HeartPulse, Truck } from "lucide-react";
 import { PanelHeader, Tile } from "../shared";
 import TerceroModulo1Datos from "./TerceroModulo1Datos";
 import TerceroModulo2Vehiculo from "./TerceroModulo2Vehiculo";
@@ -17,6 +17,8 @@ import TerceroModulo5Servicios from "./TerceroModulo4Servicios";
 
 const TIPOS_TERCERO = ["Conductor", "Propietario del bien", "Lesionado"];
 
+// El módulo "Vehículo" cambia de icono según lo que se haya capturado
+// (auto o moto) para que se distinga desde la grilla — ver modulosDe().
 const MODULOS = [
   { id: "datos",      titulo: "Datos personales", subtitulo: "Datos, licencia, fotos",      Icon: IdCard },
   { id: "vehiculo",   titulo: "Vehículo",         subtitulo: "Datos y fotos del vehículo",  Icon: CarFront },
@@ -25,8 +27,14 @@ const MODULOS = [
   { id: "servicios",  titulo: "Servicios",        subtitulo: "Taller, grúa",                Icon: Truck },
 ];
 
+const modulosDe = (clase) =>
+  clase === "moto"
+    ? MODULOS.map((m) => (m.id === "vehiculo" ? { ...m, titulo: "Motocicleta", Icon: Motorbike } : m))
+    : MODULOS;
+
 export default function TerceroDetalle({ siniestro, idx, datos, onDatos, onGuardar, guardando, errorGuardar, guardadoOk, onVolver, onEliminar }) {
   const [modulo, setModulo] = useState(null);
+  const modulos = modulosDe(datos.vehiculoClase);
 
   if (modulo) {
     const volver = () => setModulo(null);
@@ -68,7 +76,7 @@ export default function TerceroDetalle({ siniestro, idx, datos, onDatos, onGuard
           </div>
         </div>
         <div className="space-y-3">
-          {MODULOS.map((m) => (
+          {modulos.map((m) => (
             <Tile key={m.id} titulo={m.titulo} subtitulo={m.subtitulo} icon={<m.Icon className="w-5 h-5 text-[#13193a]" />} onClick={() => setModulo(m.id)} />
           ))}
         </div>

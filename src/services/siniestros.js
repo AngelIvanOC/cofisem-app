@@ -281,6 +281,9 @@ export async function crearSiniestro({ polizaId, clienteId, folio, form, reporta
     .filter((t) => t.vehiculoDesc || t.vehiculoColor || t.vehiculoModelo || t.vehiculoPlacas)
     .map((t) => ({
       siniestro_id:    data.id,
+      // Catálogo AMIS que usó cabina (auto → vehiculos_amis,
+      // moto → motos_amis). El ajustador lo lee para abrir el mismo.
+      vehiculo_clase:  t.vehiculoClase === "moto" ? "moto" : "auto",
       vehiculo_desc:   t.vehiculoDesc   || null,
       vehiculo_color:  t.vehiculoColor  || null,
       // El select "Modelo" del cabinero se alimenta de getTiposPorMarca()
@@ -537,6 +540,8 @@ const NORMALIZAR_NA = {
 function filaTercero(siniestroId, d) {
   return {
     siniestro_id:          siniestroId,
+    // Catálogo del que salieron marca/submarca — ver SwitchClaseVehiculo.
+    vehiculo_clase:        d.vehiculoClase === "moto" ? "moto" : "auto",
     vehiculo_desc:         d.vehiculo    || null,
     vehiculo_modelo:       d.anio        || null,
     vehiculo_color:        d.color       || null,
@@ -694,7 +699,7 @@ export async function fetchPartesInvolucradas(siniestroId) {
   const { data: terceros, error: errT } = await supabase
     .from("siniestros_terceros")
     .select(`
-      id, vehiculo_desc, vehiculo_modelo, vehiculo_color, vehiculo_placas, vehiculo_serie,
+      id, vehiculo_clase, vehiculo_desc, vehiculo_modelo, vehiculo_color, vehiculo_placas, vehiculo_serie,
       vehiculo_tipo, vehiculo_motor, propietario_nombre, propietario_domicilio,
       propietario_telefono, edad, sexo, rfc, curp, email, aseguradora_nombre, poliza_tercero,
       declaracion, licencia_tipo, licencia_numero, licencia_fecha_exp, licencia_lugar_exp,
@@ -721,6 +726,8 @@ export async function fetchPartesInvolucradas(siniestroId) {
       telefono: t.propietario_telefono || "", email: t.email || "",
       rfc: t.rfc || "", curp: t.curp || "", direccion: t.propietario_domicilio || "",
       direccionEstado: "", direccionMunicipio: "", direccionColonia: "", direccionCp: "", direccionCalle: "", direccionNumero: "",
+      // NULL = fila anterior al soporte de motos → se lee como auto.
+      vehiculoClase: t.vehiculo_clase === "moto" ? "moto" : "auto",
       vehiculo: t.vehiculo_desc || "", vehiculoMarca: "", vehiculoSubmarca: "",
       anio: t.vehiculo_modelo || "", color: t.vehiculo_color || "", placas: t.vehiculo_placas || "", serie: t.vehiculo_serie || "",
       vehiculoTipo: t.vehiculo_tipo || "", vehiculoMotor: t.vehiculo_motor || "",

@@ -16,6 +16,9 @@ export const datosAfectadoVacio = () => ({
   nombre: "", edad: "", sexo: "", telefono: "", email: "",
   rfc: "", curp: "", direccion: "",
   direccionEstado: "", direccionMunicipio: "", direccionColonia: "", direccionCp: "", direccionCalle: "", direccionNumero: "",
+  // "auto" | "moto" — catálogo AMIS de marca/submarca (ver
+  // SwitchClaseVehiculo). Lo hereda de lo que capturó cabina.
+  vehiculoClase: "auto",
   vehiculo: "", vehiculoMarca: "", vehiculoSubmarca: "", anio: "", color: "", placas: "", serie: "",
   vehiculoTipo: "", vehiculoMotor: "",
   aseguradora: "", polizaTercero: "",

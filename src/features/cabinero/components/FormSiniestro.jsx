@@ -10,7 +10,7 @@ import TerceroCard from "./TerceroCard";
 import { Check, CheckCircle2, ChevronLeft, Loader2 } from "lucide-react";
 
 function terceroVacio(id) {
-  return { id, vehiculoDesc: "", vehiculoModelo: "", vehiculoColor: "", vehiculoPlacas: "" };
+  return { id, vehiculoClase: "auto", vehiculoDesc: "", vehiculoModelo: "", vehiculoColor: "", vehiculoPlacas: "" };
 }
 
 function generarFolio() {
