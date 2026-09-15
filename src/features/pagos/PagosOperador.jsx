@@ -308,7 +308,7 @@ export default function PagosOperador({ usuario }) {
           `
           id, poliza_id, aseguradora, numero_poliza, asegurado_nombre,
           fecha_emision, fecha_corte, prima_primer_pago, prima_primer_pago_neta,
-          efectivo, cheque, tdc, pol_pend_pago, poliza_gaman_estatus,
+          efectivo, cheque, tdc, pol_pend_pago, poliza_gaman_estatus, oficina_id,
           comprobante_cheque_url, comprobante_tdc_url,
           perdida, perdida_nota, registro_parcial, num_cuota_pago,
           pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
