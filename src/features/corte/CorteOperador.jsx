@@ -1277,7 +1277,9 @@ export default function CorteOperador({ usuario }) {
                         <button
                           type="button"
                           onClick={() =>
-                            verComprobante(r.comprobante_cheque_url)
+                            r._esCuotaSubsecuente
+                              ? verComprobantePago(r.comprobante_cheque_url)
+                              : verComprobante(r.comprobante_cheque_url)
                           }
                           title="Ver comprobante"
                           className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"
@@ -1291,7 +1293,11 @@ export default function CorteOperador({ usuario }) {
                       {r.comprobante_tdc_url && (
                         <button
                           type="button"
-                          onClick={() => verComprobante(r.comprobante_tdc_url)}
+                          onClick={() =>
+                            r._esCuotaSubsecuente
+                              ? verComprobantePago(r.comprobante_tdc_url)
+                              : verComprobante(r.comprobante_tdc_url)
+                          }
                           title="Ver comprobante"
                           className="ml-1 align-middle text-[#1447e6] hover:text-[#0f36b3] inline-flex"
                         >
