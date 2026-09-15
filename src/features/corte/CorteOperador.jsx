@@ -1375,12 +1375,16 @@ export default function CorteOperador({ usuario }) {
                               ? "Poner al corriente"
                               : "Registrar cobro"}
                           </button>
-                        ) : r._cuotaEstatus === "RECIBIDO" &&
-                          !r._cuotaRaw?.pago_gaman_id ? (
-                          // Cobro propio (no traído de GAMAN) ya registrado:
-                          // mientras el corte no esté cerrado se puede reabrir
-                          // para corregir monto / forma de pago / fecha. Los
-                          // cobros de GAMAN y los ya APLICADOS no se tocan.
+                        ) : r._cuotaEstatus === "RECIBIDO" ? (
+                          // pagos_cofisem.estatus solo llega a RECIBIDO desde
+                          // RegistrarCobroModal — folio/monto/forma de pago
+                          // siempre los capturó a mano un operador COFISEM,
+                          // tenga o no pago_gaman_id (pago tardío de cuota 1,
+                          // o pago subsecuente de cuota 2+). Mientras el
+                          // corte no esté cerrado se puede reabrir para
+                          // corregir folio / monto / forma de pago (la fecha,
+                          // si viene de GAMAN, queda fija dentro del modal).
+                          // Los ya APLICADOS no se tocan.
                           <button
                             type="button"
                             onClick={() =>

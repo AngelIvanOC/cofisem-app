@@ -97,9 +97,17 @@ export default function RegistrarCobroModal({
     if (!row) return;
     // Cuota 1 que quedó como "pól. pend. pago": el saldo a cobrar vive en la
     // póliza padre, no en esta fila. Se precarga en Efectivo para que la
-    // encargada solo confirme la forma de pago y la fecha del cobro.
+    // encargada solo confirme la forma de pago y la fecha del cobro — pero
+    // SOLO al registrar por primera vez (fila virtual, sin cobro real aún).
+    // pol_pend_pago nunca se limpia (se deja así a propósito para que el
+    // corte del día de emisión lo siga mostrando pendiente), así que al
+    // EDITAR un cobro ya guardado seguiría siendo > 0 y pisaría con el saldo
+    // completo cualquier forma de pago real que ya esté en 0 (ej. se pagó
+    // solo con TDC/transferencia y Efectivo legítimamente es 0).
     const saldoCuota1 =
-      row.num_cuota === 1 ? n(row.polizas_cofisem?.pol_pend_pago) : 0;
+      row._virtual && row.num_cuota === 1
+        ? n(row.polizas_cofisem?.pol_pend_pago)
+        : 0;
     setForm({
       folio: row.folio ?? "",
       prima_total: row.prima_total || (saldoCuota1 > 0 ? saldoCuota1 : ""),
@@ -444,8 +452,18 @@ export default function RegistrarCobroModal({
             <input
               type="date"
               value={form.fecha_recibido}
+              disabled={esGaman}
               onChange={(e) => setF("fecha_recibido", e.target.value)}
-              className={inp + " sm:max-w-xs"}
+              className={
+                inp +
+                " sm:max-w-xs" +
+                (esGaman ? " bg-gray-100 text-gray-400" : "")
+              }
+              title={
+                esGaman
+                  ? "Esta cuota está ligada a GAMAN — la fecha no se modifica desde aquí"
+                  : undefined
+              }
             />
           </div>
 

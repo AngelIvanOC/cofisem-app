@@ -114,6 +114,10 @@ function infoFila(c, p) {
     if (yaCobrado) {
       return {
         esGaman: !!c.pago_gaman_id,
+        // El folio/monto de esta cuota los capturó a mano un operador
+        // (no vienen sincronizados de GAMAN), aunque quede ligada a un
+        // pago_gaman_id — debe poder reabrirse para corregirla.
+        _capturaLocal: true,
         bucket: c.estatus === "APLICADO" ? "APLICADO" : "RECIBIDO",
         meta: {
           label: "Cobrado",
@@ -152,6 +156,23 @@ function infoFila(c, p) {
     };
   }
   if (c.pago_gaman_id) {
+    // pagos_cofisem.estatus solo llega a RECIBIDO/APLICADO desde
+    // RegistrarCobroModal: esta cuota (2+, "pago subsecuente") ya la
+    // cobró a mano un operador COFISEM, con su propio folio/forma de
+    // pago/fecha — no depende del estatus en vivo de GAMAN. Debe poder
+    // reabrirse para corregirla, igual que la cuota 1 "pago tardío".
+    if (c.estatus === "RECIBIDO" || c.estatus === "APLICADO") {
+      return {
+        esGaman: true,
+        _capturaLocal: true,
+        bucket: c.estatus,
+        meta: ESTATUS_META[c.estatus],
+        primaTotal: n(c.efectivo) + n(c.cheque) + n(c.tdc),
+        primaNeta: c.prima_neta ?? null,
+        fecha: c.fecha_recibido,
+        vence: c.fecha_vencimiento,
+      };
+    }
     const g = c.pago_gaman ?? {};
     return {
       esGaman: true,
@@ -696,6 +717,7 @@ function ModalCuotasPoliza({
                 vence,
                 fecha,
                 _saldoPendiente,
+                _capturaLocal,
               } = c._info;
               return (
                 <div
@@ -774,34 +796,51 @@ function ModalCuotasPoliza({
                     {!c._virtual &&
                       !grupo.cancelada &&
                       (esGaman ? (
-                        <>
-                          {!_saldoPendiente && (
-                            <button
-                              type="button"
-                              onClick={() => onAdjuntarArchivo(c)}
-                              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-[11px] font-bold whitespace-nowrap"
-                            >
-                              {c.comprobante_url
-                                ? "Cambiar archivo"
-                                : "Adjuntar archivo"}
-                            </button>
-                          )}
-                          {/* Cuota 1 de una póliza GAMAN se cobra desde
-                              "Completar" al emitir. Solo aparece "Registrar
-                              cobro" aquí cuando quedó con saldo pendiente de
-                              pago (_saldoPendiente) para liquidarlo otro día,
-                              o para las cuotas 2+ pendientes. */}
-                          {((c.num_cuota > 1 && c.estatus === "PENDIENTE") ||
-                            _saldoPendiente) && (
-                            <button
-                              type="button"
-                              onClick={() => onMarcarRecibido(c)}
-                              className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold whitespace-nowrap"
-                            >
-                              Registrar cobro
-                            </button>
-                          )}
-                        </>
+                        _capturaLocal && c.estatus === "RECIBIDO" ? (
+                          // Cuota (1 "pago tardío" o 2+ "pago subsecuente")
+                          // ya cobrada a mano por un operador COFISEM: el
+                          // folio/monto/forma de pago no vienen sincronizados
+                          // de GAMAN, así que se puede reabrir igual que un
+                          // cobro propio. Los ya APLICADOS por el analista no
+                          // traen este botón.
+                          <button
+                            type="button"
+                            onClick={() => onMarcarRecibido(c)}
+                            title="Corregir folio, monto o forma de pago de este cobro"
+                            className="px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold whitespace-nowrap"
+                          >
+                            Editar cobro
+                          </button>
+                        ) : (
+                          <>
+                            {!_saldoPendiente && (
+                              <button
+                                type="button"
+                                onClick={() => onAdjuntarArchivo(c)}
+                                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-[11px] font-bold whitespace-nowrap"
+                              >
+                                {c.comprobante_url
+                                  ? "Cambiar archivo"
+                                  : "Adjuntar archivo"}
+                              </button>
+                            )}
+                            {/* Cuota 1 de una póliza GAMAN se cobra desde
+                                "Completar" al emitir. Solo aparece "Registrar
+                                cobro" aquí cuando quedó con saldo pendiente de
+                                pago (_saldoPendiente) para liquidarlo otro día,
+                                o para las cuotas 2+ pendientes. */}
+                            {((c.num_cuota > 1 && c.estatus === "PENDIENTE") ||
+                              _saldoPendiente) && (
+                              <button
+                                type="button"
+                                onClick={() => onMarcarRecibido(c)}
+                                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold whitespace-nowrap"
+                              >
+                                Registrar cobro
+                              </button>
+                            )}
+                          </>
+                        )
                       ) : (
                         c.estatus === "PENDIENTE" ? (
                           <>
