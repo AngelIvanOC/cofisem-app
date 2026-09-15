@@ -38,6 +38,7 @@ import {
   Truck,
   Settings,
   Siren,
+  RefreshCw,
 } from "lucide-react";
 
 // ── Iconos (Lucide React) ────────────────────────────────────
@@ -65,6 +66,7 @@ const ICONS = {
   ticket: Ticket,
   truck: Truck,
   siren: Siren,
+  "refresh-cw": RefreshCw,
 };
 
 // Renderiza el ícono Lucide correspondiente

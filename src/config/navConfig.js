@@ -15,6 +15,7 @@ export const NAV_POR_ROL = {
     { label: "Inicio",       path: "/gaman/dashboard",    icon: "home"       },
     { label: "Pólizas",      path: "/gaman/polizas",      icon: "file-text"  },
     { label: "Vencimientos", path: "/gaman/vencimientos", icon: "calendar"   },
+    { label: "Renovaciones", path: "/gaman/renovaciones", icon: "refresh-cw"},
     { label: "Pagos",        path: "/gaman/pagos",        icon: "credit-card"},
     { label: "Reportes",     path: "/gaman/reportes",     icon: "bar-chart"  },
   ],

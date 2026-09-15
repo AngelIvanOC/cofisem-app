@@ -59,6 +59,9 @@ const AnalistaDashboard = lazy(
   () => import("./pages/analista/AnalistaDashboard"),
 );
 const AnalistaPolizas = lazy(() => import("./pages/analista/AnalistaPolizas"));
+const AnalistaRenovaciones = lazy(
+  () => import("./pages/analista/AnalistaRenovaciones"),
+);
 const AnalistaPagos = lazy(() => import("./pages/analista/AnalistaPagos"));
 const AnalistaReportes = lazy(
   () => import("./pages/analista/AnalistaReportes"),
@@ -148,6 +151,7 @@ const RUTAS_POR_ROL = {
     "/gaman/pagos",
     "/gaman/reportes",
     "/gaman/vencimientos",
+    "/gaman/renovaciones",
   ],
   ADMINISTRACION: [
     "/gaman/dashboard",
@@ -593,6 +597,19 @@ export default function App() {
                       rolNombre={rolNombre}
                       usuario={usuario}
                     />
+                  </RutaProtegida>
+                }
+              />
+
+              {/* Renovaciones (analista) */}
+              <Route
+                path="/gaman/renovaciones"
+                element={
+                  <RutaProtegida
+                    rolNombre={rolNombre}
+                    path="/gaman/renovaciones"
+                  >
+                    <AnalistaRenovaciones usuario={usuario} />
                   </RutaProtegida>
                 }
               />
