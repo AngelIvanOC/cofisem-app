@@ -452,18 +452,8 @@ export default function RegistrarCobroModal({
             <input
               type="date"
               value={form.fecha_recibido}
-              disabled={esGaman}
               onChange={(e) => setF("fecha_recibido", e.target.value)}
-              className={
-                inp +
-                " sm:max-w-xs" +
-                (esGaman ? " bg-gray-100 text-gray-400" : "")
-              }
-              title={
-                esGaman
-                  ? "Esta cuota está ligada a GAMAN — la fecha no se modifica desde aquí"
-                  : undefined
-              }
+              className={inp + " sm:max-w-xs"}
             />
           </div>
 
