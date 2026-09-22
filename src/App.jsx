@@ -410,8 +410,20 @@ export default function App() {
             element={<VerificarPoliza />}
           />
 
-          {/* ── Área COFISEM con sidebar (accesos + pólizas + cortes) ── */}
-          <Route element={<CofisemLayout />}>
+          {/* ── Área COFISEM con sidebar (accesos + pólizas + cortes) ──
+              Sin sesión → login (antes seguía mostrando la pantalla con
+              usuario null y las consultas salían como anónimo). */}
+          <Route
+            element={
+              !session ? (
+                <Navigate to="/login" replace />
+              ) : !rolNombre ? (
+                <Spinner />
+              ) : (
+                <CofisemLayout />
+              )
+            }
+          >
             <Route
               path="/accesos"
               element={

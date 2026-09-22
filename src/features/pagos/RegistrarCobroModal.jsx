@@ -309,8 +309,10 @@ export default function RegistrarCobroModal({
           .update(campos)
           .eq("id", row.id)
           .select()
-          .single();
+          .maybeSingle();
         if (res.error) throw res.error;
+        // 0 filas = la RLS filtró el UPDATE (no marca error): tratarlo igual.
+        if (!res.data) throw { code: "42501" };
         data = res.data;
       }
       // NO se toca polizas_cofisem.pol_pend_pago: el corte del día en que se

@@ -6,6 +6,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { MOTIVO_SESION_EXPIRADA } from "../auth.js";
 import Swal from "sweetalert2";
 import iconoGaman from "../assets/icono_gaman.svg";
 import { Loader2 } from "lucide-react";
@@ -33,6 +34,16 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [fadeIn, setFadeIn] = useState(true);
   const [error, setError] = useState("");
+  // auth.js deja esta marca cuando la sesión se cerró sola (no por el botón).
+  const [sesionExpirada] = useState(() => {
+    try {
+      const v = sessionStorage.getItem(MOTIVO_SESION_EXPIRADA) === "1";
+      sessionStorage.removeItem(MOTIVO_SESION_EXPIRADA);
+      return v;
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -76,6 +87,12 @@ export default function Login() {
 
     if (perfil?.activo === false) {
       await supabase.auth.signOut();
+      // Este signOut no es una sesión expirada: quitar la marca de auth.js.
+      try {
+        sessionStorage.removeItem(MOTIVO_SESION_EXPIRADA);
+      } catch {
+        /* ignorar */
+      }
       setLoading(false);
       Swal.fire({
         icon: "error",
@@ -168,6 +185,12 @@ export default function Login() {
             {error && (
               <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/20 border border-red-400/30 text-red-300 text-sm text-center">
                 {error}
+              </div>
+            )}
+
+            {!error && sesionExpirada && (
+              <div className="mb-4 px-4 py-3 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-200 text-sm text-center">
+                Tu sesión expiró. Inicia sesión de nuevo para continuar.
               </div>
             )}
 

@@ -3,7 +3,7 @@
 // Toda la lógica de sesión vive AQUÍ, fuera de React.
 // Los componentes solo leen, nunca modifican.
 // ============================================================
-import { supabase } from "./supabaseClient";
+import { supabase, registrarGuardSesion } from "./supabaseClient";
 
 // Estado global (no es React state)
 let _session   = undefined; // undefined=checking, null=no-auth, obj=auth
@@ -72,6 +72,79 @@ export async function logout() {
   await supabase.auth.signOut();
 }
 
+// ── Sesión perdida ─────────────────────────────────────────
+// La sesión ya no sirve (refresh token revocado/expirado): se limpia el
+// estado para que App.jsx mande al login, y el Login avisa por qué.
+export const MOTIVO_SESION_EXPIRADA = "cofisem_sesion_expirada";
+
+function marcarExpirada() {
+  try {
+    sessionStorage.setItem(MOTIVO_SESION_EXPIRADA, "1");
+  } catch {
+    /* sin storage: el login simplemente no muestra el aviso */
+  }
+}
+
+function sesionPerdida() {
+  if (!_session) return;
+  marcarExpirada();
+  _session   = null;
+  _usuario   = null;
+  _rolNombre = null;
+  _error     = null;
+  _lastUID   = null;
+  _loading   = false;
+  notify();
+  // scope local: solo borra la sesión de este navegador (el token ya no sirve)
+  supabase.auth.signOut({ scope: "local" }).catch(() => {});
+}
+
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+const esErrorDeRed = (err) =>
+  err?.name === "AuthRetryableFetchError" ||
+  (typeof navigator !== "undefined" && navigator.onLine === false);
+
+// Consigue un access token válido. Si falla por red (la compu despertó y el
+// wifi aún no conecta) reintenta unos segundos SIN cerrar la sesión; solo la
+// da por perdida si Supabase contesta que ya no existe. Las peticiones que
+// llegan a la vez comparten el mismo intento.
+let _recuperando = null;
+function recuperarToken() {
+  if (_recuperando) return _recuperando;
+  _recuperando = (async () => {
+    for (let intento = 0; intento < 4; intento++) {
+      const { data, error } = await supabase.auth.getSession();
+      if (data?.session?.access_token && !error) return data.session.access_token;
+      if (!esErrorDeRed(error)) {
+        const r = await supabase.auth.refreshSession();
+        if (r.data?.session?.access_token) return r.data.session.access_token;
+        if (!esErrorDeRed(r.error)) {
+          sesionPerdida();
+          return null;
+        }
+      }
+      await esperar(1000 * (intento + 1));
+    }
+    return null; // sin red: la petición falla, pero la sesión se conserva
+  })().finally(() => {
+    _recuperando = null;
+  });
+  return _recuperando;
+}
+
+registrarGuardSesion({
+  activa: () => !!_session,
+  recuperarToken,
+  perdida: sesionPerdida,
+});
+
+// Al regresar a la pestaña (o reconectar la red) se revisa que la sesión
+// siga viva; si ya murió, se manda al login antes de que el usuario capture
+// algo que luego no se va a poder guardar.
+function revisarSesion() {
+  if (_session && document.visibilityState === "visible") recuperarToken();
+}
+
 // ── Inicializar (llamar UNA vez al arrancar la app) ────────
 let _initialized = false;
 
@@ -89,9 +162,20 @@ export async function initAuth() {
     notify();
   }
 
-  // 2. Escuchar SOLO eventos de login y logout, nunca TOKEN_REFRESHED ni otros
+  document.addEventListener("visibilitychange", revisarSesion);
+  window.addEventListener("online", revisarSesion);
+
+  // 2. Escuchar login/logout. TOKEN_REFRESHED solo actualiza la sesión
+  //    guardada (no recarga el perfil ni re-renderiza).
   supabase.auth.onAuthStateChange((event, session) => {
+    if (event === "TOKEN_REFRESHED" && session && _session) {
+      _session = session;
+    }
+
     if (event === "SIGNED_OUT") {
+      // Si todavía había sesión es que se cerró sola (logout() la limpia
+      // antes): avisar en el login.
+      if (_session) marcarExpirada();
       _session   = null;
       _usuario   = null;
       _rolNombre = null;
