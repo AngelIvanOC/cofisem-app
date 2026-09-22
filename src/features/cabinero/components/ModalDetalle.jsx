@@ -33,7 +33,18 @@ function BadgeUbicacion({ arriboLat, arriboLng, geoSin, cargando }) {
       </div>
     );
   }
-  if (!arriboLat || !geoSin) return null;
+  // El ajustador puede confirmar el arribo sin GPS (permiso de ubicación
+  // denegado o falló el sensor) — no es un error de la app, pero antes se
+  // quedaba en blanco sin explicar nada, así que ahora se avisa.
+  if (!arriboLat) {
+    return (
+      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold mt-1 bg-gray-50 text-gray-400 border border-gray-200">
+        <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-300" />
+        Ubicación no registrada
+      </div>
+    );
+  }
+  if (!geoSin) return null;
 
   const dist  = distanciaMetros(arriboLat, arriboLng, geoSin.lat, geoSin.lng);
   const nivel = dist < 1000 ? "ok" : dist < 4000 ? "cerca" : "lejos";
@@ -83,17 +94,17 @@ const DOC_GRUPOS = [
   { key: "danos", tipos: ["danos"], icon: "🔍", label: "Daños" },
 ];
 
-// Grupos que solo aparecen si tienen fotos (sin placeholder vacío): "Arribo"
-// separa la foto de llegada del ajustador (ya se ve aparte en el panel de
-// Ajustador, pero también debe contarse aquí); "Otros" es una red de
-// seguridad para cualquier `tipo` nuevo que el flujo del ajustador agregue
-// en el futuro sin que alguien actualice esta lista — así nunca vuelve a
-// pasar que fotos reales "desaparezcan" del conteo, como ocurrió con los
-// vértices/tarjeta/identificación tras el cambio de proceso del ajustador.
+// "Otros" es una red de seguridad (sin placeholder si está vacío): cualquier
+// `tipo` nuevo que el flujo del ajustador agregue en el futuro sin que
+// alguien actualice esta lista cae aquí en vez de desaparecer en silencio,
+// como pasó con los vértices/tarjeta/identificación tras el cambio de
+// proceso del ajustador. La foto de llegada (`tipo === "llegada"`) NO entra
+// aquí: ya se muestra aparte en la tarjeta de Ajustador (foto + badge de
+// distancia), así que ni se cuenta ni aparece en Documentos para no
+// duplicarla.
 const TIPOS_CORE = new Set(DOC_GRUPOS.flatMap((g) => g.tipos));
 const GRUPOS_EXTRA = [
-  { key: "arribo", tipos: ["llegada"], icon: "📍", label: "Arribo" },
-  { key: "otros",  tipos: null,        icon: "🗂️", label: "Otros"  }, // null = catch-all
+  { key: "otros", tipos: null, icon: "🗂️", label: "Otros" }, // null = catch-all
 ];
 
 function etiquetaParticipante(id) {
@@ -159,23 +170,23 @@ function Carrusel({ imgs, initialIdx, onClose }) {
 }
 
 // ── Acordeón por participante ────────────────────────────────
-function SeccionParticipante({ id, evidencias, onVerCarrusel }) {
+function SeccionParticipante({ id, evidencias: evidenciasTodas, onVerCarrusel }) {
   const [abierto, setAbierto] = useState(id === "NA");
   const esNA = id === "NA";
+
+  // La foto de llegada ("llegada") ya se muestra en la tarjeta de Ajustador
+  // (foto + badge de distancia) — se excluye aquí para no duplicarla ni en
+  // el conteo ni en el grid.
+  const evidencias = evidenciasTodas.filter((e) => e.tipo !== "llegada");
 
   const gruposCore = DOC_GRUPOS.map((g) => ({
     ...g,
     imgs: evidencias.filter((e) => g.tipos.includes(e.tipo)),
   }));
-  // Extra: "Arribo" (tipo llegada) y "Otros" (catch-all) solo se muestran
-  // si de verdad tienen fotos — no ocupan un slot vacío como los core.
+  // "Otros" (catch-all) solo se muestra si de verdad tiene fotos — no
+  // ocupa un slot vacío como los grupos core.
   const gruposExtra = GRUPOS_EXTRA
-    .map((g) => ({
-      ...g,
-      imgs: g.tipos
-        ? evidencias.filter((e) => g.tipos.includes(e.tipo))
-        : evidencias.filter((e) => !TIPOS_CORE.has(e.tipo) && e.tipo !== "llegada"),
-    }))
+    .map((g) => ({ ...g, imgs: evidencias.filter((e) => !TIPOS_CORE.has(e.tipo)) }))
     .filter((g) => g.imgs.length > 0);
   const grupos = [...gruposCore, ...gruposExtra];
   const totalFotos = evidencias.length;
@@ -375,7 +386,9 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
     return [...set].sort((a, b) => a === "NA" ? -1 : b === "NA" ? 1 : a.localeCompare(b));
   })();
 
-  const totalFotos = evidencias.length;
+  // La foto de llegada no cuenta aquí — ya se muestra en la tarjeta de
+  // Ajustador (ver SeccionParticipante, que aplica el mismo filtro).
+  const totalFotos = evidencias.filter((e) => e.tipo !== "llegada").length;
 
   const infoFields = [
     ["Asegurado", live.asegurado],
@@ -528,7 +541,7 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
                         </button>
                       )}
                     </div>
-                    {(live.arribo_lat || geoLoading) && (
+                    {arriboDone && (
                       <BadgeUbicacion
                         arriboLat={live.arribo_lat}
                         arriboLng={live.arribo_lng}

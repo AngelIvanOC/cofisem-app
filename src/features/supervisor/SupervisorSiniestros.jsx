@@ -648,12 +648,13 @@ const DOC_GRUPOS = [
   { key: "danos", tipos: ["danos"], icon: "🔍", label: "Daños" },
 ];
 
-// Grupos que solo aparecen si tienen fotos — ver ModalDetalle.jsx (cabinero,
-// mismo patrón) para la explicación completa de por qué existe el catch-all.
+// "Otros" (catch-all, sin placeholder vacío) — ver ModalDetalle.jsx
+// (cabinero, mismo patrón) para la explicación completa. La foto de
+// llegada (`tipo === "llegada"`) NO entra aquí: ya se muestra aparte junto
+// al ajustador asignado, así que ni se cuenta ni aparece en Evidencias.
 const TIPOS_CORE = new Set(DOC_GRUPOS.flatMap((g) => g.tipos));
 const GRUPOS_EXTRA = [
-  { key: "arribo", tipos: ["llegada"], icon: "📍", label: "Arribo" },
-  { key: "otros",  tipos: null,        icon: "🗂️", label: "Otros"  }, // null = catch-all
+  { key: "otros", tipos: null, icon: "🗂️", label: "Otros" }, // null = catch-all
 ];
 
 function etiquetaParticipanteEvidencia(id) {
@@ -717,21 +718,20 @@ function CarruselEvidencia({ imgs, initialIdx, onClose }) {
   );
 }
 
-function AcordeonParticipanteEvidencia({ id, evidencias, onVerCarrusel }) {
+function AcordeonParticipanteEvidencia({ id, evidencias: evidenciasTodas, onVerCarrusel }) {
   const [abierto, setAbierto] = useState(id === "NA");
   const esNA = id === "NA";
+
+  // La foto de llegada ya se muestra junto al ajustador asignado (arriba en
+  // este mismo panel) — se excluye aquí para no duplicarla.
+  const evidencias = evidenciasTodas.filter((e) => e.tipo !== "llegada");
 
   const gruposCore = DOC_GRUPOS.map((g) => ({
     ...g,
     imgs: evidencias.filter((e) => g.tipos.includes(e.tipo)),
   }));
   const gruposExtra = GRUPOS_EXTRA
-    .map((g) => ({
-      ...g,
-      imgs: g.tipos
-        ? evidencias.filter((e) => g.tipos.includes(e.tipo))
-        : evidencias.filter((e) => !TIPOS_CORE.has(e.tipo) && e.tipo !== "llegada"),
-    }))
+    .map((g) => ({ ...g, imgs: evidencias.filter((e) => !TIPOS_CORE.has(e.tipo)) }))
     .filter((g) => g.imgs.length > 0);
   const grupos = [...gruposCore, ...gruposExtra];
   const totalFotos = evidencias.length;
@@ -1027,7 +1027,8 @@ function ModalDesglose({ s, ajustadores, carga, onClose, onReasignar }) {
                   <div className="flex items-center gap-2">
                     {loadingEvid && <div className="w-3 h-3 border border-gray-300 border-t-gray-500 rounded-full animate-spin" />}
                     <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                      {evidencias.length} foto{evidencias.length !== 1 ? "s" : ""}
+                      {/* La foto de llegada no cuenta aquí — ya se muestra junto al ajustador asignado. */}
+                      {evidencias.filter((e) => e.tipo !== "llegada").length} foto{evidencias.filter((e) => e.tipo !== "llegada").length !== 1 ? "s" : ""}
                     </span>
                   </div>
                 </div>
