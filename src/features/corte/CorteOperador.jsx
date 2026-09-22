@@ -1344,7 +1344,9 @@ export default function CorteOperador({ usuario }) {
                                 ? "Ver fotos del vehículo"
                                 : j === 3
                                   ? "Ver identificación"
-                                  : "Ver documento"
+                                  : j === 5 && r.otro_nota
+                                    ? `Otro: ${r.otro_nota}`
+                                    : "Ver documento"
                             }
                             className="text-amber-600 hover:text-amber-700 font-bold inline-flex"
                           >

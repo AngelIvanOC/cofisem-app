@@ -187,6 +187,7 @@ const FORM_VACIO = {
   identif_reverso_path: null,
   pol_ant_path: null,
   otro_path: null,
+  otro_nota: "",
   acta_constitutiva_path: null,
   poderes_path: null,
   comprobante_domicilio_path: null,
@@ -768,6 +769,7 @@ export default function PoliciasDia({ usuario }) {
             identif_reverso_url: form.identif_reverso_path,
             pol_ant_url: form.pol_ant_path,
             otro_url: form.otro_path,
+            otro_nota: form.otro_path ? form.otro_nota || null : null,
             acta_constitutiva_url: form.acta_constitutiva_path,
             poderes_url: form.poderes_path,
             comprobante_domicilio_url: form.comprobante_domicilio_path,
@@ -1743,6 +1745,8 @@ export default function PoliciasDia({ usuario }) {
                   onFile={(f) => handleDocumentoChange("otro", f)}
                   onVer={() => handleVerDocumento(form.otro_path)}
                   obligatorio={false}
+                  nota={form.otro_nota}
+                  onNotaChange={(v) => setF("otro_nota", v)}
                 />
                 {esPersonaMoral(form.tipo_persona) && (
                   <>

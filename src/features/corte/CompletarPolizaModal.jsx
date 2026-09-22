@@ -118,6 +118,7 @@ const VACIO = {
   identif_reverso_path: null,
   pol_ant_path: null,
   otro_path: null,
+  otro_nota: "",
   acta_constitutiva_path: null,
   poderes_path: null,
   comprobante_domicilio_path: null,
@@ -297,6 +298,12 @@ export function CompletarBadge({ completado, onClick }) {
 
 // Campo reutilizable: adjunta/reemplaza/ve un comprobante (foto o PDF).
 // Exportado — también se usa en el formulario "Nueva póliza" de /polizas.
+// `nota`/`onNotaChange` son opcionales: cuando se pasan, el campo de nota
+// aparece solo (sin switch) en cuanto ya hay un archivo adjunto — a
+// diferencia de FotosVehiculoField, aquí no hace falta marcar nada a mano,
+// el input se abre automáticamente porque la nota siempre acompaña a un
+// archivo ya subido (nunca lo reemplaza). Se usa en "Otro" para poder
+// explicar qué es el documento.
 export function ComprobanteField({
   label,
   path,
@@ -304,60 +311,76 @@ export function ComprobanteField({
   onFile,
   onVer,
   obligatorio = true,
+  nota,
+  onNotaChange,
+  notaPlaceholder = "Explica qué es este documento…",
 }) {
   return (
-    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/70 px-4 py-3 flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <Paperclip className="w-4 h-4 shrink-0 text-gray-400" />
-        <div className="min-w-0">
-          <p className="text-xs font-bold text-gray-600">{label}</p>
-          <p
-            className={`text-[11px] ${path ? "text-emerald-600 font-semibold" : obligatorio ? "text-amber-600" : "text-gray-400"}`}
+    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/70 px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Paperclip className="w-4 h-4 shrink-0 text-gray-400" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-gray-600">{label}</p>
+            <p
+              className={`text-[11px] ${path ? "text-emerald-600 font-semibold" : obligatorio ? "text-amber-600" : "text-gray-400"}`}
+            >
+              {subiendo
+                ? "Subiendo…"
+                : path
+                  ? "✓ Comprobante adjunto"
+                  : obligatorio
+                    ? "Obligatorio — sube foto o PDF"
+                    : "Opcional — sube foto o PDF"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {path && !subiendo && (
+            <button
+              type="button"
+              onClick={onVer}
+              className="text-xs font-bold text-[#1447e6] underline underline-offset-2"
+            >
+              Ver
+            </button>
+          )}
+          <label
+            className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors whitespace-nowrap ${
+              subiendo
+                ? "bg-gray-200 text-gray-400 cursor-wait"
+                : path
+                  ? "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  : "bg-[#1447e6] text-white hover:bg-[#0f36b3]"
+            }`}
           >
-            {subiendo
-              ? "Subiendo…"
-              : path
-                ? "✓ Comprobante adjunto"
-                : obligatorio
-                  ? "Obligatorio — sube foto o PDF"
-                  : "Opcional — sube foto o PDF"}
-          </p>
+            {subiendo ? "..." : path ? "Cambiar" : "Subir"}
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              capture="environment"
+              className="hidden"
+              disabled={subiendo}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) onFile(f);
+              }}
+            />
+          </label>
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {path && !subiendo && (
-          <button
-            type="button"
-            onClick={onVer}
-            className="text-xs font-bold text-[#1447e6] underline underline-offset-2"
-          >
-            Ver
-          </button>
-        )}
-        <label
-          className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors whitespace-nowrap ${
-            subiendo
-              ? "bg-gray-200 text-gray-400 cursor-wait"
-              : path
-                ? "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
-                : "bg-[#1447e6] text-white hover:bg-[#0f36b3]"
-          }`}
-        >
-          {subiendo ? "..." : path ? "Cambiar" : "Subir"}
-          <input
-            type="file"
-            accept="image/*,application/pdf"
-            capture="environment"
-            className="hidden"
-            disabled={subiendo}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) onFile(f);
-            }}
+      {onNotaChange && path && (
+        <div className="mt-2.5">
+          <textarea
+            rows={2}
+            value={nota || ""}
+            onChange={(e) => onNotaChange(e.target.value)}
+            placeholder={notaPlaceholder}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] resize-none"
           />
-        </label>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -784,6 +807,7 @@ export default function CompletarPolizaModal({
       identif_reverso_path: row.identif_reverso_url ?? null,
       pol_ant_path: row.pol_ant_url ?? null,
       otro_path: row.otro_url ?? null,
+      otro_nota: row.otro_nota ?? "",
       acta_constitutiva_path: row.acta_constitutiva_url ?? null,
       poderes_path: row.poderes_url ?? null,
       comprobante_domicilio_path: row.comprobante_domicilio_url ?? null,
@@ -1024,6 +1048,7 @@ export default function CompletarPolizaModal({
         identif_reverso_url: datos.identif_reverso_path,
         pol_ant_url: datos.pol_ant_path,
         otro_url: datos.otro_path,
+        otro_nota: datos.otro_path ? datos.otro_nota || null : null,
         acta_constitutiva_url: datos.acta_constitutiva_path,
         poderes_url: datos.poderes_path,
         comprobante_domicilio_url: datos.comprobante_domicilio_path,
@@ -1776,6 +1801,8 @@ export default function CompletarPolizaModal({
                   onFile={(f) => handleDocumentoChange("otro", f)}
                   onVer={() => handleVerDocumento(form.otro_path)}
                   obligatorio={false}
+                  nota={form.otro_nota}
+                  onNotaChange={(v) => setF("otro_nota", v)}
                 />
                 {esMoral && (
                   <>
