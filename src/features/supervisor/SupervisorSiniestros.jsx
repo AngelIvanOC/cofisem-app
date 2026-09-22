@@ -621,11 +621,39 @@ function TabCostos({ siniestroId, costos, onCostosChange }) {
 // ModalDetalle.jsx: lee siniestro_evidencias (no siniestros_documentos,
 // que ninguna pantalla llena todavía) y se suscribe a Realtime para que
 // las fotos que va subiendo el ajustador aparezcan solas, sin recargar.
+// Grupos fijos que se muestran siempre (con placeholder si están vacíos) —
+// sus listas de `tipos` cubren TODO lo que hoy sube el flujo del ajustador
+// (SeccionEvidencias, NAModulo1/2, TerceroModulo1/2). "vehiculo" agrupa la
+// foto única de Tercero + los 4 vértices de NA; "documentacion" agrupa
+// licencia/identificación/INE/tarjeta de circulación (incluye los nombres
+// legados _frente/_reverso de antes de que se unificaran en una sola caja).
 const DOC_GRUPOS = [
-  { key: "siniestro",     tipos: ["siniestro", "fotos_siniestro"],            icon: "📷", label: "Siniestro"     },
-  { key: "vehiculo",      tipos: ["vehiculo"],                                 icon: "🚗", label: "Vehículo"      },
-  { key: "documentacion", tipos: ["documentacion", "documentos", "licencias"], icon: "📄", label: "Documentación" },
-  { key: "danos",         tipos: ["danos"],                                    icon: "🔍", label: "Daños"         },
+  { key: "siniestro",     tipos: ["siniestro", "fotos_siniestro"], icon: "📷", label: "Siniestro" },
+  {
+    key: "vehiculo", icon: "🚗", label: "Vehículo",
+    tipos: [
+      "vehiculo", "numero_serie",
+      "vertice_frontal_izq", "vertice_frontal_der",
+      "vertice_trasero_izq", "vertice_trasero_der",
+    ],
+  },
+  {
+    key: "documentacion", icon: "📄", label: "Documentación",
+    tipos: [
+      "documentacion", "documentos", "documentacion_general", "licencias",
+      "identificacion_oficial", "ine",
+      "tarjeta_circulacion", "tarjeta_circulacion_frente", "tarjeta_circulacion_reverso",
+    ],
+  },
+  { key: "danos", tipos: ["danos"], icon: "🔍", label: "Daños" },
+];
+
+// Grupos que solo aparecen si tienen fotos — ver ModalDetalle.jsx (cabinero,
+// mismo patrón) para la explicación completa de por qué existe el catch-all.
+const TIPOS_CORE = new Set(DOC_GRUPOS.flatMap((g) => g.tipos));
+const GRUPOS_EXTRA = [
+  { key: "arribo", tipos: ["llegada"], icon: "📍", label: "Arribo" },
+  { key: "otros",  tipos: null,        icon: "🗂️", label: "Otros"  }, // null = catch-all
 ];
 
 function etiquetaParticipanteEvidencia(id) {
@@ -671,7 +699,7 @@ function CarruselEvidencia({ imgs, initialIdx, onClose }) {
         <div className="flex items-center gap-2 mt-3">
           <span className="text-white/50 text-xs">{idx + 1} / {imgs.length}</span>
           <span className="text-white/20 text-xs">·</span>
-          <span className="text-white/40 text-xs capitalize">{imgs[idx].tipo?.replace("_", " ")}</span>
+          <span className="text-white/40 text-xs capitalize">{imgs[idx].tipo?.replace(/_/g, " ")}</span>
         </div>
         {imgs.length > 1 && (
           <div className="flex gap-2 mt-3 overflow-x-auto pb-1 max-w-full">
@@ -693,10 +721,19 @@ function AcordeonParticipanteEvidencia({ id, evidencias, onVerCarrusel }) {
   const [abierto, setAbierto] = useState(id === "NA");
   const esNA = id === "NA";
 
-  const grupos = DOC_GRUPOS.map((g) => ({
+  const gruposCore = DOC_GRUPOS.map((g) => ({
     ...g,
     imgs: evidencias.filter((e) => g.tipos.includes(e.tipo)),
   }));
+  const gruposExtra = GRUPOS_EXTRA
+    .map((g) => ({
+      ...g,
+      imgs: g.tipos
+        ? evidencias.filter((e) => g.tipos.includes(e.tipo))
+        : evidencias.filter((e) => !TIPOS_CORE.has(e.tipo) && e.tipo !== "llegada"),
+    }))
+    .filter((g) => g.imgs.length > 0);
+  const grupos = [...gruposCore, ...gruposExtra];
   const totalFotos = evidencias.length;
 
   return (
