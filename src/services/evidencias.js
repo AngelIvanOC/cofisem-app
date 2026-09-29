@@ -68,8 +68,10 @@ export async function fetchSiniestrosAjustador(ajustadorId) {
         coberturas(nombre)
       )
     `)
+    // Trae también los cerrados: ListaSiniestros los separa con sus
+    // pestañas ("Activos" los oculta, "Todos" los muestra para volver a
+    // descargar sus documentos).
     .eq("ajustador_id", ajustadorId)
-    .not("estatus", "eq", "Cerrado")
     .order("created_at", { ascending: false });
 
   if (error) throw error;

@@ -4,17 +4,22 @@
 //   → Header (shrink-0) — métricas y tabs
 //   → Cards  (flex-1 overflow-y-auto) — scroll aquí
 // ============================================================
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ESTATUS_CLS } from "./shared";
 import { fetchSiniestrosAjustador } from "../../services/evidencias";
 import { getState } from "../../auth";
 import DescargaDocumentosSiniestro from "../../components/siniestros/DescargaDocumentosSiniestro";
+import Paginator from "../../components/Paginator";
+import { usePagination } from "../../hooks/usePagination";
+
+const esCerrado = (s) => s.estatus === "Atendido" || s.estatus === "Cerrado";
 
 export default function ListaSiniestros({ onAtender }) {
   const [tab,        setTab]        = useState("activos");
   const [siniestros, setSiniestros] = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
+  const listaRef = useRef(null);
 
   useEffect(() => {
     const uid = getState().usuario?.id;
@@ -26,14 +31,14 @@ export default function ListaSiniestros({ onAtender }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const esCerrado = (s) => s.estatus === "Atendido" || s.estatus === "Cerrado";
+  const activos   = useMemo(() => siniestros.filter((s) => !esCerrado(s)), [siniestros]);
+  const filtrados = tab === "todos" ? siniestros : activos;
 
-  const filtrados = tab === "todos"
-    ? siniestros
-    : siniestros.filter((s) => !esCerrado(s));
+  const { paginated, page, setPage, totalPages, total: totalFiltrados, pageSize } = usePagination(filtrados);
+  const cambiarTab = (k) => { setTab(k); setPage(1); };
 
   // Métricas dinámicas
-  const total     = siniestros.filter((s) => !esCerrado(s)).length;
+  const total     = activos.length;
   const pendArr   = siniestros.filter((s) => s.estatus === "Pendiente de arribo").length;
   const enProceso = siniestros.filter((s) => s.estatus === "En proceso").length;
 
@@ -57,23 +62,27 @@ export default function ListaSiniestros({ onAtender }) {
           ))}
         </div>
         <div className="flex gap-1 mt-4 bg-gray-100 rounded-xl p-1">
-          {[{ k: "activos", l: "Activos" }, { k: "todos", l: "Todos" }].map((t) => (
+          {[
+            { k: "activos", l: "Activos", n: activos.length },
+            { k: "todos",   l: "Todos",   n: siniestros.length },
+          ].map((t) => (
             <button
               key={t.k}
-              onClick={() => setTab(t.k)}
+              onClick={() => cambiarTab(t.k)}
               className={[
                 "flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all",
                 tab === t.k ? "bg-white text-[#13193a] shadow-sm" : "text-gray-500",
               ].join(" ")}
             >
               {t.l}
+              {!loading && <span className="ml-1 text-[10px] text-gray-400">({t.n})</span>}
             </button>
           ))}
         </div>
       </div>
 
       {/* Cards scrolleables */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div ref={listaRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
 
         {/* Estado carga */}
         {loading && (
@@ -99,13 +108,13 @@ export default function ListaSiniestros({ onAtender }) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
               </svg>
             </div>
-            <p className="text-sm font-semibold text-[#13193a]">Sin siniestros activos</p>
+            <p className="text-sm font-semibold text-[#13193a]">{tab === "todos" ? "Sin siniestros" : "Sin siniestros activos"}</p>
             <p className="text-xs text-gray-400">No tienes casos asignados por el momento.</p>
           </div>
         )}
 
         {/* Lista de siniestros */}
-        {!loading && !error && filtrados.map((s) => {
+        {!loading && !error && paginated.map((s) => {
           const atendido  = esCerrado(s);
           const tieneUbic = !!s.ubicacion;
           const mapsUrl   = tieneUbic
@@ -186,6 +195,18 @@ export default function ListaSiniestros({ onAtender }) {
         })}
 
         <div className="h-4" />
+      </div>
+
+      {/* Paginador fijo abajo — la columna de escritorio es angosta (w-80), va en modo compacto */}
+      <div className="shrink-0">
+        <Paginator
+          page={page}
+          totalPages={totalPages}
+          total={totalFiltrados}
+          pageSize={pageSize}
+          onPage={(p) => { setPage(p); listaRef.current?.scrollTo({ top: 0 }); }}
+          compacto
+        />
       </div>
     </div>
   );
