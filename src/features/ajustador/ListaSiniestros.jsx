@@ -8,6 +8,7 @@ import { useState, useEffect } from "react";
 import { ESTATUS_CLS } from "./shared";
 import { fetchSiniestrosAjustador } from "../../services/evidencias";
 import { getState } from "../../auth";
+import DescargaDocumentosSiniestro from "../../components/siniestros/DescargaDocumentosSiniestro";
 
 export default function ListaSiniestros({ onAtender }) {
   const [tab,        setTab]        = useState("activos");
@@ -116,7 +117,7 @@ export default function ListaSiniestros({ onAtender }) {
               key={s.id}
               className={[
                 "bg-white rounded-2xl border p-4 transition-all",
-                atendido ? "border-gray-100 opacity-60" : "border-gray-200 shadow-sm",
+                atendido ? "border-gray-100 bg-gray-50/60" : "border-gray-200 shadow-sm",
               ].join(" ")}
             >
               <div className="flex items-start justify-between gap-2 mb-3">
@@ -166,6 +167,13 @@ export default function ListaSiniestros({ onAtender }) {
                   </a>
                 ) : null}
               </div>
+
+              {s.estatus === "Cerrado" && (
+                <div className="mb-3">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Volver a descargar</p>
+                  <DescargaDocumentosSiniestro siniestroId={s.id} compacto />
+                </div>
+              )}
 
               <div className="flex items-center gap-1.5 text-xs text-gray-400 pt-2 border-t border-gray-50">
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

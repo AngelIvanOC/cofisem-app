@@ -58,6 +58,9 @@ export async function fetchPaseTallerData(siniestroId) {
     .from("siniestros")
     .select(SEL_PASE_TALLER)
     .eq("id", siniestroId)
+    // Orden estable de terceros: el pase es del primero (mismo que
+    // muestra documentosSiniestro.js en la lista de descargas).
+    .order("id", { referencedTable: "siniestros_terceros", ascending: true })
     .single();
   if (error) throw error;
 

@@ -4,6 +4,7 @@ import PanelAsignar from "./PanelAsignar";
 import { supabase } from "../../../supabaseClient";
 import { fetchEvidencias, getSignedUrl } from "../../../services/evidencias";
 import { useHistorialSiniestro, PASOS_TIMELINE } from "../../../hooks/useHistorialSiniestro";
+import DescargaDocumentosSiniestro from "../../../components/siniestros/DescargaDocumentosSiniestro";
 
 function fmtEtapa(iso) {
   if (!iso) return "Pendiente";
@@ -462,6 +463,14 @@ export default function ModalDetalle({ s, onClose, onAsignar }) {
                   </div>
                 </div>
               </div>
+
+              {/* Archivos generados al cerrar el caso */}
+              {live.estatus === "Cerrado" && (
+                <div>
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Archivos del siniestro</p>
+                  <DescargaDocumentosSiniestro siniestroId={s.id} />
+                </div>
+              )}
 
               {/* Documentos — acordeón por participante */}
               <div>

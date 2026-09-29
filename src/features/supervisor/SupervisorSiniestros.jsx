@@ -22,6 +22,7 @@ import DireccionCascada from "../../shared/components/DireccionCascada";
 import { useHistorialSiniestro, PASOS_TIMELINE } from "../../hooks/useHistorialSiniestro";
 import Paginator from "../../components/Paginator";
 import { usePagination } from "../../hooks/usePagination";
+import DescargaDocumentosSiniestro from "../../components/siniestros/DescargaDocumentosSiniestro";
 
 const MAX_ACTIVOS = 4;
 
@@ -938,6 +939,12 @@ function ModalDesglose({ s, ajustadores, carga, onClose, onReasignar }) {
           {/* ── TAB: INFORMACIÓN ── */}
           {tabActivo === "info" && (
             <div className="space-y-5">
+              {s.estatus === "Cerrado" && (
+                <div>
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Archivos del siniestro</p>
+                  <DescargaDocumentosSiniestro siniestroId={s.id} />
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="space-y-3">
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Datos del siniestro</p>
