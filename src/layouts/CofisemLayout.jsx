@@ -187,7 +187,14 @@ const NAV = {
   ],
 };
 
-NAV.ADMINISTRACION = NAV.ANALISTA;
+NAV.ADMINISTRACION = [
+  ...NAV.ANALISTA,
+  {
+    label: "Reporte de comisiones",
+    path: "/comisiones/reporte",
+    icon: NAV.OPERADOR.find((i) => i.path === "/comisiones").icon,
+  },
+];
 NAV.CABINERO_SINIESTROS = [NAV.ANALISTA[0]];
 NAV.AJUSTADOR = [NAV.ANALISTA[0]];
 NAV.SUPERVISOR_SINIESTROS = [NAV.ANALISTA[0]];

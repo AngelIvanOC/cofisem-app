@@ -28,6 +28,7 @@ const PaseTallerPreview = lazy(() => import("./pages/PaseTallerPreview"));
 const PaseMedicoPreview = lazy(() => import("./pages/PaseMedicoPreview"));
 const DeclaracionPreview = lazy(() => import("./pages/DeclaracionPreview"));
 const CortePreview = lazy(() => import("./pages/CortePreview"));
+const ComisionesPreview = lazy(() => import("./pages/ComisionesPreview"));
 
 // ── Verificación pública de pólizas ──────────────────────────
 const VerificarPoliza = lazy(() => import("./pages/VerificarPoliza"));
@@ -50,6 +51,9 @@ const PagosOperador = lazy(() => import("./features/pagos/PagosOperador"));
 const PagosAnalista = lazy(() => import("./features/pagos/PagosAnalista"));
 const PoliciasDia = lazy(() => import("./features/cofisem/PoliciasDia"));
 const Comisiones = lazy(() => import("./features/cofisem/Comisiones"));
+const ReporteComisiones = lazy(
+  () => import("./features/cofisem/ReporteComisiones"),
+);
 
 // ── VENCIMIENTOS (compartido: administración, analista, operador) ─────
 const Vencimientos = lazy(() => import("./features/vencimientos/Vencimientos"));
@@ -403,6 +407,10 @@ export default function App() {
             element={<DeclaracionPreview />}
           />
           <Route path="/gaman/corte-preview" element={<CortePreview />} />
+          <Route
+            path="/gaman/comisiones-preview"
+            element={<ComisionesPreview />}
+          />
 
           {/* ── Verificación pública de pólizas ── */}
           <Route
@@ -480,6 +488,16 @@ export default function App() {
                 <SoloEncargadoCofisem rolNombre={rolNombre} usuario={usuario}>
                   <Comisiones usuario={usuario} />
                 </SoloEncargadoCofisem>
+              }
+            />
+            <Route
+              path="/comisiones/reporte"
+              element={
+                rolNombre === "ADMINISTRACION" ? (
+                  <ReporteComisiones />
+                ) : (
+                  <Navigate to="/accesos" replace />
+                )
               }
             />
           </Route>
