@@ -825,6 +825,53 @@ export default function CompletarPolizaModal({
     setEndosoAbierto(!!row.endoso_url || !!row.endoso_nota);
   }, [row]);
 
+  // Filas viejas solo traen asegurado_nombre (sin nombre/apellidos
+  // separados). Si es de GAMAN se toman del cliente con el mismo corte que
+  // usa registrarEnCorte() en services/polizas.js; si no, o si falla, el
+  // nombre completo va en "Nombre(s)" para que al menos no salga vacío.
+  useEffect(() => {
+    if (!row) return;
+    const sinPartes =
+      !row.asegurado_nombre_pila &&
+      !row.asegurado_apellido_paterno &&
+      !row.asegurado_apellido_materno;
+    if (!sinPartes || !row.asegurado_nombre) return;
+    let vivo = true;
+    const rellenar = (partes) => {
+      if (!vivo) return;
+      setForm((prev) =>
+        prev.asegurado_nombre_pila ||
+        prev.asegurado_apellido_paterno ||
+        prev.asegurado_apellido_materno
+          ? prev
+          : { ...prev, ...partes },
+      );
+    };
+    const soloNombre = { asegurado_nombre_pila: row.asegurado_nombre };
+    if (!row.poliza_id) {
+      rellenar(soloNombre);
+      return;
+    }
+    supabase
+      .from("polizas")
+      .select("clientes(nombre, apellido)")
+      .eq("id", row.poliza_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        const c = data?.clientes;
+        if (!c?.nombre) return rellenar(soloNombre);
+        const apellidos = (c.apellido || "").trim().split(/\s+/);
+        rellenar({
+          asegurado_nombre_pila: c.nombre.toUpperCase(),
+          asegurado_apellido_paterno: (apellidos[0] || "").toUpperCase(),
+          asegurado_apellido_materno: apellidos.slice(1).join(" ").toUpperCase(),
+        });
+      }, () => rellenar(soloNombre));
+    return () => {
+      vivo = false;
+    };
+  }, [row]);
+
   if (!row) return null;
 
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
