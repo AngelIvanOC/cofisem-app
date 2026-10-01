@@ -31,6 +31,8 @@ import {
 } from "../../services/documentacionPoliza";
 import { obtenerPrimaGaman } from "../../services/primaGaman";
 import { fetchCoberturasActivas } from "../../services/coberturas";
+import { fetchVendedores } from "../../services/vendedores";
+import SelectTypeahead from "../../components/SelectTypeahead";
 import { hoyISO } from "../../utils/fecha";
 
 const n = (v) => parseFloat(v) || 0;
@@ -100,6 +102,7 @@ const VACIO = {
   vigencia_fin: "",
   placas: "",
   num_serie: "",
+  vendedor_id: "",
   vendedor_nombre: "",
   telefono: "",
   prima_anual: "",
@@ -698,6 +701,7 @@ export default function CompletarPolizaModal({
   const [gamanLoading, setGamanLoading] = useState(false);
   const [endosoAbierto, setEndosoAbierto] = useState(false);
   const [coberturasGaman, setCoberturasGaman] = useState([]); // nombres reales, cuando esGaman
+  const [vendedores, setVendedores] = useState([]); // catálogo, cuando no esGaman
   const [carruselFotosAbierto, setCarruselFotosAbierto] = useState(false);
 
   // Póliza real de GAMAN (no capturada a mano en COFISEM): las primas se
@@ -764,6 +768,23 @@ export default function CompletarPolizaModal({
     };
   }, [esGaman]);
 
+  // Catálogo de vendedores para las pólizas capturadas en COFISEM. En las de
+  // GAMAN el vendedor no se edita aquí: viene de GAMAN y lo mantiene al día
+  // el trigger sincronizar_estatus_poliza_cofisem (ver
+  // archivos_apoyo/migracion_sync_vendedor_gaman_cofisem.sql).
+  useEffect(() => {
+    if (!row || esGaman) return;
+    let vivo = true;
+    fetchVendedores()
+      .then((data) => {
+        if (vivo) setVendedores(data ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [row, esGaman]);
+
   useEffect(() => {
     if (!row) return;
     setForm({
@@ -785,6 +806,7 @@ export default function CompletarPolizaModal({
       vigencia_fin: row.vigencia_fin ?? "",
       placas: row.placas ?? "",
       num_serie: row.num_serie ?? "",
+      vendedor_id: row.vendedor_id != null ? String(row.vendedor_id) : "",
       vendedor_nombre: row.vendedor_nombre ?? "",
       telefono: row.telefono ?? "",
       prima_anual: row.prima_anual || "",
@@ -879,6 +901,25 @@ export default function CompletarPolizaModal({
   // Igual que en guardar(): para pólizas de GAMAN las primas y (si aplica)
   // el bloqueo de "cómo se pagó" vienen de GAMAN, no de los inputs. Se usa
   // tanto al guardar como para saber en vivo qué le falta (chequeo abajo).
+  // vendedor_id y vendedor_nombre siempre se guardan juntos — antes el
+  // nombre era texto libre y se desincronizaba del id (que es lo que usa
+  // Comisiones). En pólizas de GAMAN no se mandan: los pone el trigger.
+  // Sin vendedor elegido se respeta lo que ya traía la fila (registros
+  // viejos con un nombre escrito a mano que no está en el catálogo).
+  function vendedorPayload(datos) {
+    if (esGaman) return {};
+    if (!datos.vendedor_id) return {};
+    const id = Number(datos.vendedor_id);
+    if (id === 1) return { vendedor_id: 1, vendedor_nombre: "COFISEM" };
+    const v = vendedores.find((x) => x.id === id);
+    return {
+      vendedor_id: id,
+      vendedor_nombre: v
+        ? `${v.nombre} ${v.apellido || ""}`.trim()
+        : datos.vendedor_nombre || null,
+    };
+  }
+
   function construirDatos() {
     return {
       ...form,
@@ -1077,7 +1118,7 @@ export default function CompletarPolizaModal({
         vigencia_fin: datos.vigencia_fin || null,
         placas: datos.placas || null,
         num_serie: datos.num_serie ? datos.num_serie.toUpperCase() : null,
-        vendedor_nombre: datos.vendedor_nombre || null,
+        ...vendedorPayload(datos),
         telefono: datos.telefono || null,
         prima_anual: n(datos.prima_anual),
         prima_neta: n(datos.prima_neta),
@@ -1513,14 +1554,41 @@ export default function CompletarPolizaModal({
               )}
               <div className="col-span-2 sm:col-span-3">
                 <label className={lblModal}>Vendedor</label>
-                <input
-                  value={form.vendedor_nombre}
-                  onChange={(e) =>
-                    setF("vendedor_nombre", e.target.value.toUpperCase())
-                  }
-                  placeholder="Opcional — nombre del vendedor"
-                  className={inpModal}
-                />
+                {esGaman ? (
+                  <input
+                    value={form.vendedor_nombre || "COFISEM"}
+                    disabled
+                    title="Viene de GAMAN — se cambia desde la póliza en GAMAN"
+                    className={
+                      inpModal + " bg-gray-100 text-gray-500 cursor-not-allowed"
+                    }
+                  />
+                ) : (
+                  <SelectTypeahead
+                    value={form.vendedor_id}
+                    onChange={(e) => setF("vendedor_id", e.target.value)}
+                    className={inpModal}
+                  >
+                    <option value="">
+                      {form.vendedor_nombre && !form.vendedor_id
+                        ? `${form.vendedor_nombre} (no está en el catálogo)`
+                        : "Selecciona un vendedor"}
+                    </option>
+                    <option value="1">COFISEM (sin vendedor)</option>
+                    {vendedores
+                      .filter(
+                        (v) =>
+                          v.id !== 1 &&
+                          (v.activo || String(v.id) === form.vendedor_id),
+                      )
+                      .map((v) => (
+                        <option key={v.id} value={String(v.id)}>
+                          {v.nombre} {v.apellido || ""}
+                          {v.codigo ? ` (${v.codigo})` : ""}
+                        </option>
+                      ))}
+                  </SelectTypeahead>
+                )}
               </div>
               <div>
                 <label className={lblModal}>Teléfono</label>
