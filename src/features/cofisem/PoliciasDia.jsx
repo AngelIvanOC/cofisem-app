@@ -2196,7 +2196,10 @@ export default function PoliciasDia({ usuario }) {
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        {!corteCerrado && (
+                        {/* Las pólizas de GAMAN nunca se borran desde aquí:
+                            su registro viene de GAMAN y borrarlo se llevaría
+                            en cascada sus cuotas, vales y archivos. */}
+                        {!corteCerrado && !p.poliza_id && (
                           <button
                             type="button"
                             title="Eliminar"

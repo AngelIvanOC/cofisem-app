@@ -8,6 +8,7 @@ import {
   eliminarCotizacion,
   fetchPolizasSubsecuentes,
   renovarPoliza,
+  calcularSiguienteRenovacion,
 } from "../../services/polizas";
 import { fetchConfigCostos } from "../../services/configuracion";
 import Swal from "sweetalert2";
@@ -103,18 +104,37 @@ export default function Polizas({ usuario }) {
 
   const renovar = async (p) => {
     const constanciaLabel = p.constancia || p.numero_poliza;
-    const match = constanciaLabel.match(/^(.+)-(\d+)$/);
-    const siguienteSufijo = match
-      ? String(parseInt(match[2], 10) + 1).padStart(2, "0")
-      : "??";
-    const nuevaConstancia = match ? `${match[1]}-${siguienteSufijo}` : "?";
+    // Número real de la renovación (salta las que se cancelaron) o el motivo
+    // por el que no se puede renovar — ver calcularSiguienteRenovacion.
+    // El botón queda en "cargando" desde ya (la consulta tarda un momento)
+    // para que no se le dé doble clic.
+    if (renovandoId) return;
+    setRenovandoId(p.id);
+    let nuevaConstancia, saltadas;
+    try {
+      ({ constancia: nuevaConstancia, saltadas } = await calcularSiguienteRenovacion(p));
+    } catch (e) {
+      setRenovandoId(null);
+      Swal.fire({
+        icon: "info",
+        title: "No se puede renovar",
+        text: e.message,
+        confirmButtonColor: "#13193a",
+      });
+      return;
+    }
+    const avisoSaltadas = saltadas.length
+      ? `<br/><br/><span style="font-size:12px;color:#6b7280">Se salta ${saltadas
+          .map((s) => `<b>${s.constancia}</b> (${s.estatus.toLowerCase()})`)
+          .join(", ")} — queda como registro.</span>`
+      : "";
 
     const result = await Swal.fire({
       title: "Renovar póliza",
       html: `¿Deseas iniciar la renovación de <b>${constanciaLabel}</b>?<br/><br/>
              Se creará <b>${nuevaConstancia}</b>. Podrás revisar y ajustar<br/>
              los datos antes de confirmar. La póliza anterior continuará<br/>
-             vigente hasta su fecha de vencimiento.`,
+             vigente hasta su fecha de vencimiento.${avisoSaltadas}`,
       icon: "question",
       showCancelButton: true,
       confirmButtonColor: "#13193a",
@@ -122,9 +142,11 @@ export default function Polizas({ usuario }) {
       confirmButtonText: "Continuar",
       cancelButtonText: "Cancelar",
     });
-    if (!result.isConfirmed) return;
+    if (!result.isConfirmed) {
+      setRenovandoId(null);
+      return;
+    }
 
-    setRenovandoId(p.id);
     try {
       const { id: nuevaId, constancia } = await renovarPoliza(
         p.id,
@@ -285,7 +307,7 @@ export default function Polizas({ usuario }) {
 
   const borrarCotizacion = async (id) => {
     try {
-      await eliminarCotizacion(id);
+      await eliminarCotizacion(id, usuario?.id);
       setCotizaciones((cs) => cs.filter((c) => c.id !== id));
     } catch (e) {
       console.error("Error eliminando cotización:", e.message);

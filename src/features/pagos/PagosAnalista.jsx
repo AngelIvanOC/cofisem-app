@@ -104,7 +104,7 @@ function cuotasDePoliza(p) {
 
 // Mismos 3 estatus que GAMAN ya trata como "bloqueada" en su propia
 // sección de Pagos (operador/Pagos.jsx, analista/AnalistaPagos.jsx).
-const ESTATUS_GAMAN_BLOQUEADOS = ["CANCELADA", "VENCIDA", "ANULADA"];
+const ESTATUS_GAMAN_BLOQUEADOS = ["CANCELADA", "VENCIDA", "ANULADA", "ELIMINADA"];
 
 function agruparPorPoliza(polizas) {
   const arr = polizas.map((p) => {

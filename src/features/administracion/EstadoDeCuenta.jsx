@@ -423,6 +423,8 @@ function PanelEstadoCuenta({ tab }) {
         .select(
           "id, constancia, created_at, forma_pago, oficina_id, creado_por, oficinas(id, nombre), coberturas(nombre, prima_total), usuarios!polizas_creado_por_fkey(id_muestra, nombre)",
         )
+        // ELIMINADA = antes se borraba físicamente; no debe contar.
+        .neq("estatus", "ELIMINADA")
         .gte("created_at", `${r.s}T00:00:00`)
         .lte("created_at", `${r.e}T23:59:59`)
         .order("created_at", { ascending: true });

@@ -2010,7 +2010,7 @@ export default function AdminPolizas() {
       title: "Eliminar póliza incompleta",
       html: `Se eliminará <b>${p.constancia || p.numero_poliza}</b> (${
         p.estatus === "RENOVACION" ? "renovación" : "subsecuente"
-      } a medias).<br/>Esta acción no se puede deshacer.`,
+      } a medias).<br/>Quedará marcada como <b>ELIMINADA</b>: deja de aparecer en las listas, pero su registro y su número se conservan.`,
       showCancelButton: true,
       confirmButtonColor: "#dc2626",
       cancelButtonColor: "#6b7280",
@@ -2020,7 +2020,7 @@ export default function AdminPolizas() {
     if (!isConfirmed) return;
     setEliminandoId(p.id);
     try {
-      await eliminarPolizaIncompleta(p.id);
+      await eliminarPolizaIncompleta(p.id, usuario?.id);
       setIncompletas((xs) => xs.filter((x) => x.id !== p.id));
       Swal.fire({
         icon: "success",

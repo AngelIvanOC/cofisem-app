@@ -157,7 +157,7 @@ export async function buscarPolizaParaSiniestro(valor) {
     const { data } = await supabase
       .from("polizas").select(SEL_POLIZA)
       .ilike("num_serie", v)
-      .not("estatus", "in", '("GUARDADO","SUBSECUENTE")')
+      .not("estatus", "in", '("GUARDADO","SUBSECUENTE","ELIMINADA")')
       .order("fecha_inicio", { ascending: false })
       .limit(1).maybeSingle();
     rawPoliza = data;
@@ -166,7 +166,7 @@ export async function buscarPolizaParaSiniestro(valor) {
     const { data } = await supabase
       .from("polizas").select(SEL_POLIZA)
       .ilike("placas", v)
-      .not("estatus", "in", '("GUARDADO","SUBSECUENTE")')
+      .not("estatus", "in", '("GUARDADO","SUBSECUENTE","ELIMINADA")')
       .order("fecha_inicio", { ascending: false })
       .limit(1).maybeSingle();
     rawPoliza = data;
@@ -187,7 +187,7 @@ export async function buscarPolizaParaSiniestro(valor) {
     const { data } = await supabase
       .from("polizas").select(SEL_POLIZA)
       .or(`constancia.ilike.%${upper}%,numero_poliza.ilike.%${upper}%`)
-      .not("estatus", "in", '("GUARDADO","SUBSECUENTE")')
+      .not("estatus", "in", '("GUARDADO","SUBSECUENTE","ELIMINADA")')
       .order("fecha_inicio", { ascending: false })
       .limit(1).maybeSingle();
     rawPoliza = data;

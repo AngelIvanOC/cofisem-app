@@ -112,7 +112,7 @@ function generarConstancia(fecha, seqGlobal, seqVehiculo, oficinaId) {
 // CANCELADA es permanente y nunca se sobreescribe.
 export function calcularEstatus(dbEstatus, fechaFin) {
   // Estatus definitivos puestos explícitamente en la BD — nunca sobreescribir
-  if (dbEstatus === 'CANCELADA' || dbEstatus === 'VENCIDA' || dbEstatus === 'ANULADA') {
+  if (dbEstatus === 'CANCELADA' || dbEstatus === 'VENCIDA' || dbEstatus === 'ANULADA' || dbEstatus === 'ELIMINADA') {
     return dbEstatus;
   }
   // Para los demás, calcular dinámicamente según fecha_fin
@@ -165,9 +165,20 @@ export async function generarCuotasPoliza(polizaId, formaPago, primaTotal, fecha
       fecha_vencimiento: d.toISOString().split('T')[0],
     });
   }
-  // Limpiar cuotas previas de esta póliza antes de regenerar (evita acumulación
-  // si se recalcula la forma de pago o se reactiva un folio antes cancelado).
-  await supabase.from('pagos').delete().eq('poliza_id', polizaId);
+  // Nunca se regeneran cuotas encima de pagos reales: si la póliza ya tiene
+  // algún pago cobrado (ADEUDO/PAGADO) se detiene — borrarlos perdería el
+  // registro del cobro. Solo se limpian cuotas PENDIENTE de un intento previo.
+  const { data: previas, error: ePrev } = await supabase
+    .from('pagos').select('id, estatus').eq('poliza_id', polizaId);
+  if (ePrev) throw ePrev;
+  if ((previas ?? []).some((p) => p.estatus !== 'PENDIENTE')) {
+    throw new Error('Esta póliza ya tiene pagos registrados; no se pueden regenerar sus cuotas.');
+  }
+  if ((previas ?? []).length > 0) {
+    const { error: eDel } = await supabase
+      .from('pagos').delete().eq('poliza_id', polizaId).eq('estatus', 'PENDIENTE');
+    if (eDel) throw eDel;
+  }
   const { error } = await supabase.from('pagos').insert(cuotas);
   if (error) throw error;
 }
@@ -289,14 +300,31 @@ export async function verificarConstanciaExistente(constancia) {
   return data ?? null;
 }
 
-// ── Eliminar borrador ─────────────────────────────────────────────────────
-export async function eliminarCotizacion(id) {
-  const { error } = await supabase
+// ── Borrado lógico ────────────────────────────────────────────────────────
+// Una póliza NUNCA se borra físicamente de la BD (un borrado arrastraba en
+// cascada su historial de endosos, sus pagos y su registro de corte — así
+// se perdió la primera emisión de 01250100001097-02). "Eliminar" = marcarla
+// ELIMINADA: deja de verse en todas las listas (todas filtran por estatus
+// válidos) pero queda el registro y su número sigue ocupado. La BD además
+// rechaza cualquier DELETE sobre polizas
+// (archivos_apoyo/migracion_polizas_sin_borrado_fisico.sql).
+async function marcarPolizaEliminada(id, { soloSiEstatus = null, eliminadoPor = null } = {}) {
+  let q = supabase
     .from('polizas')
-    .delete()
-    .eq('id', id)
-    .eq('estatus', 'GUARDADO');
+    .update({
+      estatus:         'ELIMINADA',
+      actualizado_por: eliminadoPor || null,
+      actualizado_at:  new Date().toISOString(),
+    })
+    .eq('id', id);
+  if (soloSiEstatus) q = q.in('estatus', soloSiEstatus);
+  const { error } = await q;
   if (error) throw error;
+}
+
+// ── Eliminar borrador ─────────────────────────────────────────────────────
+export async function eliminarCotizacion(id, eliminadoPor = null) {
+  await marcarPolizaEliminada(id, { soloSiEstatus: ['GUARDADO'], eliminadoPor });
 }
 
 // ── Crear póliza subsecuente (constancia reservada) ───────────────────────
@@ -339,8 +367,9 @@ export async function crearPolizaSubsecuente({ polizaOriginalId, clienteId, cobe
 
     return { id: nueva.id, constancia };
   } catch (err) {
+    // Se marca ELIMINADA (no se borra): queda rastro del intento fallido.
     try {
-      await supabase.from('polizas').delete().eq('id', nueva.id);
+      await marcarPolizaEliminada(nueva.id, { eliminadoPor: creadoPor });
     } catch {}
     throw err;
   }
@@ -388,10 +417,11 @@ export async function fetchPolizasIncompletas() {
 }
 
 // ── Eliminar una póliza incompleta (solo administración) ─────────────────
-// Borra la fila huérfana y limpia dependencias que normalmente están vacías
-// en una póliza a medias (cuotas, registro de corte). Nunca toca una póliza
-// ya emitida o cancelada.
-export async function eliminarPolizaIncompleta(id) {
+// Borrado LÓGICO (estatus ELIMINADA), nunca físico. Además se niega si la
+// póliza ya tuvo cualquier movimiento (endosos, pagos, registro de corte):
+// eso significa que no es "una renovación a medias" sino una póliza que sí
+// existió — p. ej. una emitida y cancelada — y su historial debe quedar.
+export async function eliminarPolizaIncompleta(id, eliminadoPor = null) {
   const { data: p, error: e0 } = await supabase
     .from('polizas')
     .select('estatus')
@@ -403,15 +433,18 @@ export async function eliminarPolizaIncompleta(id) {
       'Solo se pueden eliminar pólizas incompletas (renovación o subsecuente).',
     );
   }
-  // Limpieza defensiva — en una póliza a medias estas tablas suelen estar vacías.
-  try { await supabase.from('pagos').delete().eq('poliza_id', id); } catch {}
-  try { await supabase.from('polizas_cofisem').delete().eq('poliza_id', id); } catch {}
-  const { error } = await supabase
-    .from('polizas')
-    .delete()
-    .eq('id', id)
-    .in('estatus', ['RENOVACION', 'SUBSECUENTE']);
-  if (error) throw error;
+  const [hist, pags, cof] = await Promise.all([
+    supabase.from('polizas_historial').select('id', { count: 'exact', head: true }).eq('poliza_id', id),
+    supabase.from('pagos').select('id', { count: 'exact', head: true }).eq('poliza_id', id),
+    supabase.from('polizas_cofisem').select('id', { count: 'exact', head: true }).eq('poliza_id', id),
+  ]);
+  for (const r of [hist, pags, cof]) if (r.error) throw r.error;
+  if ((hist.count ?? 0) + (pags.count ?? 0) + (cof.count ?? 0) > 0) {
+    throw new Error(
+      'Esta póliza ya tiene movimientos (endosos, pagos o registro en el corte), así que no es una captura a medias: no se puede eliminar.',
+    );
+  }
+  await marcarPolizaEliminada(id, { soloSiEstatus: ['RENOVACION', 'SUBSECUENTE'], eliminadoPor });
 }
 
 // ── Emitir póliza ──────────────────────────────────────────────────────────
@@ -561,8 +594,17 @@ export async function emitirPoliza({
 
   if (polizaId) {
     // Detectar si es SUBSECUENTE o RENOVACION (constancia pre-asignada — no regenerar)
-    const { data: existente } = await supabase
+    const { data: existente, error: eEx } = await supabase
       .from('polizas').select('estatus, notas').eq('id', polizaId).single();
+    if (eEx) throw eEx;
+    // Solo se puede "emitir encima" de un borrador, una subsecuente o una
+    // renovación a medias. Nunca de una póliza ya emitida, cancelada,
+    // anulada o eliminada — eso sobrescribiría su registro.
+    if (!['GUARDADO', 'SUBSECUENTE', 'RENOVACION'].includes(existente?.estatus)) {
+      throw new Error(
+        `No se puede emitir sobre esta póliza (estatus ${existente?.estatus ?? 'desconocido'}).`,
+      );
+    }
     const esSubsecuente = existente?.estatus === 'SUBSECUENTE';
     const esRenovacion  = existente?.estatus === 'RENOVACION';
 
@@ -626,10 +668,9 @@ export async function emitirPoliza({
 
   // A partir de aquí, si algo falla y la póliza se acaba de insertar en esta
   // misma llamada (esInsercionNueva), el registro con folio provisional
-  // "COF-<timestamp>" quedaría huérfano en la BD (sin constancia ni cuotas)
-  // y un reintento del usuario generaría un duplicado. Por eso se envuelve
-  // en try/catch: ante cualquier error se borra ese registro a medio hacer
-  // antes de propagar el error, dejando la BD limpia para el reintento.
+  // "COF-<timestamp>" quedaría huérfano y visible. Por eso se envuelve en
+  // try/catch: ante cualquier error se marca ELIMINADA (nunca se borra —
+  // ver marcarPolizaEliminada) antes de propagar el error.
   try {
     // Si se proporcionó número manual: usarlo directamente, sin generar constancia
     if (numeroManual) {
@@ -674,7 +715,7 @@ export async function emitirPoliza({
       // Si el propio rollback falla (p.ej. sin conexión), no debe tapar el
       // error original — igual se propaga para que la operadora lo vea.
       try {
-        await supabase.from('polizas').delete().eq('id', newId);
+        await marcarPolizaEliminada(newId, { eliminadoPor: creadoPor });
       } catch {}
     }
     throw err;
@@ -682,7 +723,8 @@ export async function emitirPoliza({
 }
 
 // ── Renovar póliza (incrementa el sufijo de la constancia) ───────────────
-// Ejemplo: 01261100000159-01 → 01261100000159-02
+// Ejemplo: 01261100000159-01 → 01261100000159-02 (o -03 si la -02 se canceló;
+// ver calcularSiguienteRenovacion)
 export async function renovarPoliza(polizaId, creadoPor) {
   // 1. Obtener póliza original
   const { data: original, error: e0 } = await supabase
@@ -692,25 +734,10 @@ export async function renovarPoliza(polizaId, creadoPor) {
     .single();
   if (e0) throw e0;
 
-  // 2. Parsear constancia y calcular siguiente sufijo
-  const constanciaOrig = original.constancia ?? original.numero_poliza ?? '';
-  const match = constanciaOrig.match(/^(.+)-(\d+)$/);
-  if (!match) throw new Error('Formato de constancia inválido para renovación');
-  const base           = match[1];
-  const siguienteSufijo = String(parseInt(match[2], 10) + 1).padStart(2, '0');
-  const nuevaConstancia = `${base}-${siguienteSufijo}`;
-
-  // 3. Verificar que la nueva constancia no exista.
-  // Si ya existe pero está CANCELADA (p.ej. una renovación previa mal capturada
-  // y cancelada), se reutiliza ese registro en vez de bloquear la renovación.
-  const { data: duplicado } = await supabase
-    .from('polizas')
-    .select('id, estatus')
-    .eq('constancia', nuevaConstancia)
-    .maybeSingle();
-  if (duplicado && duplicado.estatus !== 'CANCELADA') {
-    throw new Error(`La póliza ${nuevaConstancia} ya existe`);
-  }
+  // 2-3. Número de la renovación: el siguiente al MÁS ALTO que exista para
+  // esta póliza (nunca se reutiliza un número, ni de una cancelada). Lanza
+  // error si ya hay una renovación activa o en curso.
+  const { constancia: nuevaConstancia } = await calcularSiguienteRenovacion(original);
 
   // 4. Calcular nuevas fechas (inicio = día siguiente al vencimiento original)
   const fechaInicioNueva = (() => {
@@ -725,7 +752,6 @@ export async function renovarPoliza(polizaId, creadoPor) {
   })();
 
   // 5. Insertar nueva póliza copiando los datos del original
-  // (o actualizar el registro CANCELADO reutilizado, ya que `constancia` es UNIQUE en BD)
   const notasOrig = (() => {
     try { return JSON.parse(original.notas ?? '{}'); } catch { return {}; }
   })();
@@ -765,19 +791,77 @@ export async function renovarPoliza(polizaId, creadoPor) {
     notas:              JSON.stringify({ ...notasOrig, renovacionDeId: polizaId }),
   };
 
-  let nueva, e1;
-  if (duplicado) {
-    // Las cuotas de la captura anterior (cancelada) se limpian en generarCuotasPoliza
-    // al completar esta renovación.
-    ({ data: nueva, error: e1 } = await supabase
-      .from('polizas').update(datosRenovacion).eq('id', duplicado.id).select('id').single());
-  } else {
-    ({ data: nueva, error: e1 } = await supabase
-      .from('polizas').insert(datosRenovacion).select('id').single());
+  // Siempre un registro NUEVO — nunca se sobrescribe una póliza existente
+  // (antes se reutilizaba la -02 cancelada y se perdía su historial).
+  const { data: nueva, error: e1 } = await supabase
+    .from('polizas').insert(datosRenovacion).select('id').single();
+  if (e1) {
+    if (e1.code === '23505') {
+      throw new Error(`El número ${nuevaConstancia} acaba de ocuparse. Vuelve a intentar la renovación.`);
+    }
+    throw e1;
   }
-  if (e1) throw e1;
 
   return { id: nueva.id, constancia: nuevaConstancia };
+}
+
+// Estatus de una renovación que ya "no cuenta" (no impide volver a renovar).
+const ESTATUS_SIN_VIGOR = ['CANCELADA', 'ANULADA', 'ELIMINADA'];
+
+// ── Siguiente número de renovación ────────────────────────────────────────
+// Regla: la renovación toma el sufijo SIGUIENTE AL MÁS ALTO que exista para
+// esa base, contando canceladas, anuladas y eliminadas — así la cancelada
+// queda como registro. Ej.: -01 vencida, -02 cancelada → la nueva es -03.
+// Bloquea si ya existe una renovación posterior que sigue en vigor (ya se
+// renovó) o una a medias (RENOVACION) — hay que terminarla o eliminarla.
+// `poliza` puede ser el id o el objeto con { id, constancia, numero_poliza }.
+// Se usa también en la pantalla para mostrar el número antes de confirmar.
+export async function calcularSiguienteRenovacion(poliza) {
+  let original = poliza;
+  if (typeof poliza !== 'object') {
+    const { data, error } = await supabase
+      .from('polizas').select('id, constancia, numero_poliza').eq('id', poliza).single();
+    if (error) throw error;
+    original = data;
+  }
+  const constanciaOrig = original.constancia ?? original.numero_poliza ?? '';
+  const match = constanciaOrig.match(/^(.+)-(\d+)$/);
+  if (!match) throw new Error('Formato de constancia inválido para renovación');
+  const base = match[1];
+  const sufijoOrig = parseInt(match[2], 10);
+
+  const { data: hermanas, error } = await supabase
+    .from('polizas')
+    .select('id, constancia, estatus')
+    .like('constancia', `${base}-%`);
+  if (error) throw error;
+
+  const versiones = (hermanas ?? [])
+    .map((h) => {
+      const m = (h.constancia ?? '').match(/^(.+)-(\d+)$/);
+      return m && m[1] === base ? { ...h, sufijo: parseInt(m[2], 10) } : null;
+    })
+    .filter(Boolean);
+
+  const posteriores = versiones.filter((v) => v.sufijo > sufijoOrig);
+  const aMedias = posteriores.find((v) => v.estatus === 'RENOVACION');
+  if (aMedias) {
+    throw new Error(
+      `Ya hay una renovación a medias de esta póliza (${aMedias.constancia}). Termínala desde "Subsecuentes y renovaciones" o pide a administración que la elimine.`,
+    );
+  }
+  const enVigor = posteriores.find((v) => !ESTATUS_SIN_VIGOR.includes(v.estatus));
+  if (enVigor) {
+    throw new Error(`Esta póliza ya fue renovada como ${enVigor.constancia}.`);
+  }
+
+  const maxSufijo = Math.max(sufijoOrig, ...versiones.map((v) => v.sufijo));
+  const constancia = `${base}-${String(maxSufijo + 1).padStart(2, '0')}`;
+  // Renovaciones previas que no prosperaron (se saltan sus números).
+  const saltadas = posteriores
+    .sort((a, b) => a.sufijo - b.sufijo)
+    .map((v) => ({ constancia: v.constancia, estatus: v.estatus }));
+  return { constancia, saltadas };
 }
 
 // ── Cargar póliza completa por ID (para generar PDF) ──────────────────────

@@ -62,11 +62,22 @@ function estatusEfectivoCuota(estatus, fechaVencimiento) {
 // La constancia sigue el formato BASE-NN; renovar incrementa el sufijo
 // (ver renovarPoliza en services/polizas.js). Si no matchea el formato,
 // no se puede determinar la sucesora y se asume pendiente.
-function siguienteConstancia(constancia) {
+// Posibles renovaciones posteriores de una constancia (-01 → -02 … -07).
+// Se revisan varias, no solo la +1: si una renovación se cancela, la
+// siguiente toma el número que sigue (-01 → -02 cancelada → -03).
+const MAX_SALTOS_RENOVACION = 6;
+function posterioresConstancia(constancia) {
   const m = (constancia || "").match(/^(.+)-(\d+)$/);
-  if (!m) return null;
-  return `${m[1]}-${String(parseInt(m[2], 10) + 1).padStart(2, "0")}`;
+  if (!m) return [];
+  const n = parseInt(m[2], 10);
+  return Array.from(
+    { length: MAX_SALTOS_RENOVACION },
+    (_, i) => `${m[1]}-${String(n + 1 + i).padStart(2, "0")}`,
+  );
 }
+
+// Una renovación posterior ya no cuenta si se canceló, anuló o eliminó.
+const SIN_VIGOR = ["CANCELADA", "ANULADA", "ELIMINADA"];
 
 function RenovacionBadge({ estado }) {
   if (estado === "RENOVADA") {
@@ -133,7 +144,7 @@ export default function AnalistaRenovaciones() {
     const candidatas = (data ?? []).map((p) => ({
       ...p,
       estatus: calcularEstatus(p.estatus, p.fecha_fin),
-      _siguiente: siguienteConstancia(p.constancia || p.numero_poliza),
+      _posteriores: posterioresConstancia(p.constancia || p.numero_poliza),
     }));
 
     if (candidatas.length === 0) {
@@ -142,17 +153,24 @@ export default function AnalistaRenovaciones() {
       return;
     }
 
-    const siguientesUnicas = [...new Set(candidatas.map((p) => p._siguiente).filter(Boolean))];
+    const posterioresUnicas = [...new Set(candidatas.flatMap((p) => p._posteriores))];
     const ids = candidatas.map((p) => p.id);
 
-    const [sucesorasRes, pagosRes] = await Promise.all([
-      siguientesUnicas.length > 0
-        ? supabase.from("polizas").select("id, constancia, estatus").in("constancia", siguientesUnicas)
-        : Promise.resolve({ data: [] }),
+    // En bloques para no pasarse del largo de la URL.
+    const bloques = [];
+    for (let i = 0; i < posterioresUnicas.length; i += 150) {
+      bloques.push(posterioresUnicas.slice(i, i + 150));
+    }
+    const [pagosRes, ...sucesorasRes] = await Promise.all([
       supabase.from("pagos").select("poliza_id, estatus, fecha_vencimiento").in("poliza_id", ids),
+      ...bloques.map((b) =>
+        supabase.from("polizas").select("id, constancia, estatus").in("constancia", b),
+      ),
     ]);
 
-    const mapaSucesoras = new Map((sucesorasRes.data ?? []).map((s) => [s.constancia, s]));
+    const mapaSucesoras = new Map(
+      sucesorasRes.flatMap((r) => r.data ?? []).map((s) => [s.constancia, s]),
+    );
     const cuotasPorPoliza = new Map();
     (pagosRes.data ?? []).forEach((c) => {
       const arr = cuotasPorPoliza.get(c.poliza_id) ?? [];
@@ -162,8 +180,10 @@ export default function AnalistaRenovaciones() {
 
     setPolizas(
       candidatas.map((p) => {
-        const sucesora = p._siguiente ? mapaSucesoras.get(p._siguiente) : null;
-        const renovada = !!sucesora && sucesora.estatus !== "CANCELADA" && sucesora.estatus !== "ANULADA";
+        const renovada = p._posteriores.some((c) => {
+          const s = mapaSucesoras.get(c);
+          return !!s && !SIN_VIGOR.includes(s.estatus);
+        });
         const cuotas = cuotasPorPoliza.get(p.id) ?? [];
         const tieneAdeudo = cuotas.some((c) => {
           const e = estatusEfectivoCuota(c.estatus, c.fecha_vencimiento);

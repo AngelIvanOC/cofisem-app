@@ -137,7 +137,9 @@ export default function VerificarPoliza() {
     supabase
       .rpc("verificar_poliza_publica", { p_constancia: constancia })
       .then(async ({ data, error }) => {
-        if (error || !data) {
+        // Una póliza ELIMINADA (captura a medias dada de baja) nunca existió
+        // para el público.
+        if (error || !data || data.estatus === "ELIMINADA") {
           setNoFound(true);
         } else {
           setPoliza({ ...data, estatus: calcularEstatus(data.estatus, data.fecha_fin) });
