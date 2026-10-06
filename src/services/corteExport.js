@@ -213,8 +213,8 @@ function notaAFila(nt) {
     _esNota: true,
     numero_poliza: nt?.polizas?.constancia || nt?.polizas?.numero_poliza,
     fecha_emision: nt?.cambiado_at,
-    // Los endosos manuales de COFISEM llevan folio propio; los endosos
-    // A/C que vienen de polizas_historial (GAMAN) no tienen, quedan vacíos.
+    // Folio propio del endoso: el manual de COFISEM, o el que COFISEM le
+    // adjunta a un endoso de GAMAN (endosos_gaman_cofisem). Vacío si no hay.
     folio: nt?.folio,
     observaciones: nt?.notas,
   };

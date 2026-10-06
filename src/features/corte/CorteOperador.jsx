@@ -22,7 +22,7 @@ import {
   getDocumentoSignedUrl,
 } from "../../services/documentacionPoliza";
 import { exportarCorteExcel } from "../../services/corteExport";
-import { fetchEndososManualesDia } from "../../services/endososCofisem";
+import { fetchEndososManualesDia, aplanarAdjuntoGaman } from "../../services/endososCofisem";
 import { verComprobantePago } from "../../services/comprobantesPagoCofisem";
 import { hoyISO } from "../../utils/fecha";
 import CompletarPolizaModal, {
@@ -351,14 +351,14 @@ export default function CorteOperador({ usuario }) {
       let query = supabase
         .from("polizas_historial")
         .select(
-          "id, poliza_id, notas, cambiado_at, polizas!inner(numero_poliza, constancia, oficina_id)",
+          "id, poliza_id, notas, cambiado_at, polizas!inner(numero_poliza, constancia, oficina_id), endosos_gaman_cofisem(folio, archivo_url)",
         )
         .in("tipo_endoso", ["A", "C"]);
       if (usuario?.oficina_id)
         query = query.eq("polizas.oficina_id", usuario.oficina_id);
       const { data, error } = await query;
       if (error) throw error;
-      const delDia = (data ?? []).filter(
+      const delDia = (data ?? []).map(aplanarAdjuntoGaman).filter(
         (r) =>
           r.cambiado_at &&
           new Date(r.cambiado_at).toLocaleDateString("en-CA") === fechaCorte,
@@ -1167,7 +1167,7 @@ export default function CorteOperador({ usuario }) {
                     </td>
                     <td colSpan={12} className="px-3 py-2.5 text-left italic text-gray-500">
                       {nt.notas}
-                      {nt._esManual && nt.archivo_url && (
+                      {nt.archivo_url && (
                         <button
                           type="button"
                           onClick={() => verComprobantePago(nt.archivo_url)}

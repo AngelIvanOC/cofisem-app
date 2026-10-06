@@ -4,7 +4,7 @@ import { Paperclip, Inbox, CheckCircle2, Loader2 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import { verComprobante as abrirComprobante } from "../../services/comprobantesPago";
 import { verComprobantePago } from "../../services/comprobantesPagoCofisem";
-import { fetchEndososManualesDia } from "../../services/endososCofisem";
+import { fetchEndososManualesDia, aplanarAdjuntoGaman } from "../../services/endososCofisem";
 import { hoyISO } from "../../utils/fecha";
 
 const n = (v) => parseFloat(v) || 0;
@@ -217,7 +217,7 @@ export default function CorteAnalista({ usuario }) {
         // aparte en su propio flujo.
         supabase
           .from("polizas_historial")
-          .select("id, poliza_id, notas, cambiado_at, cambiado_por, polizas(numero_poliza, constancia, oficina_id)")
+          .select("id, poliza_id, notas, cambiado_at, cambiado_por, polizas(numero_poliza, constancia, oficina_id), endosos_gaman_cofisem(folio, archivo_url)")
           .in("tipo_endoso", ["A", "C"]),
         // Cuotas efectivamente cobradas ese día (fecha_recibido = fecha).
         // Incluye la cuota 1 solo cuando fue un cobro tardío de un saldo que
@@ -247,7 +247,7 @@ export default function CorteAnalista({ usuario }) {
       // forma de nota de endoso, así el Excel/PDF los toman sin cambios.
       const manuales = await fetchEndososManualesDia(fecha, null).catch(() => []);
       setNotasEndosoDia([
-        ...(notas ?? []).filter(
+        ...(notas ?? []).map(aplanarAdjuntoGaman).filter(
           (n) => n.cambiado_at && new Date(n.cambiado_at).toLocaleDateString("en-CA") === fecha,
         ),
         ...manuales,
@@ -772,7 +772,7 @@ export default function CorteAnalista({ usuario }) {
                                 </td>
                                 <td colSpan={13} className="px-3 py-2.5 text-gray-500 italic">
                                   {nt.notas}
-                                  {nt._esManual && nt.archivo_url && (
+                                  {nt.archivo_url && (
                                     <button
                                       type="button"
                                       onClick={() => verComprobantePago(nt.archivo_url)}

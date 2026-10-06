@@ -90,3 +90,43 @@ export async function fetchEndososManualesDia(fechaCorte, oficinaId) {
     notas: row.descripcion ?? "",
   }));
 }
+
+// ── Endosos de pólizas GAMAN ───────────────────────────────────
+// Los endosos de una póliza de GAMAN SOLO se generan en GAMAN
+// (polizas_historial tipo A/C) y ya llegan solos al corte con su fecha y
+// su nota. COFISEM solo les agrega FOLIO y ARCHIVO, en su propia tabla
+// endosos_gaman_cofisem (1 fila por endoso; fecha/oficina las pone un
+// trigger). Ver archivos_apoyo/migracion_endosos_gaman_adjuntos.sql.
+export async function fetchEndososGamanPoliza(polizaGamanId) {
+  const { data, error } = await supabase
+    .from("polizas_historial")
+    .select("id, tipo_endoso, notas, cambiado_at, endosos_gaman_cofisem(folio, archivo_url)")
+    .eq("poliza_id", polizaGamanId)
+    .in("tipo_endoso", ["A", "C"])
+    .order("cambiado_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(aplanarAdjuntoGaman);
+}
+
+export async function guardarAdjuntoEndosoGaman(historialId, { folio, archivoUrl, capturadoPor }) {
+  const { error } = await supabase.from("endosos_gaman_cofisem").upsert(
+    {
+      historial_id: historialId,
+      folio: folio || null,
+      archivo_url: archivoUrl || null,
+      capturado_por: capturadoPor ?? null,
+    },
+    { onConflict: "historial_id" },
+  );
+  if (error) throw error;
+}
+
+// El embed 1-a-1 llega como objeto (o arreglo según la versión de
+// PostgREST); se sube folio/archivo_url al nivel de la nota para que el
+// corte, el Excel y el PDF los lean igual que en un endoso manual.
+export function aplanarAdjuntoGaman(row) {
+  const adj = Array.isArray(row.endosos_gaman_cofisem)
+    ? row.endosos_gaman_cofisem[0]
+    : row.endosos_gaman_cofisem;
+  return { ...row, folio: adj?.folio ?? null, archivo_url: adj?.archivo_url ?? null };
+}
