@@ -191,7 +191,8 @@ function FilaComision({ c }) {
     asegurado: pc.asegurado_nombre || "—",
     primaAnual: "—",
     primaNeta: "—",
-    cuota: "—",
+    // La comisión se paga por cuota: indica de cuál es este vale.
+    cuota: c.num_cuota ? String(c.num_cuota) : "—",
     pago: `-${$(c.monto)}`,
     cobertura: "—",
     placas: "—",

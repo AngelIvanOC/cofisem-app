@@ -231,7 +231,7 @@ export default function CorteAnalista({ usuario }) {
         supabase
           .from("comisiones_cofisem")
           .select(
-            "id, folio, monto, fecha_pago, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, oficina_id)",
+            "id, folio, monto, fecha_pago, num_cuota, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, oficina_id)",
           )
           .eq("fecha_pago", fecha),
       ]);
@@ -728,7 +728,7 @@ export default function CorteAnalista({ usuario }) {
                                   <td className="px-3 py-2.5 font-semibold text-red-500/80 whitespace-nowrap">{pc.aseguradora || "—"}</td>
                                   <td className="px-3 py-2.5 font-mono font-bold text-red-500/80 whitespace-nowrap">
                                     {pc.numero_poliza || "—"}
-                                    <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-200/50 text-red-600 align-middle whitespace-nowrap">comisión</span>
+                                    <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-200/50 text-red-600 align-middle whitespace-nowrap">{c.num_cuota ? `comisión · cuota ${c.num_cuota}` : "comisión"}</span>
                                   </td>
                                   <td className="px-3 py-2.5 font-mono text-red-400/80">{c.folio || "—"}</td>
                                   <td className="px-3 py-2.5 text-red-500/80 whitespace-nowrap">{pc.asegurado_nombre || "—"}</td>

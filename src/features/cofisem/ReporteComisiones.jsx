@@ -10,9 +10,8 @@
 //   - % de comisión que se pagará a cada vendedor.
 //   - Gastos de administración.
 // La comisión que sí se muestra es el vale capturado en /comisiones
-// (comisiones_cofisem), que hoy es UNO POR PÓLIZA: se muestra en la fila
-// de la primera cuota de la póliza; el "%" es ese vale entre la prima
-// neta de esa cuota.
+// (comisiones_cofisem), uno POR CUOTA (UNIQUE poliza_cofisem_id +
+// num_cuota); el "%" es ese vale entre la prima neta de la cuota.
 // ============================================================
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
@@ -83,10 +82,12 @@ function importesCuotaGaman(p, c, filasConfig) {
 // vendedor_id = 1 es "COFISEM" (venta de oficina, sin vendedor específico).
 const VENDEDOR_COFISEM = 1;
 
-const comisionDe = (p) =>
-  (Array.isArray(p.comisiones_cofisem)
-    ? p.comisiones_cofisem[0]
-    : p.comisiones_cofisem) ?? null;
+const comisionesDe = (p) =>
+  Array.isArray(p.comisiones_cofisem)
+    ? p.comisiones_cofisem
+    : p.comisiones_cofisem
+      ? [p.comisiones_cofisem]
+      : [];
 
 function rangoMes(offset = 0) {
   const hoy = new Date();
@@ -239,7 +240,7 @@ export default function ReporteComisiones() {
                 coberturas(nombre, prima_neta, prima_total, regla_pago, prima_base),
                 clientes(rfc)
               ),
-              comisiones_cofisem(monto, fecha_pago),
+              comisiones_cofisem(num_cuota, monto, fecha_pago),
               pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
             `,
             )
@@ -269,8 +270,7 @@ export default function ReporteComisiones() {
     const porVendedor = new Map();
     for (const p of polizas) {
       const cuotas = cuotasDePoliza(p);
-      const primeraCuota = Math.min(...cuotas.map((c) => c.num_cuota ?? 1));
-      const comision = comisionDe(p);
+      const comisiones = comisionesDe(p);
       for (const c of cuotas) {
         const info = c._info;
         const cobrada = info.bucket === "RECIBIDO" || info.bucket === "APLICADO";
@@ -287,7 +287,9 @@ export default function ReporteComisiones() {
             : n(c.prima_neta) > 0
               ? n(c.prima_neta)
               : null;
-        const llevaComision = c.num_cuota === primeraCuota && n(comision?.monto) > 0;
+        // Vale de ESTA cuota (la comisión se paga por cuota).
+        const comision = comisiones.find((x) => x.num_cuota === c.num_cuota);
+        const llevaComision = n(comision?.monto) > 0;
         const comisionMonto = llevaComision ? n(comision.monto) : null;
 
         const key = p.vendedor_id ?? `txt:${p.vendedor_nombre ?? ""}`;

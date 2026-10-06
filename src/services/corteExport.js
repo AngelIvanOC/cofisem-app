@@ -183,7 +183,7 @@ const IDX_ULTIMA = COLUMNAS.length - 1;
 // columna que en pantalla se reutiliza para mostrar el monto en negativo).
 const CLAVES_COMISION = new Set([
   "no", "no2", "aseguradora", "numero_poliza", "fecha_emision", "folio",
-  "vendedor_nombre", "asegurado_nombre", "prima_primer_pago",
+  "vendedor_nombre", "asegurado_nombre", "prima_primer_pago", "num_cuota_pago",
 ]);
 
 function comisionAFila(c) {
@@ -198,6 +198,8 @@ function comisionAFila(c) {
     vendedor_nombre: pc.vendedor_nombre,
     asegurado_nombre: pc.asegurado_nombre,
     prima_primer_pago: -n(c?.monto),
+    // La comisión se paga por cuota: indica de cuál es este vale.
+    num_cuota_pago: c?.num_cuota ?? null,
   };
 }
 

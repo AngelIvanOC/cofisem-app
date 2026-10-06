@@ -329,7 +329,7 @@ export default function CorteOperador({ usuario }) {
       let query = supabase
         .from("comisiones_cofisem")
         .select(
-          "id, folio, monto, fecha_pago, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, creado_por, oficina_id)",
+          "id, folio, monto, fecha_pago, num_cuota, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, creado_por, oficina_id)",
         )
         .eq("fecha_pago", fechaCorte);
       if (usuario?.oficina_id)
@@ -1082,7 +1082,7 @@ export default function CorteOperador({ usuario }) {
                       <td className="px-3 py-2.5 text-center whitespace-nowrap font-mono font-bold text-red-500/80">
                         {pc.numero_poliza || "—"}
                         <span className="ml-1.5 inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-200/50 text-red-600 align-middle whitespace-nowrap">
-                          comisión
+                          {c.num_cuota ? `comisión · cuota ${c.num_cuota}` : "comisión"}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-center text-red-400/80 whitespace-nowrap">
