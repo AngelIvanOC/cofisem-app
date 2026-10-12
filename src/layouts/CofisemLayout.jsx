@@ -194,6 +194,21 @@ NAV.ADMINISTRACION = [
     path: "/comisiones/reporte",
     icon: NAV.OPERADOR.find((i) => i.path === "/comisiones").icon,
   },
+  {
+    label: "Config. de comisiones",
+    path: "/comisiones/configuracion",
+    icon: (
+      <svg
+        className="w-[18px] h-[18px]"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 5L5 19M6.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zm11 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+      </svg>
+    ),
+  },
 ];
 NAV.CABINERO_SINIESTROS = [NAV.ANALISTA[0]];
 NAV.AJUSTADOR = [NAV.ANALISTA[0]];

@@ -56,7 +56,8 @@ function valor(col, v) {
   if (v == null || v === "") return "—";
   if (col.tipo === "dinero") return $(v);
   if (col.tipo === "pct") return `${n(v).toFixed(2)}%`;
-  if (col.tipo === "fecha") return fmtFecha(v);
+  if (col.tipo === "fecha")
+    return /^d{4}-d{2}-d{2}$/.test(String(v)) ? fmtFecha(v) : String(v);
   return String(v);
 }
 

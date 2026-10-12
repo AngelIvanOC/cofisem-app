@@ -34,6 +34,7 @@ import { fetchCoberturasActivas } from "../../services/coberturas";
 import { fetchVendedores } from "../../services/vendedores";
 import SelectTypeahead from "../../components/SelectTypeahead";
 import { hoyISO } from "../../utils/fecha";
+import { TIPOS_VEHICULO } from "../cofisem/comisionesCalculo";
 
 const n = (v) => parseFloat(v) || 0;
 
@@ -62,18 +63,9 @@ const DIVISOR_PAGO = {
   CUATRIMESTRAL: 3,
   "4 PARCIALES": 4,
 };
-const TIPO_OPT = [
-  "AUTO",
-  "TAXI",
-  "COLECTIVO",
-  "APP",
-  "PICKUP",
-  "CAMION",
-  "EQUIPO PESADO",
-  "MOTO",
-  "CUATRIMOTO",
-  "OTRO",
-];
+// Catálogo único de "Tipo de vehículo" — define el % de comisión de las
+// aseguradoras externas (ver comisionesCalculo.js).
+const TIPO_OPT = TIPOS_VEHICULO;
 
 // Coberturas "amplia"/"limitada" exigen foto del vehículo además de la
 // identificación.
@@ -194,7 +186,7 @@ const lblModal =
 // documentación, porque esos datos sencillamente no existen aquí. Pero
 // el tipo de pago (cómo se pagó esta cuota) SÍ aplica igual que a
 // cualquier otra póliza — se captura aquí mismo, en el mismo formulario.
-export function faltantesCompletado(f, { registroParcial = false } = {}) {
+export function faltantesCompletado(f, { registroParcial = false, esGaman = false } = {}) {
   const amplLim = esAmpliaOLimitada(f.cobertura);
   const esMoral = f.tipo_persona === "MORAL";
   const grupoMinimo = amplLim
@@ -204,6 +196,9 @@ export function faltantesCompletado(f, { registroParcial = false } = {}) {
   const detalle = {
     folio: !(f.folio && f.folio.trim()),
     cobertura: !(f.cobertura && f.cobertura.trim()),
+    // Las externas cobran comisión según el tipo de vehículo (GAMAN según
+    // su cobertura) — por eso se pide también en registro parcial.
+    tipo: !esGaman && !TIPOS_VEHICULO.includes(f.tipo),
     vigenciaFin: !registroParcial && !f.vigencia_fin,
     placas: !registroParcial && !(f.placas && f.placas.trim()),
     primas: !registroParcial
@@ -242,6 +237,7 @@ export function faltantesCompletado(f, { registroParcial = false } = {}) {
   const labels = {
     folio: "Folio",
     cobertura: "Cobertura",
+    tipo: "Tipo de vehículo (de la lista — define el % de comisión del vendedor)",
     vigenciaFin: "Vigencia fin",
     placas: "Placas",
     primas: registroParcial
@@ -939,6 +935,7 @@ export default function CompletarPolizaModal({
 
   const chequeo = faltantesCompletado(construirDatos(), {
     registroParcial: esRegistroParcial,
+    esGaman,
   });
   // Los avisos rojos solo se activan después de intentar "Completar" — no
   // deben estorbar mientras el operador todavía está llenando el formulario.
@@ -1073,6 +1070,7 @@ export default function CompletarPolizaModal({
     const datos = construirDatos();
     const chk = faltantesCompletado(datos, {
       registroParcial: esRegistroParcial,
+      esGaman,
     });
     if (completar && !chk.completo) {
       setIntentoCompletar(true);
@@ -1161,6 +1159,18 @@ export default function CompletarPolizaModal({
       if (error) throw error;
       onSaved(data);
     } catch (e) {
+      // Candado de primas (BD): la comisión del primer pago ya se pagó —
+      // se muestra el motivo tal cual.
+      if (/ya no se puede cambiar/i.test(e?.message || "")) {
+        await Swal.fire({
+          icon: "warning",
+          title: "No se puede cambiar la prima",
+          text: e.message,
+          confirmButtonText: "Entendido",
+          confirmButtonColor: "#1447e6",
+        });
+        return;
+      }
       // El caso más común de error aquí es haber cambiado "¿A qué corte
       // se registra esta póliza?" a un día cuyo corte ya está cerrado:
       // la política RLS de polizas_cofisem (WITH CHECK … NOT
@@ -1407,9 +1417,11 @@ export default function CompletarPolizaModal({
                     </div>
                   </>
                 )}
-                {!esRegistroParcial && (
+                {!esGaman && (
                   <div>
-                    <label className={lblModal}>Tipo</label>
+                    <label className={lblModal}>
+                      Tipo de vehículo <span className="text-red-400">*</span>
+                    </label>
                     <select
                       value={form.tipo}
                       onChange={(e) => setF("tipo", e.target.value)}

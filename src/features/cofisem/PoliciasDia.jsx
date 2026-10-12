@@ -35,6 +35,7 @@ import SelectTypeahead from "../../components/SelectTypeahead";
 import ModalNuevoVendedor from "../operador/components/ModalNuevoVendedor";
 import ModalEndososPoliza from "./ModalEndososPoliza";
 import { hoyISO } from "../../utils/fecha";
+import { TIPOS_VEHICULO } from "./comisionesCalculo";
 
 const HOY_ISO = hoyISO();
 const HOY_LABEL = new Date().toLocaleDateString("es-MX", {
@@ -138,18 +139,9 @@ function calcularPrimerPago(primaAnual, formaPago) {
   return (anual / divisor).toFixed(2);
 }
 
-const TIPO_OPT = [
-  "AUTO",
-  "TAXI",
-  "COLECTIVO",
-  "APP",
-  "PICKUP",
-  "CAMION",
-  "EQUIPO PESADO",
-  "MOTO",
-  "CUATRIMOTO",
-  "OTRO",
-];
+// Catálogo único de "Tipo de vehículo" — define el % de comisión de las
+// aseguradoras externas (ver comisionesCalculo.js).
+const TIPO_OPT = TIPOS_VEHICULO;
 
 const FORM_VACIO = {
   aseguradora: "",
@@ -170,7 +162,8 @@ const FORM_VACIO = {
   vendedor_id: null,
   placas: "",
   num_serie: "",
-  tipo: "AUTO",
+  // Sin valor por defecto: elegirlo a conciencia (define el % de comisión).
+  tipo: "",
   prima_anual: "",
   prima_neta: "",
   prima_primer_pago: "",
@@ -691,7 +684,8 @@ export default function PoliciasDia({ usuario }) {
             vendedor_nombre: vendedorNombre,
             placas: null,
             num_serie: null,
-            tipo: null,
+            // El tipo sí se captura en registro parcial: define la comisión.
+            tipo: form.tipo || null,
             autorizacion: form.autorizacion || null,
             observaciones: form.observaciones || null,
             fecha_corte: fechaCorteSel,
@@ -1454,23 +1448,26 @@ export default function PoliciasDia({ usuario }) {
                       className={inpCls}
                     />
                   </div>
-                  <div>
-                    <label className={lblCls}>
-                      Tipo de vehículo <span className="text-red-400">*</span>
-                    </label>
-                    <select
-                      value={form.tipo}
-                      required
-                      onChange={(e) => setF("tipo", e.target.value)}
-                      className={inpCls}
-                    >
-                      {TIPO_OPT.map((o) => (
-                        <option key={o}>{o}</option>
-                      ))}
-                    </select>
-                  </div>
                 </>
               )}
+              {/* Tipo de vehículo: obligatorio en ambos modos — define el %
+                  de comisión del vendedor (aseguradoras externas). */}
+              <div>
+                <label className={lblCls}>
+                  Tipo de vehículo <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={form.tipo}
+                  required
+                  onChange={(e) => setF("tipo", e.target.value)}
+                  className={inpCls}
+                >
+                  <option value="">Selecciona…</option>
+                  {TIPO_OPT.map((o) => (
+                    <option key={o}>{o}</option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className={lblCls}>
                   Uso{" "}

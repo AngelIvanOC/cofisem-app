@@ -29,10 +29,9 @@ import { supabase } from "../../supabaseClient";
 import { hoyISO } from "../../utils/fecha";
 import { cuotasDePoliza } from "../pagos/cuotasCofisem";
 import {
-  construirPolizaRecibo,
-  calcularImportesRecibo,
-  mapCuota,
-} from "../../utils/recibo";
+  cargarContextoComisiones,
+  calcularComisionCuota,
+} from "./comisionesCalculo";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) =>
@@ -50,34 +49,6 @@ const fmt = (d) =>
 // IVA): 625.00 → 86.21 de IVA, igual que en los recibos. Solo para
 // pólizas que no son de GAMAN — las de GAMAN usan el desglose del recibo.
 const ivaIncluido = (total) => Math.round((n(total) * 0.16 / 1.16) * 100) / 100;
-
-// Mismo criterio que fetchConfigCostos(fecha) (services/configuracion.js),
-// pero sobre todas las filas ya cargadas, para no pedir el config una vez
-// por póliza: para cada clave, el valor más reciente vigente a esa fecha.
-function configParaFecha(filasConfig, fecha) {
-  const dia = fecha ?? hoyISO();
-  const config = {};
-  for (const row of filasConfig) {
-    if (row.vigente_desde > dia) continue;
-    if (!(row.clave in config)) config[row.clave] = Number(row.valor);
-  }
-  return config;
-}
-
-// Cuota ligada a un pago de GAMAN: GAMAN solo guarda el monto del pago,
-// así que la prima neta/total/IVA se desglosan con la MISMA fórmula del
-// recibo oficial (utils/recibo.js), igual que primaGaman.js al completar
-// en /corte y RegistrarCobroModal al cobrar una cuota subsecuente.
-function importesCuotaGaman(p, c, filasConfig) {
-  if (!c.pago_gaman_id || !c.pago_gaman || !p.gaman) return null;
-  const cfg = configParaFecha(filasConfig, p.gaman.fecha_inicio);
-  const polizaObj = construirPolizaRecibo(p.gaman, cfg);
-  const cuota = mapCuota(
-    { ...c.pago_gaman, num_cuota: c.num_cuota },
-    (c.num_cuota ?? 1) - 1,
-  );
-  return calcularImportesRecibo(polizaObj, cuota);
-}
 
 // vendedor_id = 1 es "COFISEM" (venta de oficina, sin vendedor específico).
 const VENDEDOR_COFISEM = 1;
@@ -131,7 +102,9 @@ function filaExport(f) {
     comisionPct: f.comisionPct,
     gastosAdmin: null,
     iva: f.iva,
-    fechaComision: f.comisionFecha,
+    // Fecha en que se pagó el vale, o "AÚN NO CAPTURADO" si es el monto
+    // calculado pendiente de pagar.
+    fechaComision: f.comisionEstimada ? "AÚN NO CAPTURADO" : f.comisionFecha,
   };
 }
 
@@ -194,7 +167,7 @@ export default function ReporteComisiones() {
   const [vendedores, setVendedores] = useState([]);
   const [oficinas, setOficinas] = useState([]);
   const [polizas, setPolizas] = useState([]);
-  const [filasConfig, setFilasConfig] = useState([]);
+  const [ctx, setCtx] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
 
@@ -202,20 +175,19 @@ export default function ReporteComisiones() {
     Promise.all([
       supabase.from("vendedores").select("id, nombre, apellido").order("nombre"),
       supabase.from("oficinas").select("id, nombre").order("nombre"),
-      supabase
-        .from("configuracion_costos")
-        .select("clave, valor, vigente_desde")
-        .order("vigente_desde", { ascending: false }),
-    ]).then(([v, o, cfg]) => {
-      const error = v.error || o.error || cfg.error;
-      if (error) {
-        setErrorMsg(error.message);
-        return;
-      }
-      setVendedores(v.data ?? []);
-      setOficinas(o.data ?? []);
-      setFilasConfig(cfg.data ?? []);
-    });
+      cargarContextoComisiones(),
+    ])
+      .then(([v, o, contexto]) => {
+        const error = v.error || o.error;
+        if (error) {
+          setErrorMsg(error.message);
+          return;
+        }
+        setVendedores(v.data ?? []);
+        setOficinas(o.data ?? []);
+        setCtx(contexto);
+      })
+      .catch((e) => setErrorMsg(e.message));
   }, []);
 
   useEffect(() => {
@@ -229,7 +201,7 @@ export default function ReporteComisiones() {
             .select(
               `
               id, poliza_id, oficina_id, aseguradora, numero_poliza, vigencia_inicio,
-              fecha_emision, fecha_corte, asegurado_nombre, cobertura, tipo, num_serie,
+              fecha_emision, fecha_corte, asegurado_nombre, cobertura, tipo, num_serie, created_at,
               forma_pago, prima_anual, prima_primer_pago, prima_primer_pago_neta,
               efectivo, cheque, tdc, pol_pend_pago, registro_parcial, num_cuota_pago,
               comprobante_cheque_url, comprobante_tdc_url,
@@ -240,7 +212,7 @@ export default function ReporteComisiones() {
                 coberturas(nombre, prima_neta, prima_total, regla_pago, prima_base),
                 clientes(rfc)
               ),
-              comisiones_cofisem(num_cuota, monto, fecha_pago),
+              comisiones_cofisem(num_cuota, monto, fecha_pago, porcentaje, origen),
               pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
             `,
             )
@@ -268,6 +240,7 @@ export default function ReporteComisiones() {
   // cuya fecha de pago cae en el rango; agrupadas por vendedor.
   const todosGrupos = useMemo(() => {
     const porVendedor = new Map();
+    if (!ctx) return [];
     for (const p of polizas) {
       const cuotas = cuotasDePoliza(p);
       const comisiones = comisionesDe(p);
@@ -278,19 +251,18 @@ export default function ReporteComisiones() {
         if (desde && info.fecha < desde) continue;
         if (hasta && info.fecha > hasta) continue;
 
-        const gaman = importesCuotaGaman(p, c, filasConfig);
-        const primaTotal = gaman ? gaman.total : n(info.primaTotal);
-        const primaNeta = gaman
-          ? gaman.primaNeta
-          : info.primaNeta != null && n(info.primaNeta) > 0
-            ? n(info.primaNeta)
-            : n(c.prima_neta) > 0
-              ? n(c.prima_neta)
-              : null;
-        // Vale de ESTA cuota (la comisión se paga por cuota).
+        // Mismo cálculo que /comisiones (comisionesCalculo.js).
+        const calc = calcularComisionCuota(p, c, ctx);
+        const primaTotal = n(calc.primaTotal);
+        const primaNeta = calc.primaNeta;
+        // Vale de ESTA cuota (la comisión se paga por cuota). Si aún no se
+        // captura, se muestra el monto calculado como "aún no capturado"
+        // (solo para vendedores reales; COFISEM no lleva comisión).
         const comision = comisiones.find((x) => x.num_cuota === c.num_cuota);
         const llevaComision = n(comision?.monto) > 0;
-        const comisionMonto = llevaComision ? n(comision.monto) : null;
+        const conVendedor = p.vendedor_id != null && p.vendedor_id !== VENDEDOR_COFISEM;
+        const estimada = !llevaComision && conVendedor && calc.monto != null;
+        const comisionMonto = llevaComision ? n(comision.monto) : estimada ? calc.monto : null;
 
         const key = p.vendedor_id ?? `txt:${p.vendedor_nombre ?? ""}`;
         if (!porVendedor.has(key)) {
@@ -309,10 +281,14 @@ export default function ReporteComisiones() {
           primaTotal,
           primaNeta,
           comisionMonto,
-          comisionPct:
-            comisionMonto != null && primaNeta ? (comisionMonto / primaNeta) * 100 : null,
+          comisionPct: llevaComision
+            ? (comision.porcentaje != null
+                ? Number(comision.porcentaje)
+                : primaNeta ? (comisionMonto / primaNeta) * 100 : null)
+            : estimada ? calc.porcentaje : null,
           comisionFecha: llevaComision ? comision.fecha_pago : null,
-          iva: gaman ? gaman.iva : ivaIncluido(primaTotal),
+          comisionEstimada: estimada,
+          iva: calc.iva != null ? calc.iva : ivaIncluido(primaTotal),
         });
       }
     }
@@ -341,7 +317,7 @@ export default function ReporteComisiones() {
       return ra - rb || a.nombre.localeCompare(b.nombre);
     });
     return arr;
-  }, [polizas, filasConfig, desde, hasta]);
+  }, [polizas, ctx, desde, hasta]);
 
   // "Excluir COFISEM" oculta las ventas de oficina (vendedor_id = 1) en
   // pantalla, totales y exportaciones.
@@ -790,16 +766,29 @@ function TablaVendedor({ grupo }) {
                   <td className={`${td} text-right text-gray-600`}>
                     {f.primaNeta != null ? $(f.primaNeta) : vacio}
                   </td>
-                  <td className={`${td} text-right font-bold text-emerald-700`}>
+                  <td
+                    className={`${td} text-right font-bold ${f.comisionEstimada ? "text-amber-600" : "text-emerald-700"}`}
+                    title={f.comisionEstimada ? "Calculado por el sistema — aún no se captura el vale" : undefined}
+                  >
                     {f.comisionMonto != null ? $(f.comisionMonto) : vacio}
                   </td>
                   <td className={`${td} text-right text-gray-600`}>
-                    {f.comisionPct != null ? `${f.comisionPct.toFixed(2)}%` : vacio}
+                    {f.comisionPct != null
+                      ? `${Number(f.comisionPct).toLocaleString("es-MX", { maximumFractionDigits: 3 })}%`
+                      : vacio}
                   </td>
                   <td className={`${td} text-right`}>{vacio}</td>
                   <td className={`${td} text-right text-gray-600`}>{$(f.iva)}</td>
                   <td className={`${td} text-gray-500`}>
-                    {f.comisionFecha ? fmt(f.comisionFecha) : vacio}
+                    {f.comisionEstimada ? (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                        AÚN NO CAPTURADO
+                      </span>
+                    ) : f.comisionFecha ? (
+                      fmt(f.comisionFecha)
+                    ) : (
+                      vacio
+                    )}
                   </td>
                 </tr>
               );

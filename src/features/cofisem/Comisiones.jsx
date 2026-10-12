@@ -1,23 +1,22 @@
 // ============================================================
 // src/features/cofisem/Comisiones.jsx
-// Captura la comisión (vale) de un vendedor POR CADA CUOTA COBRADA de las
-// pólizas que él vendió (decisión del cliente 2026-10-05: se paga por
-// pago, no un solo vale por póliza). Se captura aparte del formulario de
-// la póliza porque normalmente se calcula días después del cobro. Solo
-// aplican pólizas con un vendedor real (vendedor_id distinto de NULL y
-// distinto de 1=COFISEM, que es "sin vendedor específico").
+// Vales de comisión del vendedor, UNO POR CADA PAGO (cuota) de las pólizas
+// que vendió. Solo pólizas con vendedor real (vendedor_id distinto de NULL
+// y de 1=COFISEM, "sin vendedor").
 //
-// La tabla va UNA FILA POR PÓLIZA (como /pagos): los puntos de "Cuotas"
-// dicen cuáles ya tienen vale. "Capturar vale" abre un modal en dos pasos:
-// 1) elegir la cuota, 2) el formulario del vale de esa cuota.
+// Cada pago aparece desde que se crea la póliza. El MONTO lo calcula el
+// sistema (comisionesCalculo.js): % de la regla × prima neta de ESE pago.
+// Un pago solo se puede capturar cuando ya se cobró y tiene prima total y
+// neta; entonces la encargada solo agrega folio, fecha de pago y
+// comprobante. El monto queda fijo (se guarda con su % y prima neta).
 //
-// El vale se guarda en su propia tabla (comisiones_cofisem, UNIQUE
-// poliza_cofisem_id + num_cuota) en vez de vivir en polizas_cofisem/
-// pagos_cofisem — eso permite seguir editándolo aunque el corte del día
-// del cobro ya esté cerrado. Se liga por num_cuota (no por FK a
-// pagos_cofisem) porque la cuota 1 de pólizas que no son de GAMAN no tiene
-// fila en pagos_cofisem. "Cobrada" y su fecha salen de la misma lógica que
-// /pagos (cuotasCofisem.js).
+//   · Pólizas anteriores a comisiones_auto_desde a las que les falta algún
+//     dato: se capturan a mano, como antes (origen MANUAL).
+//   · Monto distinto al calculado: se pide a administración una "solicitud
+//     de monto manual"; si la aprueba, se captura con ese monto (SOLICITUD).
+//
+// La tabla va UNA FILA POR PÓLIZA (como /pagos); el modal es en dos pasos:
+// 1) elegir el pago, 2) capturar su vale (o pedir monto manual).
 // ============================================================
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
@@ -30,6 +29,7 @@ import {
   ChevronLeft,
   Pencil,
   Paperclip,
+  Lock,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
@@ -44,6 +44,12 @@ import { hoyISO } from "../../utils/fecha";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 import { cuotasDePoliza } from "../pagos/cuotasCofisem";
+import {
+  SELECT_POLIZA_COMISION,
+  cargarContextoComisiones,
+  calcularComisionCuota,
+  esEsquemaAutomatico,
+} from "./comisionesCalculo";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) =>
@@ -56,83 +62,113 @@ const fmt = (d) =>
         year: "numeric",
       })
     : "—";
+const pctTxt = (p) =>
+  `${Number(p).toLocaleString("es-MX", { maximumFractionDigits: 3 })}%`;
 
 const FILTROS = [
-  { k: "PENDIENTE", label: "Pendientes" },
+  { k: "PENDIENTE", label: "Por capturar" },
   { k: "CAPTURADO", label: "Al corriente" },
   { k: "TODAS", label: "Todas" },
 ];
 
-const comisionesDe = (p) =>
-  Array.isArray(p.comisiones_cofisem)
-    ? p.comisiones_cofisem
-    : p.comisiones_cofisem
-      ? [p.comisiones_cofisem]
-      : [];
+const arreglo = (v) => (Array.isArray(v) ? v : v ? [v] : []);
 
-const tieneVale = (c) => n(c.comision?.monto) > 0;
+// Cómo se puede capturar el vale de un pago.
+//   CAPTURADA  ya tiene vale.
+//   AUTO       monto calculado por el sistema (lo normal).
+//   SOLICITUD  administración aprobó un monto manual.
+//   MANUAL     póliza del esquema anterior a la que le falta algún dato.
+//   EN_REVISION hay una solicitud de monto manual sin resolver: se espera
+//              a administración antes de capturar.
+//   BLOQUEADA  aún no se puede (falta cobro, prima, tipo o regla).
+function modoCaptura(calc, comision, aprobada, esAuto, pendiente) {
+  if (comision) return "CAPTURADA";
+  if (!calc.cobrada) return "BLOQUEADA";
+  if (pendiente) return "EN_REVISION";
+  if (aprobada) return "SOLICITUD";
+  if (calc.estado === "LISTA") return "AUTO";
+  if (!esAuto) return "MANUAL";
+  return "BLOQUEADA";
+}
+const CAPTURABLE = ["AUTO", "SOLICITUD", "MANUAL"];
 
-// Todas las cuotas de la póliza (cobradas o no — las no cobradas se
-// muestran para dar contexto, pero no aceptan vale), cada una con su vale.
-function agruparPoliza(p) {
-  const comisiones = comisionesDe(p);
+function agruparPoliza(p, ctx) {
+  const comisiones = arreglo(p.comisiones_cofisem);
+  const solicitudes = arreglo(p.comision_solicitudes).sort((a, b) =>
+    (b.created_at ?? "").localeCompare(a.created_at ?? ""),
+  );
+  const esAuto = esEsquemaAutomatico(p, ctx.autoDesde);
   const cuotas = cuotasDePoliza(p)
     .sort((a, b) => a.num_cuota - b.num_cuota)
-    .map((c) => ({
-      numCuota: c.num_cuota,
-      cobrada:
-        (c._info.bucket === "RECIBIDO" || c._info.bucket === "APLICADO") &&
-        !!c._info.fecha,
-      fechaCobro: c._info.fecha,
-      monto: c._info.primaTotal,
-      comision: comisiones.find((x) => x.num_cuota === c.num_cuota) ?? null,
-    }));
-  const cobradas = cuotas.filter((c) => c.cobrada);
-  const sinVale = cobradas.filter((c) => !tieneVale(c));
+    .map((c) => {
+      const calc = calcularComisionCuota(p, c, ctx);
+      const comision = comisiones.find((x) => x.num_cuota === c.num_cuota) ?? null;
+      const deCuota = solicitudes.filter((s) => s.num_cuota === c.num_cuota);
+      const pendiente = deCuota.find((s) => s.estatus === "PENDIENTE") ?? null;
+      const aprobada = deCuota.find((s) => s.estatus === "APROBADA") ?? null;
+      const rechazada =
+        !pendiente && !aprobada ? (deCuota.find((s) => s.estatus === "RECHAZADA") ?? null) : null;
+      return {
+        numCuota: c.num_cuota,
+        calc,
+        comision,
+        pendiente,
+        aprobada,
+        rechazada,
+        modo: modoCaptura(calc, comision, aprobada, esAuto, pendiente),
+      };
+    });
+  const porCapturar = cuotas.filter((c) => CAPTURABLE.includes(c.modo));
+  const cobradas = cuotas.filter((c) => c.calc.cobrada);
   return {
     poliza: p,
+    esAuto,
     cuotas,
+    porCapturar,
     cobradas,
-    sinVale,
+    conVale: cuotas.filter((c) => c.comision).length,
     totalVales: cuotas.reduce((s, c) => s + n(c.comision?.monto), 0),
-    conVale: cuotas.filter(tieneVale).length,
     ultimoCobro:
       cobradas
-        .map((c) => c.fechaCobro)
+        .map((c) => c.calc.fechaCobro)
         .sort()
         .at(-1) ?? null,
   };
 }
 
-// Verde = vale capturado · ámbar = cobrada sin vale · gris = aún no cobrada.
+// Verde = vale capturado · ámbar = listo para capturar · rojo = cobrado
+// pero le falta un dato · gris = aún no se cobra.
+function colorCuota(c) {
+  if (c.comision) return "bg-emerald-500";
+  if (CAPTURABLE.includes(c.modo)) return "bg-amber-400";
+  if (c.modo === "EN_REVISION") return "bg-blue-300";
+  if (c.calc.cobrada) return "bg-rose-400";
+  return "bg-gray-200";
+}
+function estadoCuotaTxt(c) {
+  if (c.comision) return `vale ${$(c.comision.monto)}`;
+  if (CAPTURABLE.includes(c.modo)) return "lista para capturar";
+  if (c.modo === "EN_REVISION") return "monto manual en revisión";
+  return c.calc.motivo.toLowerCase();
+}
+
 function CuotasDots({ cuotas }) {
   return (
     <div className="flex items-center gap-1">
-      {cuotas.map((c) => {
-        const cls = tieneVale(c)
-          ? "bg-emerald-500"
-          : c.cobrada
-            ? "bg-amber-400"
-            : "bg-gray-200";
-        const estado = tieneVale(c)
-          ? `vale ${$(c.comision.monto)}`
-          : c.cobrada
-            ? "cobrada, sin vale"
-            : "aún no cobrada";
-        return (
-          <div
-            key={c.numCuota}
-            className={`w-2 h-2 rounded-full ${cls}`}
-            title={`Cuota ${c.numCuota}: ${estado}`}
-          />
-        );
-      })}
+      {cuotas.map((c) => (
+        <div
+          key={c.numCuota}
+          className={`w-2 h-2 rounded-full ${colorCuota(c)}`}
+          title={`Pago ${c.numCuota}: ${estadoCuotaTxt(c)}`}
+        />
+      ))}
     </div>
   );
 }
 
 export default function Comisiones({ usuario }) {
   const [polizas, setPolizas] = useState([]);
+  const [ctx, setCtx] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [filtro, setFiltro] = useState("PENDIENTE");
@@ -145,24 +181,22 @@ export default function Comisiones({ usuario }) {
       let query = supabase
         .from("polizas_cofisem")
         .select(
-          `
-          id, poliza_id, aseguradora, numero_poliza, asegurado_nombre,
-          fecha_emision, fecha_corte, prima_primer_pago, prima_primer_pago_neta,
-          efectivo, cheque, tdc, pol_pend_pago, registro_parcial, num_cuota_pago,
-          comprobante_cheque_url, comprobante_tdc_url,
-          vendedor_id, vendedor_nombre,
-          comisiones_cofisem(id, num_cuota, monto, fecha_pago, comprobante_url, folio),
-          pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
-        `,
+          `${SELECT_POLIZA_COMISION},
+          comisiones_cofisem(id, num_cuota, monto, fecha_pago, comprobante_url, folio, porcentaje, prima_neta_base, origen),
+          comision_solicitudes(id, num_cuota, monto, motivo, estatus, nota_resolucion, created_at)`,
         )
         .not("vendedor_id", "is", null)
         .neq("vendedor_id", 1);
       // Comisiones de toda la oficina (las lleva la encargada).
       if (usuario?.oficina_id)
         query = query.eq("oficina_id", usuario.oficina_id);
-      const { data, error } = await query;
+      const [{ data, error }, contexto] = await Promise.all([
+        query,
+        cargarContextoComisiones(),
+      ]);
       if (error) throw error;
       setPolizas(data ?? []);
+      setCtx(contexto);
       setErrorMsg(null);
     } catch (e) {
       setErrorMsg(e.message);
@@ -175,22 +209,28 @@ export default function Comisiones({ usuario }) {
     cargar();
   }, [cargar]);
 
-  // Pólizas con al menos una cuota cobrada, o que ya tengan algún vale
-  // (p. ej. GAMAN cuya cuota 1 quedó "pendiente de pago" en COFISEM pero
-  // ya se le pagó el vale — no debe desaparecer de aquí). Cobro más
-  // reciente primero.
+  // Todas las pólizas con vendedor: sus pagos aparecen desde que se crean.
+  // Primero las que tienen algo por capturar, luego por cobro más reciente.
   const grupos = useMemo(
     () =>
-      polizas
-        .map(agruparPoliza)
-        .filter((g) => g.cobradas.length > 0 || g.conVale > 0)
-        .sort((a, b) => (b.ultimoCobro ?? "").localeCompare(a.ultimoCobro ?? "")),
-    [polizas],
+      ctx
+        ? polizas
+            .map((p) => agruparPoliza(p, ctx))
+            .sort(
+              (a, b) =>
+                (b.porCapturar.length > 0) - (a.porCapturar.length > 0) ||
+                (b.ultimoCobro ?? "").localeCompare(a.ultimoCobro ?? "") ||
+                b.poliza.id - a.poliza.id,
+            )
+        : [],
+    [polizas, ctx],
   );
 
   const porFiltro = grupos.filter((g) => {
     if (filtro === "TODAS") return true;
-    return filtro === "CAPTURADO" ? g.sinVale.length === 0 : g.sinVale.length > 0;
+    return filtro === "CAPTURADO"
+      ? g.porCapturar.length === 0 && g.conVale > 0
+      : g.porCapturar.length > 0;
   });
   const q = busqueda.trim().toLowerCase();
   const visibles = q
@@ -206,7 +246,7 @@ export default function Comisiones({ usuario }) {
       )
     : porFiltro;
 
-  const pendientesCount = grupos.filter((g) => g.sinVale.length > 0).length;
+  const pendientesCount = grupos.filter((g) => g.porCapturar.length > 0).length;
   const totalCapturado = grupos.reduce((s, g) => s + g.totalVales, 0);
   const grupoAbierto = grupos.find((g) => g.poliza.id === modalPolizaId) ?? null;
 
@@ -218,34 +258,41 @@ export default function Comisiones({ usuario }) {
     total,
   } = usePagination(visibles, 10);
 
-  // Reemplaza (o agrega / quita) el vale de UNA cuota dentro de la póliza.
+  // Reemplaza (o quita) el vale de UN pago dentro de la póliza.
   function ponerComision(polizaId, numCuota, comision) {
     setPolizas((prev) =>
       prev.map((p) => {
         if (p.id !== polizaId) return p;
-        const otras = comisionesDe(p).filter((c) => c.num_cuota !== numCuota);
-        return {
-          ...p,
-          comisiones_cofisem: comision ? [...otras, comision] : otras,
-        };
+        const otras = arreglo(p.comisiones_cofisem).filter((c) => c.num_cuota !== numCuota);
+        return { ...p, comisiones_cofisem: comision ? [...otras, comision] : otras };
       }),
+    );
+  }
+
+  function agregarSolicitud(polizaId, solicitud) {
+    setPolizas((prev) =>
+      prev.map((p) =>
+        p.id === polizaId
+          ? { ...p, comision_solicitudes: [...arreglo(p.comision_solicitudes), solicitud] }
+          : p,
+      ),
     );
   }
 
   async function eliminarComision(p, c) {
     const v = c.comision;
-    if (!v) return false;
+    if (!v) return;
     const { isConfirmed } = await Swal.fire({
       icon: "warning",
       title: "¿Eliminar este vale?",
-      html: `Se borrará el vale de <strong>${$(v.monto)}</strong> de la cuota <strong>${c.numCuota}</strong> de la póliza <strong>${p.numero_poliza || "—"}</strong> y su comprobante (si tenía).`,
+      html: `Se borrará el vale de <strong>${$(v.monto)}</strong> del pago <strong>${c.numCuota}</strong> de la póliza <strong>${p.numero_poliza || "—"}</strong> y su comprobante (si tenía).`,
       showCancelButton: true,
       confirmButtonColor: "#dc2626",
       cancelButtonColor: "#6b7280",
       confirmButtonText: "Sí, eliminar",
       cancelButtonText: "Cancelar",
     });
-    if (!isConfirmed) return false;
+    if (!isConfirmed) return;
     try {
       const { error } = await supabase
         .from("comisiones_cofisem")
@@ -257,7 +304,6 @@ export default function Comisiones({ usuario }) {
         await supabase.storage.from(COMPROBANTE_BUCKET).remove([v.comprobante_url]);
       }
       ponerComision(p.id, c.numCuota, null);
-      return true;
     } catch (e) {
       Swal.fire({
         icon: "error",
@@ -265,7 +311,6 @@ export default function Comisiones({ usuario }) {
         text: e.message,
         confirmButtonColor: "#13193a",
       });
-      return false;
     }
   }
 
@@ -277,8 +322,8 @@ export default function Comisiones({ usuario }) {
           Comisiones
         </h1>
         <p className="text-gray-400 text-sm mt-0.5">
-          Captura el vale de cada cuota cobrada de pólizas con vendedor — se
-          puede editar aunque el corte de ese cobro ya esté cerrado.
+          Un vale por cada pago cobrado de pólizas con vendedor. El monto lo
+          calcula el sistema; solo se captura folio, fecha y comprobante.
         </p>
       </div>
 
@@ -358,7 +403,7 @@ export default function Comisiones({ usuario }) {
                     "Aseguradora",
                     "Vendedor",
                     "Asegurado",
-                    "Cuotas",
+                    "Pagos",
                     "Vales",
                     "Último cobro",
                     "Acción",
@@ -375,12 +420,9 @@ export default function Comisiones({ usuario }) {
               <tbody className="divide-y divide-gray-50">
                 {visiblesPag.map((g) => {
                   const p = g.poliza;
-                  const pendientes = g.sinVale.length;
+                  const pendientes = g.porCapturar.length;
                   return (
-                    <tr
-                      key={p.id}
-                      className="hover:bg-gray-50/60 transition-colors"
-                    >
+                    <tr key={p.id} className="hover:bg-gray-50/60 transition-colors">
                       <td className="px-4 py-2 font-mono font-bold text-[#1447e6] whitespace-nowrap">
                         {p.numero_poliza || "—"}
                       </td>
@@ -397,7 +439,7 @@ export default function Comisiones({ usuario }) {
                         <div className="flex items-center gap-1.5">
                           <CuotasDots cuotas={g.cuotas} />
                           <span className="text-[11px] text-gray-500 tabular-nums whitespace-nowrap">
-                            {g.conVale}/{Math.max(g.cobradas.length, g.conVale)} con vale
+                            {g.conVale}/{g.cuotas.length} con vale
                           </span>
                         </div>
                       </td>
@@ -423,7 +465,7 @@ export default function Comisiones({ usuario }) {
                         >
                           {pendientes > 0
                             ? `Capturar vale${pendientes > 1 ? ` (${pendientes})` : ""}`
-                            : "Ver vales"}
+                            : "Ver pagos"}
                         </button>
                       </td>
                     </tr>
@@ -449,36 +491,41 @@ export default function Comisiones({ usuario }) {
         onClose={() => setModalPolizaId(null)}
         onGuardado={ponerComision}
         onEliminar={eliminarComision}
+        onSolicitud={agregarSolicitud}
       />
     </div>
   );
 }
 
-// Modal en dos pasos: 1) lista de cuotas de la póliza para elegir a cuál
-// se le captura/edita el vale; 2) el formulario del vale de esa cuota.
-// Si la póliza solo tiene una cuota cobrada y sin vale, abre directo en
-// el formulario (con "Cuotas" para regresar). Al guardar vuelve a la
-// lista, para capturar el de otra cuota sin cerrar.
-function ModalVales({ grupo, usuario, onClose, onGuardado, onEliminar }) {
-  const [cuotaSel, setCuotaSel] = useState(() =>
-    grupo && grupo.cobradas.length === 1 && grupo.sinVale.length === 1
-      ? grupo.sinVale[0].numCuota
+// Modal en pasos: lista de pagos → vale de un pago (o solicitud de monto
+// manual). Si solo hay un pago por capturar abre directo en su vale. Al
+// guardar vuelve a la lista.
+function ModalVales({ grupo, usuario, onClose, onGuardado, onEliminar, onSolicitud }) {
+  const [vista, setVista] = useState(() =>
+    grupo && grupo.porCapturar.length === 1 && grupo.cobradas.length === 1
+      ? { cuota: grupo.porCapturar[0].numCuota, paso: "vale" }
       : null,
   );
-  // Esc: en el formulario regresa a la lista de cuotas; en la lista cierra.
+  // Esc: en un paso regresa a la lista; en la lista cierra.
   useEffect(() => {
     if (!grupo) return;
     const onKey = (e) => {
       if (e.key !== "Escape") return;
-      if (cuotaSel != null) setCuotaSel(null);
+      if (vista) setVista(null);
       else onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [grupo, cuotaSel, onClose]);
+  }, [grupo, vista, onClose]);
   if (!grupo) return null;
   const p = grupo.poliza;
-  const cuota = grupo.cuotas.find((c) => c.numCuota === cuotaSel) ?? null;
+  const cuota = vista ? (grupo.cuotas.find((c) => c.numCuota === vista.cuota) ?? null) : null;
+
+  let titulo = "Vales de comisión";
+  if (cuota && vista.paso === "vale")
+    titulo = `${cuota.comision ? "Editar" : "Capturar"} vale · Pago ${cuota.numCuota}`;
+  if (cuota && vista.paso === "solicitud")
+    titulo = `Solicitar monto manual · Pago ${cuota.numCuota}`;
 
   return (
     <div
@@ -494,19 +541,15 @@ function ModalVales({ grupo, usuario, onClose, onGuardado, onEliminar }) {
             {cuota && (
               <button
                 type="button"
-                onClick={() => setCuotaSel(null)}
-                title="Volver a las cuotas"
+                onClick={() => setVista(null)}
+                title="Volver a los pagos"
                 className="w-8 h-8 -ml-2 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-500 shrink-0"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
             )}
             <div className="min-w-0">
-              <p className="text-sm font-bold text-[#1447e6]">
-                {cuota
-                  ? `${tieneVale(cuota) ? "Editar" : "Capturar"} vale · Cuota ${cuota.numCuota}`
-                  : "Vales de comisión"}
-              </p>
+              <p className="text-sm font-bold text-[#1447e6]">{titulo}</p>
               <p className="text-xs text-gray-400 mt-0.5 truncate">
                 <span className="font-mono font-bold text-gray-600">
                   {p.numero_poliza || "—"}
@@ -523,21 +566,34 @@ function ModalVales({ grupo, usuario, onClose, onGuardado, onEliminar }) {
           </button>
         </div>
 
-        {cuota ? (
+        {cuota && vista.paso === "vale" ? (
           <FormVale
             poliza={p}
             cuota={cuota}
             usuario={usuario}
-            onCancel={() => setCuotaSel(null)}
+            onCancel={() => setVista(null)}
             onSaved={(data) => {
               onGuardado(p.id, cuota.numCuota, data);
-              setCuotaSel(null);
+              setVista(null);
+            }}
+            onSolicitar={() => setVista({ cuota: cuota.numCuota, paso: "solicitud" })}
+          />
+        ) : cuota && vista.paso === "solicitud" ? (
+          <FormSolicitud
+            poliza={p}
+            cuota={cuota}
+            usuario={usuario}
+            onCancel={() => setVista(null)}
+            onSaved={(sol) => {
+              onSolicitud(p.id, sol);
+              setVista(null);
             }}
           />
         ) : (
           <ListaCuotas
             grupo={grupo}
-            onElegir={(c) => setCuotaSel(c.numCuota)}
+            onVale={(c) => setVista({ cuota: c.numCuota, paso: "vale" })}
+            onSolicitar={(c) => setVista({ cuota: c.numCuota, paso: "solicitud" })}
             onEliminar={(c) => onEliminar(p, c)}
           />
         )}
@@ -546,96 +602,81 @@ function ModalVales({ grupo, usuario, onClose, onGuardado, onEliminar }) {
   );
 }
 
-function ListaCuotas({ grupo, onElegir, onEliminar }) {
+// "10% de $1,500.00 de prima neta = $150.00"
+function DetalleCalculo({ calc }) {
+  if (calc.porcentaje == null || !calc.primaNeta) return null;
   return (
-    <div className="p-6 space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "Cuotas cobradas", value: `${grupo.cobradas.length}/${grupo.cuotas.length}` },
-          { label: "Con vale", value: `${grupo.conVale}/${Math.max(grupo.cobradas.length, grupo.conVale)}` },
-          { label: "Total vales", value: $(grupo.totalVales) },
-        ].map((k) => (
-          <div key={k.label} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">
-              {k.label}
-            </p>
-            <p className="text-sm font-bold text-[#1447e6]">{k.value}</p>
-          </div>
-        ))}
-      </div>
+    <span>
+      {pctTxt(calc.porcentaje)} de {$(calc.primaNeta)} de prima neta ={" "}
+      <strong className="text-gray-700">{$(calc.monto)}</strong>
+    </span>
+  );
+}
 
-      <p className="text-xs text-gray-500">
-        Elige la cuota a la que corresponde el vale:
-      </p>
+function ListaCuotas({ grupo, onVale, onSolicitar, onEliminar }) {
+  return (
+    <div className="p-5 space-y-3">
+      {/* Resumen en una línea */}
+      <div className="flex items-center justify-between gap-3 px-1 text-xs text-gray-500">
+        <span>
+          <strong className="text-gray-700">{grupo.cobradas.length}</strong> de{" "}
+          {grupo.cuotas.length} pagos cobrados ·{" "}
+          <strong className="text-gray-700">{grupo.conVale}</strong> con vale
+        </span>
+        <span>
+          Pagado <strong className="text-[#1447e6]">{$(grupo.totalVales)}</strong>
+        </span>
+      </div>
 
       <div className="space-y-2">
         {grupo.cuotas.map((c) => {
           const v = c.comision;
-          const conVale = tieneVale(c);
-          const circulo = conVale
+          const capturable = CAPTURABLE.includes(c.modo);
+          const bloqueadaCobrada = !v && !capturable && c.calc.cobrada && c.modo !== "EN_REVISION";
+          const circulo = v
             ? "bg-emerald-100 text-emerald-700"
-            : c.cobrada
+            : capturable
               ? "bg-amber-100 text-amber-700"
-              : "bg-gray-100 text-gray-400";
+              : bloqueadaCobrada
+                ? "bg-rose-100 text-rose-600"
+                : "bg-gray-100 text-gray-400";
+          const monto = v ? v.monto : c.aprobada ? c.aprobada.monto : c.calc.monto;
+          const pct = v ? v.porcentaje : c.aprobada ? null : c.calc.porcentaje;
+          const base = v ? v.prima_neta_base : c.calc.primaNeta;
+          // Línea secundaria: un solo dato, el más útil según el estado.
+          let sub;
+          if (v) sub = <>Pagado {fmt(v.fecha_pago)}{v.folio && <> · <span className="font-mono">{v.folio}</span></>}</>;
+          else if (c.pendiente) sub = <span className="text-amber-700">Monto manual de {$(c.pendiente.monto)} en revisión</span>;
+          else if (c.rechazada) sub = <span className="text-red-600">Monto manual rechazado{c.rechazada.nota_resolucion ? `: ${c.rechazada.nota_resolucion}` : ""}</span>;
+          else if (bloqueadaCobrada) sub = <span className="text-rose-600">{c.calc.motivo}</span>;
+          else if (c.calc.cobrada) sub = <>Cobrado {fmt(c.calc.fechaCobro)}{c.aprobada && " · monto autorizado"}</>;
+          else sub = "Aún no se cobra";
           return (
             <div
               key={c.numCuota}
-              className={`flex items-center justify-between gap-3 p-3.5 rounded-2xl border ${
-                c.cobrada ? "border-gray-200" : "border-dashed border-gray-200 bg-gray-50/60"
+              className={`flex items-center justify-between gap-3 px-3.5 py-3 rounded-2xl border ${
+                c.calc.cobrada || v ? "border-gray-200" : "border-dashed border-gray-200 bg-gray-50/60"
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${circulo}`}
-                >
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${circulo}`}>
                   {c.numCuota}
                 </div>
                 <div className="min-w-0">
-                  {conVale ? (
-                    <>
-                      <p className="text-sm font-bold text-emerald-700">
-                        Vale {$(v.monto)}
-                        {v.folio && (
-                          <span className="ml-1.5 text-xs font-mono font-bold text-[#1447e6]">
-                            {v.folio}
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        Pagado {fmt(v.fecha_pago)} ·{" "}
-                        {c.cobrada
-                          ? `cuota cobrada ${fmt(c.fechaCobro)}`
-                          : "cuota aún sin cobro registrado"}
-                      </p>
-                    </>
-                  ) : c.cobrada ? (
-                    <>
-                      <p className="text-sm font-bold text-[#13193a]">
-                        Sin vale
-                        <span className="text-xs text-gray-400 font-normal">
-                          {" "}
-                          · cuota de {$(c.monto)}
-                        </span>
-                      </p>
-                      <p className="text-xs text-blue-600 mt-0.5">
-                        Cobrada {fmt(c.fechaCobro)}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm font-semibold text-gray-400">
-                        Aún no cobrada
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        El vale se captura cuando se cobre esta cuota.
-                      </p>
-                    </>
-                  )}
+                  <p className="text-sm font-bold text-[#13193a] truncate">
+                    {monto != null ? $(monto) : <span className="text-gray-400 font-semibold">Sin monto</span>}
+                    {pct != null && base ? (
+                      <span className="ml-1.5 text-[11px] font-normal text-gray-400">
+                        {pctTxt(pct)} de {$(base)}
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{sub}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                {conVale && v.comprobante_url && (
+                {v?.comprobante_url && (
                   <button
                     type="button"
                     onClick={() => verComprobante(v.comprobante_url)}
@@ -645,15 +686,15 @@ function ListaCuotas({ grupo, onElegir, onEliminar }) {
                     <Paperclip className="w-3.5 h-3.5" />
                   </button>
                 )}
-                {conVale ? (
+                {v ? (
                   <>
                     <button
                       type="button"
-                      onClick={() => onElegir(c)}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-[11px] font-bold"
+                      onClick={() => onVale(c)}
+                      title="Editar folio, fecha o comprobante"
+                      className="w-7 h-7 rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center justify-center text-gray-500"
                     >
-                      <Pencil className="w-3 h-3" />
-                      Editar
+                      <Pencil className="w-3.5 h-3.5" />
                     </button>
                     <button
                       type="button"
@@ -664,15 +705,29 @@ function ListaCuotas({ grupo, onElegir, onEliminar }) {
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </>
-                ) : c.cobrada ? (
+                ) : capturable ? (
                   <button
                     type="button"
-                    onClick={() => onElegir(c)}
+                    onClick={() => onVale(c)}
                     className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold whitespace-nowrap"
                   >
-                    Capturar vale
+                    Capturar
                   </button>
-                ) : null}
+                ) : bloqueadaCobrada && !c.pendiente ? (
+                  // Bloqueado por un dato faltante: la única salida desde aquí
+                  // es pedir un monto manual a administración.
+                  <button
+                    type="button"
+                    onClick={() => onSolicitar(c)}
+                    className="px-3 py-1.5 rounded-lg border border-[#1447e6]/20 text-[#1447e6] hover:bg-[#1447e6]/5 text-[11px] font-bold whitespace-nowrap"
+                  >
+                    Pedir monto
+                  </button>
+                ) : (
+                  <span title={c.calc.motivo} className="text-gray-300">
+                    <Lock className="w-3.5 h-3.5" />
+                  </span>
+                )}
               </div>
             </div>
           );
@@ -682,18 +737,30 @@ function ListaCuotas({ grupo, onElegir, onEliminar }) {
   );
 }
 
-// Formulario del vale de UNA cuota: folio, monto, fecha de pago y
-// comprobante opcional.
-function FormVale({ poliza, cuota, usuario, onCancel, onSaved }) {
-  const c = cuota.comision;
-  const [valor, setValor] = useState(c?.monto || "");
+// Vale de UN pago: el monto lo pone el sistema (AUTO) o la solicitud
+// aprobada (SOLICITUD); solo en el esquema anterior (MANUAL) se escribe.
+// Al editar un vale ya capturado solo cambian folio, fecha y comprobante
+// (salvo los MANUAL viejos, que conservan su edición de monto).
+function FormVale({ poliza, cuota, usuario, onCancel, onSaved, onSolicitar }) {
+  const existente = cuota.comision;
+  const origen = existente?.origen ?? (cuota.modo === "SOLICITUD" ? "SOLICITUD" : cuota.modo === "AUTO" ? "AUTO" : "MANUAL");
+  const montoEditable = origen === "MANUAL";
+  const montoFijo = existente
+    ? n(existente.monto)
+    : origen === "SOLICITUD"
+      ? n(cuota.aprobada?.monto)
+      : origen === "AUTO"
+        ? n(cuota.calc.monto)
+        : null;
+
+  const [valor, setValor] = useState(existente?.monto ?? "");
   // Folio propio del vale — el vale es un movimiento aparte del registro
   // de la póliza y cae en el corte de su fecha_pago, así que lleva su
   // propio folio (ver migracion_folio_por_transaccion.sql).
-  const [folio, setFolio] = useState(c?.folio ?? "");
+  const [folio, setFolio] = useState(existente?.folio ?? "");
   const [intento, setIntento] = useState(false);
-  const [fechaPago, setFechaPago] = useState(c?.fecha_pago || hoyISO());
-  const [comprobante, setComprobante] = useState(c?.comprobante_url ?? null);
+  const [fechaPago, setFechaPago] = useState(existente?.fecha_pago || hoyISO());
+  const [comprobante, setComprobante] = useState(existente?.comprobante_url ?? null);
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
@@ -707,8 +774,7 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved }) {
     setSubiendo(true);
     try {
       const basePath = `${usuario?.oficina_id ?? "sin-oficina"}/comisiones/${poliza.id}/cuota-${cuota.numCuota}/vale`;
-      const path = await subirComprobante(basePath, file);
-      setComprobante(path);
+      setComprobante(await subirComprobante(basePath, file));
     } catch (e) {
       setError("No se pudo subir el comprobante: " + e.message);
     } finally {
@@ -722,9 +788,26 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved }) {
       setError("Captura el folio del vale — con él se ubica este movimiento en el corte.");
       return;
     }
+    const monto = montoEditable ? n(valor) : montoFijo;
+    if (!(monto > 0)) {
+      setError(montoEditable ? "Captura el monto del vale." : "No hay monto calculado para este pago.");
+      return;
+    }
     setGuardando(true);
     setError(null);
     try {
+      // Con qué se calculó: en uno nuevo AUTO, el % y la prima neta del
+      // momento; en uno existente se conservan los que ya tenía.
+      const porcentaje = existente
+        ? existente.porcentaje
+        : origen === "AUTO"
+          ? cuota.calc.porcentaje
+          : null;
+      const base = existente
+        ? existente.prima_neta_base
+        : origen === "AUTO"
+          ? cuota.calc.primaNeta
+          : (cuota.calc.primaNeta ?? null);
       const { data, error: err } = await supabase
         .from("comisiones_cofisem")
         .upsert(
@@ -732,7 +815,10 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved }) {
             poliza_cofisem_id: poliza.id,
             num_cuota: cuota.numCuota,
             folio: folio.trim(),
-            monto: n(valor),
+            monto,
+            porcentaje,
+            prima_neta_base: base,
+            origen,
             fecha_pago: fechaPago || hoyISO(),
             comprobante_url: comprobante,
             capturado_por: usuario?.id ?? null,
@@ -753,13 +839,17 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved }) {
 
   return (
     <div className="p-6 space-y-4">
-      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50/60 border border-blue-100 text-xs text-gray-600">
-        <span className="w-5 h-5 rounded-full bg-white text-[#1447e6] border border-blue-100 flex items-center justify-center text-[10px] font-bold">
-          {cuota.numCuota}
-        </span>
-        Cuota de {$(cuota.monto)} cobrada el{" "}
-        <strong className="text-gray-700">{fmt(cuota.fechaCobro)}</strong>
-      </div>
+      <p className="text-xs text-gray-500">
+        Pago {cuota.numCuota}
+        {cuota.calc.primaTotal ? ` de ${$(cuota.calc.primaTotal)}` : ""} · cobrado el{" "}
+        <strong className="text-gray-700">{fmt(cuota.calc.fechaCobro)}</strong>
+      </p>
+      {origen === "MANUAL" && !existente && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+          Póliza anterior al cálculo automático ({cuota.calc.motivo.toLowerCase()}): el
+          monto se captura a mano.
+        </p>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700">
@@ -787,22 +877,35 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved }) {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-            Monto
+            Monto {!montoEditable && <Lock className="inline w-3 h-3 -mt-0.5" />}
           </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-              $
-            </span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-              placeholder="0.00"
-              className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
-            />
-          </div>
+          {montoEditable ? (
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+                placeholder="0.00"
+                className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+              />
+            </div>
+          ) : (
+            <div className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-700">
+              {$(montoFijo)}
+            </div>
+          )}
+          {!montoEditable && (
+            <p className="text-[11px] text-gray-400 mt-1">
+              {origen === "SOLICITUD" ? (
+                "Autorizado por administración"
+              ) : (
+                <DetalleCalculo calc={existente ? { porcentaje: existente.porcentaje, primaNeta: existente.prima_neta_base, monto: existente.monto } : cuota.calc} />
+              )}
+            </p>
+          )}
         </div>
         <div>
           <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
@@ -814,11 +917,19 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved }) {
             onChange={(e) => setFechaPago(e.target.value)}
             className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
           />
+          <p className="text-[11px] text-gray-400 mt-1">Sale restado en el corte de ese día.</p>
         </div>
       </div>
-      <p className="text-[11px] text-gray-400 -mt-2">
-        Día en que se pagó — así sale restado en el corte de ese día.
-      </p>
+
+      {origen === "AUTO" && !existente && !cuota.pendiente && (
+        <button
+          type="button"
+          onClick={onSolicitar}
+          className="-mt-1 text-[11px] font-semibold text-[#1447e6] hover:underline"
+        >
+          ¿Debe pagarse otro monto? Pedirlo a administración
+        </button>
+      )}
 
       <ComprobanteField
         obligatorio={false}
@@ -845,6 +956,113 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved }) {
           className="px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50 transition-all"
         >
           {guardando ? "Guardando…" : "Guardar"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Solicitud de monto manual para UN pago — la resuelve administración
+// desde su panel de comisiones.
+function FormSolicitud({ poliza, cuota, usuario, onCancel, onSaved }) {
+  const [monto, setMonto] = useState(cuota.calc.monto ?? "");
+  const [motivo, setMotivo] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function enviar() {
+    if (!(n(monto) > 0)) return setError("Captura el monto que se quiere pagar.");
+    if (!motivo.trim()) return setError("Explica el motivo — administración lo necesita para decidir.");
+    setGuardando(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from("comision_solicitudes")
+        .insert({
+          poliza_cofisem_id: poliza.id,
+          num_cuota: cuota.numCuota,
+          monto: n(monto),
+          motivo: motivo.trim(),
+          solicitado_por: usuario?.id ?? null,
+        })
+        .select("id, num_cuota, monto, motivo, estatus, nota_resolucion, created_at")
+        .single();
+      if (err) throw err;
+      onSaved(data);
+    } catch (e) {
+      setError(
+        e.code === "23505"
+          ? "Ya hay una solicitud pendiente para este pago."
+          : "No se pudo enviar la solicitud: " + e.message,
+      );
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="p-6 space-y-4">
+      <p className="text-xs text-gray-500">
+        {cuota.calc.monto != null ? (
+          <>
+            El sistema calcula <strong>{$(cuota.calc.monto)}</strong> para este pago. Si
+            debe pagarse otro monto, pídelo aquí; administración lo autoriza o lo rechaza.
+          </>
+        ) : (
+          <>
+            El sistema no puede calcular este pago ({cuota.calc.motivo.toLowerCase()}).
+            Puedes pedir a administración que autorice un monto manual.
+          </>
+        )}
+      </p>
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
+      <div>
+        <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+          Monto solicitado
+        </label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={monto}
+            onChange={(e) => setMonto(e.target.value)}
+            className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+          Motivo
+        </label>
+        <textarea
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Ej. acuerdo especial con el vendedor…"
+          className="w-full h-20 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 resize-none focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6]"
+        />
+      </div>
+      <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={guardando}
+          className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={enviar}
+          disabled={guardando}
+          className="px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50"
+        >
+          {guardando ? "Enviando…" : "Enviar solicitud"}
         </button>
       </div>
     </div>

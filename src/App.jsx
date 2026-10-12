@@ -54,6 +54,9 @@ const Comisiones = lazy(() => import("./features/cofisem/Comisiones"));
 const ReporteComisiones = lazy(
   () => import("./features/cofisem/ReporteComisiones"),
 );
+const ConfiguracionComisiones = lazy(
+  () => import("./features/cofisem/ConfiguracionComisiones"),
+);
 
 // ── VENCIMIENTOS (compartido: administración, analista, operador) ─────
 const Vencimientos = lazy(() => import("./features/vencimientos/Vencimientos"));
@@ -488,6 +491,16 @@ export default function App() {
                 <SoloEncargadoCofisem rolNombre={rolNombre} usuario={usuario}>
                   <Comisiones usuario={usuario} />
                 </SoloEncargadoCofisem>
+              }
+            />
+            <Route
+              path="/comisiones/configuracion"
+              element={
+                rolNombre === "ADMINISTRACION" ? (
+                  <ConfiguracionComisiones />
+                ) : (
+                  <Navigate to="/accesos" replace />
+                )
               }
             />
             <Route

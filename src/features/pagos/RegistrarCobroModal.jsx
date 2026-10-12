@@ -58,6 +58,8 @@ function faltantes(f) {
   const detalle = {
     folio: !(f.folio && f.folio.trim()),
     pago: !(n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0),
+    // La comisión del vendedor se calcula sobre la prima neta de ESTE pago.
+    primas: !(n(f.prima_total) > 0 && n(f.prima_neta) > 0),
     autorizacion: n(f.tdc) > 0 && !(f.autorizacion && f.autorizacion.trim()),
     comprobanteTdc: n(f.tdc) > 0 && !f.comprobante_tdc_path,
     comprobanteCheque: n(f.cheque) > 0 && !f.comprobante_cheque_path,
@@ -65,6 +67,7 @@ function faltantes(f) {
   const labels = {
     folio: "Folio de este cobro",
     pago: "Marca al menos una forma de pago (Efectivo, Cheque/Dep. o T. Crédito/Déb.)",
+    primas: "Prima Total y Prima Neta de la cuota (ambas mayores a $0 — con la neta se calcula la comisión)",
     autorizacion:
       "Autorización (obligatoria porque se pagó con T. Crédito/Déb.)",
     comprobanteTdc: "Comprobante de la terminal (TDC)",
@@ -322,6 +325,18 @@ export default function RegistrarCobroModal({
       // veces: pendiente el día de emisión, cobrada el día del pago.
       onSaved(data);
     } catch (e) {
+      // Candado de primas (BD): la cuota ya tiene su comisión pagada o el
+      // corte de su día ya se cerró — se muestra el motivo tal cual.
+      if (/ya no se puede cambiar/i.test(e?.message || "")) {
+        await Swal.fire({
+          icon: "warning",
+          title: "No se puede cambiar la prima",
+          text: e.message,
+          confirmButtonText: "Entendido",
+          confirmButtonColor: "#1447e6",
+        });
+        return;
+      }
       // La RLS de pagos_cofisem rechaza el UPDATE si el cobro ya fue APLICADO
       // por el analista, o si quien edita no es la encargada de la oficina.
       const esRls =

@@ -15,7 +15,12 @@ export function isoAMXCorto(str) {
 export function nCuotasDeFormaPago(formaPago) {
   if (formaPago === "CONTADO") return 1;
   const m = (formaPago ?? "").match(/(\d+)/);
-  return m ? parseInt(m[1], 10) : 1;
+  if (m) return parseInt(m[1], 10);
+  // "PARCIALES" (sin número) viene del sistema anterior: todas esas pólizas
+  // tienen 4 pagos. Antes caía en 1 y el recibo de cada cuota de $550 salía
+  // con la prima completa de la póliza.
+  if (formaPago === "PARCIALES") return 4;
+  return 1;
 }
 
 // Convierte una fila cruda de la tabla "pagos" a la forma de cuota usada
