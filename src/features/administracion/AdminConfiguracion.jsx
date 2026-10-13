@@ -273,6 +273,7 @@ function ModalNuevoCosto({ onClose, onGuardado, usuario }) {
 function ModalNuevaVersionCobertura({ cobertura, onClose, onGuardado }) {
   const [primaNeta, setPrimaNeta] = useState(String(cobertura.prima_neta));
   const [primaTotal, setPrimaTotal] = useState(String(cobertura.prima_total));
+  const [recargo, setRecargo] = useState(String(cobertura.recargo ?? 0));
   const [desde, setDesde] = useState(hoy());
   const [guardando, setGuardando] = useState(false);
 
@@ -293,7 +294,12 @@ function ModalNuevaVersionCobertura({ cobertura, onClose, onGuardado }) {
           grupo_id: cobertura.grupo_id,
           oficina_id: cobertura.oficina_id ?? null,
           duracion_meses: cobertura.duracion_meses,
+          // Sin estos la versión nueva caería a ESTANDAR y perdería el
+          // esquema de pagos (799+3×625, 4 iguales, etc.).
+          regla_pago: cobertura.regla_pago,
+          prima_base: cobertura.prima_base ?? null,
           prima_neta: Number(primaNeta),
+          recargo: Number(recargo) || 0,
           prima_total: Number(primaTotal),
           activa: true,
           vigente_desde: desde,
@@ -426,6 +432,27 @@ function ModalNuevaVersionCobertura({ cobertura, onClose, onGuardado }) {
                 />
               </div>
             </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+              Recargo por pago fraccionado
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">
+                $
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={recargo}
+                onChange={(e) => setRecargo(e.target.value)}
+                className={`${inp} pl-7`}
+              />
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">
+              No es prima neta (no genera comisión). Prima total = prima neta + recargo + derechos + IVA.
+            </p>
           </div>
           <div>
             <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
@@ -1210,6 +1237,11 @@ export default function AdminConfiguracion({ usuario }) {
                                   <p className="text-sm font-bold text-[#13193a] tabular-nums">
                                     {fmt$(cob.prima_neta)}
                                   </p>
+                                  {Number(cob.recargo) > 0 && (
+                                    <p className="text-[10px] text-gray-400 tabular-nums">
+                                      + recargo {fmt$(cob.recargo)}
+                                    </p>
+                                  )}
                                 </div>
                                 <div className="text-right">
                                   <p className="text-[10px] text-gray-400 uppercase tracking-wide">

@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { desglosePrimaCobertura } from "../services/configuracion";
 
 export function isoAMX(str) {
   if (!str) return "";
@@ -49,10 +50,13 @@ export function mapCuota(c, idx) {
   };
 }
 
+// `primaNeta` de cada cuota NUNCA incluye el recargo por pago fraccionado
+// (va aparte en `recargo`): es la base de la comisión en COFISEM.
 export function calcularImportesRecibo(poliza, cuota) {
   if (poliza.formaPago === "CONTADO") {
     return {
       primaNeta:        poliza.primaNeta,
+      recargo:          poliza.recargo ?? 0,
       gastosExpedicion: poliza.derechos,
       iva:              poliza.iva,
       total:            poliza.primaTotal,
@@ -69,25 +73,29 @@ export function calcularImportesRecibo(poliza, cuota) {
     const derParcial = +(poliza.derechos  / n).toFixed(2);
     const ivaParcial = +((pnParcial + derParcial) * (iva / 100)).toFixed(2);
     const total      = +(pnParcial + derParcial + ivaParcial).toFixed(2);
-    return { primaNeta: pnParcial, gastosExpedicion: derParcial, iva: ivaParcial, total, importe: total };
+    return { primaNeta: pnParcial, recargo: 0, gastosExpedicion: derParcial, iva: ivaParcial, total, importe: total };
   }
 
-  // PROGRESIVO: cuota.monto es el pago total (PT); se desglosa hacia atrás
+  // PROGRESIVO: cuota.monto es el pago total (PT); se desglosa hacia atrás.
+  // El recargo de la cobertura se cobra completo en la cuota 1, así la prima
+  // neta sale igual en todas (799 → 438.79 + 150 + 100 + 110.21;
+  // 625 → 438.79 + 100 + 86.21).
   if (poliza.reglaPago === "PROGRESIVO" && poliza.primaBase) {
     const pt       = cuota.monto;
     const subtot   = +(pt / (1 + iva / 100)).toFixed(2);
     const emision  = +(poliza.derechos / n).toFixed(2);
-    const pn       = +(subtot - emision).toFixed(2);
+    const recargo  = cuota.num === 1 ? (poliza.recargo ?? 0) : 0;
+    const pn       = +(subtot - emision - recargo).toFixed(2);
     const ivaCalc  = +(subtot * (iva / 100)).toFixed(2);
-    return { primaNeta: pn, gastosExpedicion: emision, iva: ivaCalc, total: pt, importe: pt };
+    return { primaNeta: pn, recargo, gastosExpedicion: emision, iva: ivaCalc, total: pt, importe: pt };
   }
 
   // ESTANDAR: cuota 1 lleva todos los gastos de expedición e IVA
   if (cuota.num === 1) {
     const total = cuota.monto + poliza.derechos + poliza.iva;
-    return { primaNeta: cuota.monto, gastosExpedicion: poliza.derechos, iva: poliza.iva, total, importe: total };
+    return { primaNeta: cuota.monto, recargo: 0, gastosExpedicion: poliza.derechos, iva: poliza.iva, total, importe: total };
   }
-  return { primaNeta: cuota.monto, gastosExpedicion: 0, iva: 0, total: cuota.monto, importe: cuota.monto };
+  return { primaNeta: cuota.monto, recargo: 0, gastosExpedicion: 0, iva: 0, total: cuota.monto, importe: cuota.monto };
 }
 
 // Construye el objeto "datos" del recibo, lo guarda en localStorage y abre
@@ -185,8 +193,7 @@ export function construirPolizaRecibo(pol, cfg) {
   const nombreCliente = [pol.clientes?.nombre, pol.clientes?.apellido]
     .filter(Boolean)
     .join(" ");
-  const primaNeta = Number(pol.coberturas?.prima_neta ?? 0);
-  const iva = +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);
+  const { primaNeta, recargo, iva } = desglosePrimaCobertura(pol.coberturas, derechos, ivaPct);
   return {
     id: pol.constancia ?? pol.numero_poliza ?? String(pol.id),
     polizaId: pol.id,
@@ -197,6 +204,7 @@ export function construirPolizaRecibo(pol, cfg) {
     formaPago: pol.forma_pago,
     primaTotal: Number(pol.coberturas?.prima_total ?? 0),
     primaNeta,
+    recargo,
     iva,
     ivaPct,
     derechos,

@@ -181,7 +181,7 @@ export default function AnalistaPolizas() {
         vendedores(nombre, apellido),
         concesionarios(nombre, apellido1, apellido2),
         oficinas(id, nombre),
-        coberturas(nombre, prima_neta, prima_total)
+        coberturas(nombre, prima_neta, recargo, prima_total)
       `)
       .in("estatus", ["VIGENTE", "POR VENCER", "VENCIDA", "CANCELADA", "ANULADA"])
       .order("fecha_inicio", { ascending: false });
@@ -256,7 +256,7 @@ export default function AnalistaPolizas() {
             vendedores(nombre, apellido),
             concesionarios(nombre, apellido1, apellido2),
             oficinas(id, nombre),
-            coberturas(nombre, prima_neta, prima_total)
+            coberturas(nombre, prima_neta, recargo, prima_total)
           `)
           .eq("id", p.id)
           .single(),

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { COBERTURA_BASICA } from "../constants/cobertura";
 import { fmt$ } from "../utils/fmt";
 import StatusBadge from "./StatusBadge";
-import { fetchConfigCostos } from "../../../services/configuracion";
+import { fetchConfigCostos, desglosePrimaCobertura } from "../../../services/configuracion";
 import { ChevronLeft } from "lucide-react";
 
 
@@ -44,12 +44,10 @@ export default function ResumenPoliza({ poliza, onVolver }) {
       })
     : "—";
 
-  const primaNeta = poliza.coberturas?.prima_neta ?? 0;
   const derechos  = config.derechos_emision ?? 400;
   const ivaPct    = config.iva_pct          ?? 16;
-  const subtotal  = +(primaNeta + derechos).toFixed(2);
-  const iva       = +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);
-  const total     = +(primaNeta + derechos + iva).toFixed(2);
+  const { primaNeta, recargo, subtotal, iva, total } =
+    desglosePrimaCobertura(poliza.coberturas, derechos, ivaPct);
   const formaPago = poliza.forma_pago ?? "—";
 
   const campos = [
@@ -241,6 +239,9 @@ export default function ResumenPoliza({ poliza, onVolver }) {
             <div className="divide-y divide-gray-100 text-sm border border-gray-100 rounded-xl overflow-hidden">
               {[
                 { l: "Prima neta", v: primaNeta, bold: false },
+                ...(recargo > 0
+                  ? [{ l: "Recargo pago fraccionado", v: recargo, bold: false }]
+                  : []),
                 { l: "Derechos / Expedición", v: derechos, bold: false },
                 { l: "Subtotal", v: subtotal, bold: true },
                 { l: "I.V.A. (16%)", v: iva, bold: false },

@@ -7,7 +7,7 @@ import {
 // generarCuotasPoliza ya no se llama aquí — los pagos se insertan por migración
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
-import { isoAMX, abrirRecibo } from "../../utils/recibo";
+import { isoAMX, abrirRecibo, construirPolizaRecibo } from "../../utils/recibo";
 import { hoyISO } from "../../utils/fecha";
 import {
   Banknote,
@@ -595,7 +595,7 @@ export default function OperadorPagos({ usuario }) {
           clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
           oficinas(id, nombre),
           vendedores(nombre, apellido, codigo),
-          coberturas(id, nombre, prima_neta, prima_total, regla_pago, prima_base)
+          coberturas(id, nombre, prima_neta, recargo, prima_total, regla_pago, prima_base)
         `,
         )
         .neq("estatus", "COTIZACION")
@@ -611,42 +611,18 @@ export default function OperadorPagos({ usuario }) {
 
       const rowsBuilt = (polizasDB ?? []).map((pol) => {
         const cfg = configParaFecha(versionesConfig, pol.fecha_inicio);
-        const derechos = cfg.derechos_emision ?? 400;
-        const ivaPct = cfg.iva_pct ?? 16;
-        const nombreCliente = [pol.clientes?.nombre, pol.clientes?.apellido]
-          .filter(Boolean)
-          .join(" ");
         const nombreVendedor = pol.vendedores
           ? [pol.vendedores.nombre, pol.vendedores.apellido]
               .filter(Boolean)
               .join(" ")
           : "GAMAN";
-        const primaNeta = Number(pol.coberturas?.prima_neta ?? 0);
-        const iva = +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);
+        // Mismo objeto que usan admin, corte y comisiones (utils/recibo.js),
+        // para que el desglose del recibo nunca se desincronice.
         return {
-          id: pol.constancia ?? pol.numero_poliza ?? String(pol.id),
-          polizaId: pol.id,
-          asegurado: nombreCliente,
-          oficina: pol.oficinas?.nombre ?? "",
+          ...construirPolizaRecibo(pol, cfg),
           cobertura: pol.coberturas?.nombre || "",
           coberturaId: pol.coberturas?.id ?? null,
-          reglaPago: pol.coberturas?.regla_pago ?? "ESTANDAR",
-          primaBase: pol.coberturas?.prima_base ?? null,
           vendedor: nombreVendedor,
-          formaPago: pol.forma_pago,
-          primaTotal: Number(pol.coberturas?.prima_total ?? 0),
-          primaNeta,
-          iva,
-          ivaPct,
-          derechos,
-          fechaInicio: pol.fecha_inicio ?? "",
-          fechaFin: pol.fecha_fin ?? "",
-          horaInicio: pol.hora_inicio ?? "12:00:00 hrs.",
-          horaFin: pol.hora_fin ?? "12:00:00 hrs.",
-          conducto: pol.vendedores?.codigo || "-",
-          clienteData: pol.clientes ?? {},
-          estatusPoliza: pol.estatus ?? "VIGENTE",
-          cuotas: null,
         };
       });
 

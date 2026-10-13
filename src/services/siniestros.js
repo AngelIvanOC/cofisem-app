@@ -53,7 +53,7 @@ const SEL_POLIZA = `
   vendedores(nombre, apellido),
   concesionarios(nombre, apellido1, apellido2),
   vehiculos_amis(marca, tipo, dc, dl, anio),
-  coberturas(nombre, prima_total, prima_neta,
+  coberturas(nombre, prima_total, prima_neta, recargo,
     cobertura_rubros(id, rubro, monto_maximo, es_sublimite, orden)),
   pagos(id, monto, fecha_vencimiento, estatus),
   siniestros(

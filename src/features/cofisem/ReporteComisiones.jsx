@@ -209,7 +209,7 @@ export default function ReporteComisiones() {
               vendedores(id, nombre, apellido),
               gaman:polizas!polizas_cofisem_poliza_id_fkey(
                 id, forma_pago, fecha_inicio,
-                coberturas(nombre, prima_neta, prima_total, regla_pago, prima_base),
+                coberturas(nombre, prima_neta, recargo, prima_total, regla_pago, prima_base),
                 clientes(rfc)
               ),
               comisiones_cofisem(num_cuota, monto, fecha_pago, porcentaje, origen),

@@ -4,7 +4,7 @@ export async function fetchCoberturasActivas() {
   const { data, error } = await supabase
     .from("coberturas")
     .select(`
-      id, nombre, prima_neta, prima_total, duracion_meses,
+      id, nombre, prima_neta, recargo, prima_total, duracion_meses,
       prima_base, regla_pago, oficina_id,
       grupo_id, grupos_coberturas(nombre),
       cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden)

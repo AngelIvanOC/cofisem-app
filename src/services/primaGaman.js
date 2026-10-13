@@ -20,7 +20,7 @@ export async function obtenerPrimaGaman(polizaId) {
     .from("polizas")
     .select(`
       id, forma_pago, fecha_inicio,
-      coberturas(nombre, prima_neta, prima_total, regla_pago, prima_base)
+      coberturas(nombre, prima_neta, recargo, prima_total, regla_pago, prima_base)
     `)
     .eq("id", polizaId)
     .single();
@@ -68,7 +68,7 @@ export async function obtenerImportesCuotaGaman(polizaId, numCuota) {
     .from("polizas")
     .select(`
       id, forma_pago, fecha_inicio,
-      coberturas(nombre, prima_neta, prima_total, regla_pago, prima_base)
+      coberturas(nombre, prima_neta, recargo, prima_total, regla_pago, prima_base)
     `)
     .eq("id", polizaId)
     .single();

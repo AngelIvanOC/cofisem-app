@@ -30,7 +30,7 @@ function Separador() {
 function SeccionProrrata({ poliza, prorrata, constanciaFutura, tipoDoc, esUltima }) {
   const { contratante, vigencia, agencia, numeroPoliza } = poliza;
   const {
-    primaTotal, ivaOriginal, derechos, primaNeta, primaNetaDia,
+    primaTotal, ivaOriginal, derechos, recargo, primaNeta, primaNetaDia,
     diasTotales, diasTranscurridos, diasRestantes,
     primaNoDevengada, ivaNoDevengada, totalDevolver,
     fechaCancelacion,
@@ -92,6 +92,9 @@ function SeccionProrrata({ poliza, prorrata, constanciaFutura, tipoDoc, esUltima
           <FilaProrrata label="Prima Total:"              valor={fmt$(primaTotal)} />
           <FilaProrrata label="IVA (incluido):"           valor={fmt$(ivaOriginal)} />
           <FilaProrrata label="Gastos de Expedición:"     valor={fmt$(derechos)} />
+          {recargo > 0 && (
+            <FilaProrrata label="Recargo (no se devuelve):" valor={fmt$(recargo)} />
+          )}
           <FilaProrrata label="Prima Neta:"               valor={fmt$(primaNeta)} />
           <Separador />
           <FilaProrrata label="Días totales:"             valor={String(diasTotales)} />

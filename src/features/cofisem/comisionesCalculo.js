@@ -58,7 +58,7 @@ export const SELECT_POLIZA_COMISION = `
   vendedor_id, vendedor_nombre,
   gaman:polizas!polizas_cofisem_poliza_id_fkey(
     id, forma_pago, fecha_inicio,
-    coberturas(nombre, prima_neta, prima_total, regla_pago, prima_base),
+    coberturas(nombre, prima_neta, recargo, prima_total, regla_pago, prima_base),
     clientes(rfc)
   ),
   pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))

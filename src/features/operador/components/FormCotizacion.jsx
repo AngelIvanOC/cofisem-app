@@ -513,6 +513,8 @@ export default function FormCotizacion({
   const primaNeta = cobParaPrecio
     ? parseFloat(cobParaPrecio.prima_neta)
     : +(subtotal - DERECHOS).toFixed(2);
+  // Recargo por pago fraccionado (solo la cobertura de 4 pagos 799+3×625)
+  const recargo = Number(cobParaPrecio?.recargo ?? 0);
 
   const fechaHoy = new Date().toLocaleDateString("es-MX", {
     day: "2-digit",
@@ -1835,6 +1837,9 @@ export default function FormCotizacion({
                 <div className="divide-y divide-gray-100 text-sm border border-gray-100 rounded-xl overflow-hidden">
                   {[
                     { l: "Prima neta", v: primaNeta, bold: false },
+                    ...(recargo > 0
+                      ? [{ l: "Recargo pago fraccionado", v: recargo, bold: false }]
+                      : []),
                     { l: "Derechos / Expedición", v: DERECHOS, bold: false },
                     { l: "Subtotal", v: subtotal, bold: true },
                     { l: "I.V.A. (16%)", v: iva, bold: false },

@@ -82,3 +82,17 @@ export function calcularIVA(primaNeta, derechos, ivaPct = 16) {
 export function calcularTotal(primaNeta, derechos, ivaPct = 16) {
   return +(primaNeta + derechos + calcularIVA(primaNeta, derechos, ivaPct)).toFixed(2);
 }
+
+// Desglose anual de la prima de una cobertura (barra del PDF, detalle de
+// póliza, verificación). `coberturas.recargo` es el recargo por pago
+// fraccionado (hoy solo "TAXI BÁSICA PAGOS 2500": 150): NO es prima neta,
+// así que la comisión — % sobre la prima neta — no lo incluye.
+//   PN + recargo + derechos = subtotal;  IVA = subtotal × iva_pct
+export function desglosePrimaCobertura(cobertura, derechos, ivaPct = 16) {
+  const primaNeta = Number(cobertura?.prima_neta ?? 0);
+  const recargo   = Number(cobertura?.recargo ?? 0);
+  const subtotal  = +(primaNeta + recargo + derechos).toFixed(2);
+  const iva       = +(subtotal * (ivaPct / 100)).toFixed(2);
+  const total     = +(subtotal + iva).toFixed(2);
+  return { primaNeta, recargo, derechos, subtotal, iva, total };
+}

@@ -17,7 +17,7 @@ import {
   fetchOperadores,
   fetchOperadoresPorOficina,
 } from "../../services/usuarios";
-import { fetchConfigCostos } from "../../services/configuracion";
+import { fetchConfigCostos, desglosePrimaCobertura } from "../../services/configuracion";
 import { actualizarNombreCliente } from "../../services/clientes";
 import { actualizarNombreConcesionario, vincularConcesionario, fetchConcesionariosByCliente } from "../../services/concesionarios";
 import ModalNuevoConcesionario from "../operador/components/ModalNuevoConcesionario";
@@ -871,8 +871,12 @@ function calcularProrrata(poliza, config) {
   const ivaPct = config?.iva_pct ?? 16;
   const derechos = config?.derechos_emision ?? 400;
 
+  // El recargo por pago fraccionado (coberturas.recargo) no es prima: no se
+  // devuelve, la prorrata es solo sobre la prima neta.
+  const recargo = Number(poliza.coberturas?.recargo ?? 0);
+
   const ivaOriginal = +((primaTotal * ivaPct) / (100 + ivaPct)).toFixed(2);
-  const primaNeta = +(primaTotal - ivaOriginal - derechos).toFixed(2);
+  const primaNeta = +(primaTotal - ivaOriginal - derechos - recargo).toFixed(2);
   const primaNetaDia =
     diasTotales > 0 ? +(primaNeta / diasTotales).toFixed(4) : 0;
   const primaNoDevengada = +(primaNetaDia * diasRestantes).toFixed(2);
@@ -883,6 +887,7 @@ function calcularProrrata(poliza, config) {
     primaTotal,
     ivaOriginal,
     derechos,
+    recargo,
     primaNeta,
     primaNetaDia,
     diasTotales,
@@ -928,7 +933,7 @@ function ModalCancelarProrrata({ poliza, usuario, onClose, onDone }) {
           fetchPolizaById(poliza.id),
           fetchConfigCostos(poliza.fecha_inicio),
         ]);
-        setProrrata(calcularProrrata(poliza, config));
+        setProrrata(calcularProrrata(full, config));
         setPolizaPDF(buildPolizaPDF(full, full.oficinas, config));
       } catch (e) {
         console.error(e);
@@ -1120,6 +1125,9 @@ function ModalCancelarProrrata({ poliza, usuario, onClose, onDone }) {
                     ["Prima total",               fmt$(prorrata.primaTotal)],
                     ["IVA (incluido en prima)",   fmt$(prorrata.ivaOriginal)],
                     ["Gastos de expedición",      fmt$(prorrata.derechos)],
+                    ...(prorrata.recargo > 0
+                      ? [["Recargo (no se devuelve)", fmt$(prorrata.recargo)]]
+                      : []),
                     ["Prima neta",                fmt$(prorrata.primaNeta)],
                     ["Prima neta / día",          fmt$(prorrata.primaNetaDia)],
                     null,
@@ -1314,12 +1322,10 @@ function DetallePolizaAdmin({ poliza, pagos, config, onVolver }) {
       })
     : "—";
 
-  const primaNeta = poliza.coberturas?.prima_neta ?? 0;
   const derechos  = config?.derechos_emision ?? 400;
   const ivaPct    = config?.iva_pct ?? 16;
-  const subtotal  = +(primaNeta + derechos).toFixed(2);
-  const iva       = +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);
-  const total     = +(primaNeta + derechos + iva).toFixed(2);
+  const { primaNeta, recargo, subtotal, iva, total } =
+    desglosePrimaCobertura(poliza.coberturas, derechos, ivaPct);
 
   const cuotas = [...(pagos ?? [])]
     .sort((a, b) => new Date(a.fecha_vencimiento) - new Date(b.fecha_vencimiento))
@@ -1495,6 +1501,9 @@ function DetallePolizaAdmin({ poliza, pagos, config, onVolver }) {
             <div className="divide-y divide-gray-100 text-sm border border-gray-100 rounded-xl overflow-hidden">
               {[
                 { l: "Prima neta",            v: primaNeta, bold: false },
+                ...(recargo > 0
+                  ? [{ l: "Recargo pago fraccionado", v: recargo, bold: false }]
+                  : []),
                 { l: "Derechos / Expedición", v: derechos,  bold: false },
                 { l: "Subtotal",              v: subtotal,  bold: true  },
                 { l: "I.V.A. (16%)",          v: iva,       bold: false },
@@ -2053,7 +2062,7 @@ export default function AdminPolizas() {
         clientes(nombre, apellido),
         vendedores(nombre, apellido),
         oficinas(id, nombre),
-        coberturas(nombre, prima_neta, prima_total)
+        coberturas(nombre, prima_neta, recargo, prima_total)
       `,
       )
       .in("estatus", [

@@ -462,7 +462,7 @@ export default function VerificarPoliza() {
                     mono
                   />
                   <Row
-                    label="Cargos"
+                    label="Recargos"
                     value={fmtMonto(poliza.recargo ?? 0)}
                     mono
                   />

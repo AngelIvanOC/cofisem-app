@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
 import { fetchPolizaById, calcularEstatus } from "../../services/polizas";
-import { fetchConfigCostos } from "../../services/configuracion";
+import { fetchConfigCostos, desglosePrimaCobertura } from "../../services/configuracion";
 import StatusBadge from "../operador/components/StatusBadge";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
@@ -68,12 +68,10 @@ function DetallePolizaAdmin({ poliza, pagos, config, onVolver }) {
       })
     : "—";
 
-  const primaNeta = poliza.coberturas?.prima_neta ?? 0;
   const derechos = config?.derechos_emision ?? 400;
   const ivaPct = config?.iva_pct ?? 16;
-  const subtotal = +(primaNeta + derechos).toFixed(2);
-  const iva = +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);
-  const total = +(primaNeta + derechos + iva).toFixed(2);
+  const { primaNeta, recargo, subtotal, iva, total } =
+    desglosePrimaCobertura(poliza.coberturas, derechos, ivaPct);
 
   const cuotas = [...(pagos ?? [])]
     .sort(
@@ -260,6 +258,9 @@ function DetallePolizaAdmin({ poliza, pagos, config, onVolver }) {
             <div className="divide-y divide-gray-100 text-sm border border-gray-100 rounded-xl overflow-hidden">
               {[
                 { l: "Prima neta", v: primaNeta, bold: false },
+                ...(recargo > 0
+                  ? [{ l: "Recargo pago fraccionado", v: recargo, bold: false }]
+                  : []),
                 { l: "Derechos / Expedición", v: derechos, bold: false },
                 { l: "Subtotal", v: subtotal, bold: true },
                 { l: "I.V.A. (16%)", v: iva, bold: false },
@@ -324,7 +325,7 @@ export default function CabineroPolizas() {
         clientes(nombre, apellido),
         vendedores(nombre, apellido),
         oficinas(id, nombre),
-        coberturas(nombre, prima_neta, prima_total),
+        coberturas(nombre, prima_neta, recargo, prima_total),
         vehiculos_amis (
           id,
           marca,

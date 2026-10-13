@@ -477,7 +477,7 @@ export default function AdminPagos({ usuario }) {
           clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
           oficinas(id, nombre),
           vendedores(nombre, apellido, codigo),
-          coberturas(id, nombre, prima_neta, prima_total, regla_pago, prima_base)
+          coberturas(id, nombre, prima_neta, recargo, prima_total, regla_pago, prima_base)
         `)
         .neq("estatus", "COTIZACION")
         .order("fecha_inicio", { ascending: false });

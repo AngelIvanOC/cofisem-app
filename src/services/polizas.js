@@ -3,6 +3,7 @@ import { EMPRESA } from "../components/pdf/mockData";
 import { mockCoberturas, mockCondiciones } from "../components/pdf/mockData";
 import { obtenerPrimaGaman } from "./primaGaman";
 import { hoyISO } from "../utils/fecha";
+import { desglosePrimaCobertura } from "./configuracion";
 
 // Resuelve una cobertura activa por prima_total cuando no se pasó cobertura_id
 // explícito (flujo legacy / borradores viejos). Puede haber MÁS DE UNA cobertura
@@ -386,7 +387,7 @@ export async function fetchPolizasSubsecuentes(usuarioId) {
       id, constancia, numero_poliza, estatus, fecha_inicio, fecha_fin, created_at,
       cliente_id, notas,
       clientes(id, nombre, apellido),
-      coberturas(id, nombre, prima_neta, prima_total, duracion_meses,
+      coberturas(id, nombre, prima_neta, recargo, prima_total, duracion_meses,
         cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
     `)
     .in('estatus', ['SUBSECUENTE', 'RENOVACION'])
@@ -517,7 +518,7 @@ export async function emitirPoliza({
     oficinas(id, nombre),
     usuarios!polizas_creado_por_fkey(id_muestra),
     vehiculos_amis(id, cve, mr, marca, tipo, dc, dl, anio),
-    coberturas(nombre, prima_neta, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
+    coberturas(nombre, prima_neta, recargo, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
   `;
 
   // ── Registrar automáticamente en el corte diario (polizas_cofisem) ────────
@@ -876,7 +877,7 @@ export async function fetchPolizaById(id) {
       oficinas(id, nombre),
       usuarios!polizas_creado_por_fkey(id_muestra),
       vehiculos_amis(id, cve, mr, marca, tipo, dc, dl, anio),
-      coberturas(nombre, prima_neta, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
+      coberturas(nombre, prima_neta, recargo, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
     `)
     .eq('id', id)
     .single();
@@ -970,7 +971,7 @@ export async function fetchPolizas(oficinaId = null, creadoPorId = null) {
       fecha_inicio, fecha_fin, created_at,
       clientes(nombre, apellido),
       vendedores(nombre, apellido),
-      coberturas(nombre, prima_neta, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
+      coberturas(nombre, prima_neta, recargo, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
     `)
     .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA','ANULADA'])
     .order('fecha_inicio', { ascending: false });
@@ -985,8 +986,8 @@ export async function fetchPolizas(oficinaId = null, creadoPorId = null) {
 export function buildPolizaPDF(poliza, oficina, config = {}) {
   const derechos  = config.derechos_emision ?? 400;
   const ivaPct    = config.iva_pct          ?? 16;
-  const primaNeta = poliza.coberturas?.prima_neta ?? 0;
-  const iva       = +((primaNeta + derechos) * (ivaPct / 100)).toFixed(2);
+  const { primaNeta, recargo, iva, total } =
+    desglosePrimaCobertura(poliza.coberturas, derechos, ivaPct);
   const cliente       = poliza.clientes       ?? {};
   const vendedor      = poliza.vendedores     ?? {};
   const concesionario = poliza.concesionarios ?? null;
@@ -1062,10 +1063,10 @@ export function buildPolizaPDF(poliza, oficina, config = {}) {
       neta:      primaNeta,
       descuento: poliza.descuento || 0,
       premioNeto:primaNeta,
-      recargo:   poliza.recargo   || 0,
+      recargo,
       derechos,
       iva,
-      total:     +(primaNeta + derechos + iva).toFixed(2),
+      total,
       enLetras:  poliza.en_letras    || '',
       formaPago: poliza.forma_pago   || 'CONTADO',
     },

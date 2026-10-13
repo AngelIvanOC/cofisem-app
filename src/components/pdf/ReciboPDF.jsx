@@ -77,6 +77,7 @@ function SeccionRecibo({
   rfc,
   curp,
   primaNeta,
+  recargo,
   gastosExpedicion,
   iva,
   primaTotal,
@@ -261,7 +262,7 @@ function SeccionRecibo({
             }}
           >
             <FilaPago label="PRIMA NETA :" valor={fmt$(primaNeta)} />
-            <FilaPago label="Tasa p/Pago Fracc. :" valor="$0.00" />
+            <FilaPago label="Tasa p/Pago Fracc. :" valor={fmt$(recargo ?? 0)} />
             <FilaPago
               label="Gastos Expedición :"
               valor={fmt$(gastosExpedicion)}
