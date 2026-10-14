@@ -644,7 +644,7 @@ function EjemploCalculo({ reglas }) {
     ["Retenido", `= comisión × ${num(ret)}%`, `−${$(r)}`],
     ["Impuesto", `= (comisión − retenido) × ${num(imp)}%`, `−${$(i)}`],
     ["Gastos de administración", "GAMAN contado", `−${$(gas)}`],
-    ["Neto a pagar (vale)", "redondeado al peso", $(Math.round(netoExacto))],
+    ["Neto a pagar (vale)", "contado: redondeado al peso (en pagos lleva centavos)", $(Math.round(netoExacto))],
   ];
   return (
     <div className="p-4">

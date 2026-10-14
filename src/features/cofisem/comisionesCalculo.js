@@ -152,6 +152,11 @@ export function esEsquemaAutomatico(p, autoDesde) {
   return !!creada && creada >= autoDesde;
 }
 
+// ¿Póliza de contado? (GAMAN: su forma de pago en GAMAN).
+export function esContado(p) {
+  return (p.poliza_id ? (p.gaman?.forma_pago ?? p.forma_pago) : p.forma_pago) === "CONTADO";
+}
+
 // Gastos de administración por pago: cobertura OBLIGATORIO siempre usa su
 // propia regla; GAMAN distingue contado / pagos; las externas, la forma de
 // pago tal cual (CONTADO, SEMESTRAL, TRIMESTRAL, CUATRIMESTRAL, MENSUAL,
@@ -198,7 +203,7 @@ export function calcularComisionCuota(p, c, ctx) {
 
   // Cadena exacta (sin redondear en medio):
   //   comisión − retenido − impuesto (sobre lo que queda) − gastos = neto.
-  // Solo el neto final se redondea al peso.
+  // Neto: CONTADO se redondea al peso; en pagos se deja a centavos.
   let bruto = null, retenido = null, impuesto = null, netoExacto = null, neto = null;
   if (pct != null && primaNeta > 0) {
     bruto = (primaNeta * pct) / 100;
@@ -206,7 +211,7 @@ export function calcularComisionCuota(p, c, ctx) {
       retenido = (bruto * pctRetenido) / 100;
       impuesto = ((bruto - retenido) * pctImpuesto) / 100;
       netoExacto = bruto - retenido - impuesto - gastos;
-      neto = netoExacto > 0 ? Math.round(netoExacto) : null;
+      neto = netoExacto > 0 ? (esContado(p) ? Math.round(netoExacto) : redondear(netoExacto)) : null;
     }
   }
 

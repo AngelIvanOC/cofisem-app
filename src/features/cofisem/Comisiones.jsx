@@ -62,8 +62,6 @@ const fmt = (d) =>
         year: "numeric",
       })
     : "—";
-const pctTxt = (p) =>
-  `${Number(p).toLocaleString("es-MX", { maximumFractionDigits: 3 })}%`;
 
 const FILTROS = [
   { k: "PENDIENTE", label: "Por capturar" },
@@ -603,25 +601,6 @@ function ModalVales({ grupo, usuario, onClose, onGuardado, onEliminar, onSolicit
   );
 }
 
-// "Comisión 20.3% de $1,755.17 = $356.30 · menos retenido, impuesto y
-// gastos ($20.00) → neto $200.00"
-function DetalleCalculo({ calc }) {
-  if (calc.porcentaje == null || !calc.primaNeta || calc.comision == null) return null;
-  return (
-    <span className="block leading-relaxed">
-      Comisión {pctTxt(calc.porcentaje)} de {$(calc.primaNeta)} ={" "}
-      <strong className="text-gray-600">{$(calc.comision)}</strong>
-      {calc.monto != null && (
-        <>
-          <br />
-          Menos retenido, impuesto y gastos de admin. ({$(calc.gastos)}) → neto{" "}
-          <strong className="text-gray-700">{$(calc.monto)}</strong>
-        </>
-      )}
-    </span>
-  );
-}
-
 function ListaCuotas({ grupo, onVale, onSolicitar, onEliminar }) {
   return (
     <div className="p-5 space-y-3">
@@ -650,9 +629,6 @@ function ListaCuotas({ grupo, onVale, onSolicitar, onEliminar }) {
                 ? "bg-rose-100 text-rose-600"
                 : "bg-gray-100 text-gray-400";
           const monto = v ? v.monto : c.aprobada ? c.aprobada.monto : c.calc.monto;
-          // Junto al neto: la comisión bruta y su % (lo que ve el admin).
-          const pct = v ? v.porcentaje : c.aprobada ? null : c.calc.porcentaje;
-          const bruta = v ? v.comision_bruta : c.aprobada ? null : c.calc.comision;
           // Línea secundaria: un solo dato, el más útil según el estado.
           let sub;
           if (v) sub = <>Pagado {fmt(v.fecha_pago)}{v.folio && <> · <span className="font-mono">{v.folio}</span></>}</>;
@@ -675,11 +651,6 @@ function ListaCuotas({ grupo, onVale, onSolicitar, onEliminar }) {
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-[#13193a] truncate">
                     {monto != null ? $(monto) : <span className="text-gray-400 font-semibold">Sin monto</span>}
-                    {pct != null && bruta != null ? (
-                      <span className="ml-1.5 text-[11px] font-normal text-gray-400">
-                        neto · comisión {$(bruta)} ({pctTxt(pct)})
-                      </span>
-                    ) : null}
                   </p>
                   <p className="text-xs text-gray-400 mt-0.5 truncate">{sub}</p>
                 </div>
@@ -921,30 +892,16 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved, onSolicitar }) {
               />
             </div>
           ) : (
-            <div className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-700">
+            <div className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 flex items-center justify-between gap-2">
               {$(montoFijo)}
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  origen === "SOLICITUD" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
+                {origen === "SOLICITUD" ? "Autorizado" : "Automático"}
+              </span>
             </div>
-          )}
-          {!montoEditable && (
-            <p className="text-[11px] text-gray-400 mt-1">
-              {origen === "SOLICITUD" ? (
-                "Autorizado por administración"
-              ) : (
-                <DetalleCalculo
-                  calc={
-                    existente
-                      ? {
-                          porcentaje: existente.porcentaje,
-                          primaNeta: existente.prima_neta_base,
-                          comision: existente.comision_bruta,
-                          gastos: existente.gastos_admin,
-                          monto: existente.monto,
-                        }
-                      : cuota.calc
-                  }
-                />
-              )}
-            </p>
           )}
         </div>
         <div>
