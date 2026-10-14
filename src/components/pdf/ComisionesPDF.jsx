@@ -23,11 +23,11 @@ const COLS = [
   { key: "aseguradora", label: "Aseguradora", w: 42 },
   { key: "poliza", label: "Póliza", w: 60 },
   { key: "vigInicio", label: "Inicio vig.", w: 36, tipo: "fecha", align: "center" },
-  { key: "asegurado", label: "Asegurado", w: 90 },
+  { key: "asegurado", label: "Asegurado", w: 70 },
   { key: "rfc", label: "RFC", w: 46 },
   { key: "cobertura", label: "Cobertura", w: 62 },
   { key: "tipo", label: "Tipo", w: 24 },
-  { key: "serie", label: "Serie", w: 66 },
+  { key: "serie", label: "Serie", w: 50 },
   { key: "formaPago", label: "Forma pago", w: 38 },
   { key: "cuota", label: "Cuota", w: 20, align: "center" },
   { key: "fechaPago", label: "Fecha pago", w: 36, tipo: "fecha", align: "center" },
@@ -37,10 +37,11 @@ const COLS = [
   { key: "comision", label: "Comisión $", w: 36, tipo: "dinero" },
   { key: "comisionPct", label: "Comisión %", w: 28, tipo: "pct" },
   { key: "gastosAdmin", label: "Gastos admin.", w: 32, tipo: "dinero" },
-  { key: "iva", label: "IVA", w: 34, tipo: "dinero" },
+  { key: "impuesto", label: "Impuestos", w: 34, tipo: "dinero" },
+  { key: "neto", label: "Neto a pagar", w: 36, tipo: "dinero" },
   { key: "fechaComision", label: "Pago comisión", w: 36, tipo: "fecha", align: "center" },
 ];
-const COLS_TOTAL = ["primaTotal", "primaNeta", "comision", "iva"];
+const COLS_TOTAL = ["primaTotal", "primaNeta", "comision", "gastosAdmin", "impuesto", "neto"];
 // Ancho de las columnas antes de la primera que lleva total.
 const ANCHO_ETIQUETA = COLS.slice(
   0,

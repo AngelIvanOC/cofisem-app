@@ -87,7 +87,8 @@ function modoCaptura(calc, comision, aprobada, esAuto, pendiente) {
   if (pendiente) return "EN_REVISION";
   if (aprobada) return "SOLICITUD";
   if (calc.estado === "LISTA") return "AUTO";
-  if (!esAuto) return "MANUAL";
+  // Neto en $0 o negativo: nunca se captura a mano, lo revisa administración.
+  if (!esAuto && calc.estado !== "NETO_CERO") return "MANUAL";
   return "BLOQUEADA";
 }
 const CAPTURABLE = ["AUTO", "SOLICITUD", "MANUAL"];
@@ -182,7 +183,7 @@ export default function Comisiones({ usuario }) {
         .from("polizas_cofisem")
         .select(
           `${SELECT_POLIZA_COMISION},
-          comisiones_cofisem(id, num_cuota, monto, fecha_pago, comprobante_url, folio, porcentaje, prima_neta_base, origen),
+          comisiones_cofisem(id, num_cuota, monto, fecha_pago, comprobante_url, folio, porcentaje, prima_neta_base, origen, comision_bruta, retenido, impuesto, gastos_admin),
           comision_solicitudes(id, num_cuota, monto, motivo, estatus, nota_resolucion, created_at)`,
         )
         .not("vendedor_id", "is", null)
@@ -602,13 +603,21 @@ function ModalVales({ grupo, usuario, onClose, onGuardado, onEliminar, onSolicit
   );
 }
 
-// "10% de $1,500.00 de prima neta = $150.00"
+// "Comisión 20.3% de $1,755.17 = $356.30 · menos retenido, impuesto y
+// gastos ($20.00) → neto $200.00"
 function DetalleCalculo({ calc }) {
-  if (calc.porcentaje == null || !calc.primaNeta) return null;
+  if (calc.porcentaje == null || !calc.primaNeta || calc.comision == null) return null;
   return (
-    <span>
-      {pctTxt(calc.porcentaje)} de {$(calc.primaNeta)} de prima neta ={" "}
-      <strong className="text-gray-700">{$(calc.monto)}</strong>
+    <span className="block leading-relaxed">
+      Comisión {pctTxt(calc.porcentaje)} de {$(calc.primaNeta)} ={" "}
+      <strong className="text-gray-600">{$(calc.comision)}</strong>
+      {calc.monto != null && (
+        <>
+          <br />
+          Menos retenido, impuesto y gastos de admin. ({$(calc.gastos)}) → neto{" "}
+          <strong className="text-gray-700">{$(calc.monto)}</strong>
+        </>
+      )}
     </span>
   );
 }
@@ -641,8 +650,9 @@ function ListaCuotas({ grupo, onVale, onSolicitar, onEliminar }) {
                 ? "bg-rose-100 text-rose-600"
                 : "bg-gray-100 text-gray-400";
           const monto = v ? v.monto : c.aprobada ? c.aprobada.monto : c.calc.monto;
+          // Junto al neto: la comisión bruta y su % (lo que ve el admin).
           const pct = v ? v.porcentaje : c.aprobada ? null : c.calc.porcentaje;
-          const base = v ? v.prima_neta_base : c.calc.primaNeta;
+          const bruta = v ? v.comision_bruta : c.aprobada ? null : c.calc.comision;
           // Línea secundaria: un solo dato, el más útil según el estado.
           let sub;
           if (v) sub = <>Pagado {fmt(v.fecha_pago)}{v.folio && <> · <span className="font-mono">{v.folio}</span></>}</>;
@@ -665,9 +675,9 @@ function ListaCuotas({ grupo, onVale, onSolicitar, onEliminar }) {
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-[#13193a] truncate">
                     {monto != null ? $(monto) : <span className="text-gray-400 font-semibold">Sin monto</span>}
-                    {pct != null && base ? (
+                    {pct != null && bruta != null ? (
                       <span className="ml-1.5 text-[11px] font-normal text-gray-400">
-                        {pctTxt(pct)} de {$(base)}
+                        neto · comisión {$(bruta)} ({pctTxt(pct)})
                       </span>
                     ) : null}
                   </p>
@@ -808,6 +818,23 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved, onSolicitar }) {
         : origen === "AUTO"
           ? cuota.calc.primaNeta
           : (cuota.calc.primaNeta ?? null);
+      // Desglose (comisión, retenido, impuesto, gastos): el del cálculo en un
+      // vale nuevo automático; un vale existente conserva el suyo.
+      const desglose = existente
+        ? {
+            comision_bruta: existente.comision_bruta ?? null,
+            retenido: existente.retenido ?? null,
+            impuesto: existente.impuesto ?? null,
+            gastos_admin: existente.gastos_admin ?? null,
+          }
+        : origen === "MANUAL"
+          ? { comision_bruta: null, retenido: null, impuesto: null, gastos_admin: null }
+          : {
+              comision_bruta: cuota.calc.comision,
+              retenido: cuota.calc.retenido,
+              impuesto: cuota.calc.impuesto,
+              gastos_admin: cuota.calc.gastos,
+            };
       const { data, error: err } = await supabase
         .from("comisiones_cofisem")
         .upsert(
@@ -818,6 +845,7 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved, onSolicitar }) {
             monto,
             porcentaje,
             prima_neta_base: base,
+            ...desglose,
             origen,
             fecha_pago: fechaPago || hoyISO(),
             comprobante_url: comprobante,
@@ -902,7 +930,19 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved, onSolicitar }) {
               {origen === "SOLICITUD" ? (
                 "Autorizado por administración"
               ) : (
-                <DetalleCalculo calc={existente ? { porcentaje: existente.porcentaje, primaNeta: existente.prima_neta_base, monto: existente.monto } : cuota.calc} />
+                <DetalleCalculo
+                  calc={
+                    existente
+                      ? {
+                          porcentaje: existente.porcentaje,
+                          primaNeta: existente.prima_neta_base,
+                          comision: existente.comision_bruta,
+                          gastos: existente.gastos_admin,
+                          monto: existente.monto,
+                        }
+                      : cuota.calc
+                  }
+                />
               )}
             </p>
           )}
@@ -1005,13 +1045,13 @@ function FormSolicitud({ poliza, cuota, usuario, onCancel, onSaved }) {
       <p className="text-xs text-gray-500">
         {cuota.calc.monto != null ? (
           <>
-            El sistema calcula <strong>{$(cuota.calc.monto)}</strong> para este pago. Si
+            El sistema calcula un neto de <strong>{$(cuota.calc.monto)}</strong> para este pago. Si
             debe pagarse otro monto, pídelo aquí; administración lo autoriza o lo rechaza.
           </>
         ) : (
           <>
             El sistema no puede calcular este pago ({cuota.calc.motivo.toLowerCase()}).
-            Puedes pedir a administración que autorice un monto manual.
+            Puedes pedir a administración que autorice un monto manual (neto a pagar).
           </>
         )}
       </p>
@@ -1022,7 +1062,7 @@ function FormSolicitud({ poliza, cuota, usuario, onCancel, onSaved }) {
       )}
       <div>
         <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
-          Monto solicitado
+          Neto a pagar solicitado
         </label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>

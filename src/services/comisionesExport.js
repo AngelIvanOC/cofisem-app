@@ -30,12 +30,13 @@ export const COLUMNAS_EXPORT = [
   { key: "comision", label: "Comisión $", w: 12, tipo: "dinero" },
   { key: "comisionPct", label: "Comisión %", w: 10, tipo: "pct" },
   { key: "gastosAdmin", label: "Gastos admin.", w: 12, tipo: "dinero" },
-  { key: "iva", label: "Impuestos (IVA)", w: 13, tipo: "dinero" },
+  { key: "impuesto", label: "Impuestos", w: 12, tipo: "dinero" },
+  { key: "neto", label: "Neto a pagar", w: 13, tipo: "dinero" },
   { key: "fechaComision", label: "Fecha pago comisión", w: 13, tipo: "fecha" },
 ];
 
 // Columnas que llevan total por vendedor y total general.
-export const COLUMNAS_TOTAL = ["primaTotal", "primaNeta", "comision", "iva"];
+export const COLUMNAS_TOTAL = ["primaTotal", "primaNeta", "comision", "gastosAdmin", "impuesto", "neto"];
 
 const MONEY_FORMAT = "$#,##0.00";
 const PCT_FORMAT = "0.00%";

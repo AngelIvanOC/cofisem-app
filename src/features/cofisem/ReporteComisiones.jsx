@@ -45,11 +45,6 @@ const fmt = (d) =>
       })
     : "—";
 
-// IVA 16% ya incluido en la prima total de la cuota (neta + derecho +
-// IVA): 625.00 → 86.21 de IVA, igual que en los recibos. Solo para
-// pólizas que no son de GAMAN — las de GAMAN usan el desglose del recibo.
-const ivaIncluido = (total) => Math.round((n(total) * 0.16 / 1.16) * 100) / 100;
-
 // vendedor_id = 1 es "COFISEM" (venta de oficina, sin vendedor específico).
 const VENDEDOR_COFISEM = 1;
 
@@ -100,11 +95,12 @@ function filaExport(f) {
     primaNeta: f.primaNeta,
     comision: f.comisionMonto,
     comisionPct: f.comisionPct,
-    gastosAdmin: null,
-    iva: f.iva,
+    gastosAdmin: f.gastos,
+    impuesto: f.impuesto,
+    neto: f.neto,
     // Fecha en que se pagó el vale, o "AÚN NO CAPTURADO" si es el monto
     // calculado pendiente de pagar.
-    fechaComision: f.comisionEstimada ? "AÚN NO CAPTURADO" : f.comisionFecha,
+    fechaComision: f.porRevisar ? "POR REVISAR" : f.comisionEstimada ? "AÚN NO CAPTURADO" : f.comisionFecha,
   };
 }
 
@@ -145,7 +141,8 @@ const COLUMNAS = [
   { label: "Comisión $", align: "right" },
   { label: "Comisión %", align: "right" },
   { label: "Gastos admin.", align: "right" },
-  { label: "Impuestos (IVA)", align: "right" },
+  { label: "Impuestos", align: "right" },
+  { label: "Neto a pagar", align: "right" },
   { label: "Fecha pago comisión" },
 ];
 
@@ -212,7 +209,7 @@ export default function ReporteComisiones() {
                 coberturas(nombre, prima_neta, recargo, prima_total, regla_pago, prima_base),
                 clientes(rfc)
               ),
-              comisiones_cofisem(num_cuota, monto, fecha_pago, porcentaje, origen),
+              comisiones_cofisem(num_cuota, monto, fecha_pago, porcentaje, origen, comision_bruta, impuesto, gastos_admin),
               pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
             `,
             )
@@ -261,8 +258,13 @@ export default function ReporteComisiones() {
         const comision = comisiones.find((x) => x.num_cuota === c.num_cuota);
         const llevaComision = n(comision?.monto) > 0;
         const conVendedor = p.vendedor_id != null && p.vendedor_id !== VENDEDOR_COFISEM;
-        const estimada = !llevaComision && conVendedor && calc.monto != null;
-        const comisionMonto = llevaComision ? n(comision.monto) : estimada ? calc.monto : null;
+        // Con vale: su desglose guardado. Sin vale: el calculado (estimado).
+        // Vales viejos (MANUAL) no tienen desglose: solo su neto pagado.
+        const calcVisible = !llevaComision && conVendedor;
+        const estimada = calcVisible && calc.comision != null;
+        const porRevisar = calcVisible && calc.estado === "NETO_CERO";
+        const valorDe = (campoVale, campoCalc) =>
+          llevaComision ? (comision[campoVale] ?? null) : calcVisible ? (calc[campoCalc] ?? null) : null;
 
         const key = p.vendedor_id ?? `txt:${p.vendedor_nombre ?? ""}`;
         if (!porVendedor.has(key)) {
@@ -280,15 +282,14 @@ export default function ReporteComisiones() {
           fechaPago: info.fecha,
           primaTotal,
           primaNeta,
-          comisionMonto,
-          comisionPct: llevaComision
-            ? (comision.porcentaje != null
-                ? Number(comision.porcentaje)
-                : primaNeta ? (comisionMonto / primaNeta) * 100 : null)
-            : estimada ? calc.porcentaje : null,
+          comisionMonto: valorDe("comision_bruta", "comision"),
+          comisionPct: valorDe("porcentaje", "porcentaje"),
+          gastos: valorDe("gastos_admin", "gastos"),
+          impuesto: valorDe("impuesto", "impuesto"),
+          neto: llevaComision ? n(comision.monto) : calcVisible ? calc.monto : null,
           comisionFecha: llevaComision ? comision.fecha_pago : null,
           comisionEstimada: estimada,
-          iva: calc.iva != null ? calc.iva : ivaIncluido(primaTotal),
+          porRevisar,
         });
       }
     }
@@ -303,9 +304,11 @@ export default function ReporteComisiones() {
           primaTotal: t.primaTotal + f.primaTotal,
           primaNeta: t.primaNeta + n(f.primaNeta),
           comision: t.comision + n(f.comisionMonto),
-          iva: t.iva + f.iva,
+          gastos: t.gastos + n(f.gastos),
+          impuesto: t.impuesto + n(f.impuesto),
+          neto: t.neto + n(f.neto),
         }),
-        { primaTotal: 0, primaNeta: 0, comision: 0, iva: 0 },
+        { primaTotal: 0, primaNeta: 0, comision: 0, gastos: 0, impuesto: 0, neto: 0 },
       );
       g.polizas = new Set(g.filas.map((f) => f.p.id)).size;
       return g;
@@ -331,9 +334,11 @@ export default function ReporteComisiones() {
       primaTotal: t.primaTotal + g.totales.primaTotal,
       primaNeta: t.primaNeta + g.totales.primaNeta,
       comision: t.comision + g.totales.comision,
-      iva: t.iva + g.totales.iva,
+      gastos: t.gastos + g.totales.gastos,
+      impuesto: t.impuesto + g.totales.impuesto,
+      neto: t.neto + g.totales.neto,
     }),
-    { cuotas: 0, primaTotal: 0, primaNeta: 0, comision: 0, iva: 0 },
+    { cuotas: 0, primaTotal: 0, primaNeta: 0, comision: 0, gastos: 0, impuesto: 0, neto: 0 },
   );
 
   // Lo mismo que se ve en pantalla, aplanado para el Excel y el PDF.
@@ -516,7 +521,7 @@ export default function ReporteComisiones() {
             { label: "Vendedores", valor: grupos.length },
             { label: "Cuotas cobradas", valor: totalGeneral.cuotas },
             { label: "Cobrado", valor: $(totalGeneral.primaTotal) },
-            { label: "Comisiones", valor: $(totalGeneral.comision), destacado: true },
+            { label: "Neto a pagar", valor: $(totalGeneral.neto), destacado: true },
           ].map((k) => (
             <div
               key={k.label}
@@ -709,8 +714,8 @@ function TablaVendedor({ grupo }) {
         </h2>
         <p className="text-xs text-gray-400">
           {polizas} póliza{polizas === 1 ? "" : "s"} · {filas.length} cuota
-          {filas.length === 1 ? "" : "s"} · Comisión:{" "}
-          <strong className="text-[#1447e6]">{$(totales.comision)}</strong>
+          {filas.length === 1 ? "" : "s"} · Neto a pagar:{" "}
+          <strong className="text-[#1447e6]">{$(totales.neto)}</strong>
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -767,7 +772,7 @@ function TablaVendedor({ grupo }) {
                     {f.primaNeta != null ? $(f.primaNeta) : vacio}
                   </td>
                   <td
-                    className={`${td} text-right font-bold ${f.comisionEstimada ? "text-amber-600" : "text-emerald-700"}`}
+                    className={`${td} text-right ${f.comisionEstimada ? "text-amber-600" : "text-gray-700"}`}
                     title={f.comisionEstimada ? "Calculado por el sistema — aún no se captura el vale" : undefined}
                   >
                     {f.comisionMonto != null ? $(f.comisionMonto) : vacio}
@@ -777,10 +782,23 @@ function TablaVendedor({ grupo }) {
                       ? `${Number(f.comisionPct).toLocaleString("es-MX", { maximumFractionDigits: 3 })}%`
                       : vacio}
                   </td>
-                  <td className={`${td} text-right`}>{vacio}</td>
-                  <td className={`${td} text-right text-gray-600`}>{$(f.iva)}</td>
+                  <td className={`${td} text-right text-gray-600`}>
+                    {f.gastos != null ? $(f.gastos) : vacio}
+                  </td>
+                  <td className={`${td} text-right text-gray-600`}>
+                    {f.impuesto != null ? $(f.impuesto) : vacio}
+                  </td>
+                  <td
+                    className={`${td} text-right font-bold ${f.comisionEstimada ? "text-amber-600" : "text-emerald-700"}`}
+                  >
+                    {f.neto != null ? $(f.neto) : vacio}
+                  </td>
                   <td className={`${td} text-gray-500`}>
-                    {f.comisionEstimada ? (
+                    {f.porRevisar ? (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-600">
+                        POR REVISAR
+                      </span>
+                    ) : f.comisionEstimada ? (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
                         AÚN NO CAPTURADO
                       </span>
@@ -801,12 +819,11 @@ function TablaVendedor({ grupo }) {
               </td>
               <td className={`${td} text-right`}>{$(totales.primaTotal)}</td>
               <td className={`${td} text-right`}>{$(totales.primaNeta)}</td>
-              <td className={`${td} text-right text-emerald-700`}>
-                {$(totales.comision)}
-              </td>
+              <td className={`${td} text-right`}>{$(totales.comision)}</td>
               <td className={td} />
-              <td className={td} />
-              <td className={`${td} text-right`}>{$(totales.iva)}</td>
+              <td className={`${td} text-right`}>{$(totales.gastos)}</td>
+              <td className={`${td} text-right`}>{$(totales.impuesto)}</td>
+              <td className={`${td} text-right text-emerald-700`}>{$(totales.neto)}</td>
               <td className={td} />
             </tr>
           </tfoot>

@@ -51,7 +51,7 @@ export const TIPOS_VEHICULO = [
 // polizas_cofisem de cada pantalla.
 export const SELECT_POLIZA_COMISION = `
   id, poliza_id, oficina_id, aseguradora, numero_poliza, asegurado_nombre,
-  tipo, created_at, fecha_emision, fecha_corte, forma_pago,
+  tipo, cobertura, created_at, fecha_emision, fecha_corte, forma_pago,
   prima_anual, prima_primer_pago, prima_primer_pago_neta,
   efectivo, cheque, tdc, pol_pend_pago, registro_parcial, num_cuota_pago,
   comprobante_cheque_url, comprobante_tdc_url,
@@ -152,11 +152,26 @@ export function esEsquemaAutomatico(p, autoDesde) {
   return !!creada && creada >= autoDesde;
 }
 
+// Gastos de administración por pago: cobertura OBLIGATORIO siempre usa su
+// propia regla; GAMAN distingue contado / pagos; las externas, la forma de
+// pago tal cual (CONTADO, SEMESTRAL, TRIMESTRAL, CUATRIMESTRAL, MENSUAL,
+// 4 PARCIALES).
+export function claveGastos(p) {
+  if (!p.poliza_id && /^OBLIGATORI/i.test((p.cobertura ?? "").trim())) return "OBLIGATORIO";
+  if (p.poliza_id) {
+    const forma = p.gaman?.forma_pago ?? p.forma_pago;
+    return forma === "CONTADO" ? "GAMAN CONTADO" : "GAMAN PAGOS";
+  }
+  return p.forma_pago || null;
+}
+
 export const ESTADO_COMISION = {
   NO_COBRADA: "Falta registrar el cobro de este pago",
   FALTA_PRIMA: "Falta la prima total o la prima neta de este pago",
   FALTA_TIPO: "Falta el tipo de vehículo de la póliza",
   SIN_REGLA: "Sin regla de comisión para este producto (administración)",
+  SIN_DEDUCCION: "Falta configurar el retenido, el impuesto o los gastos de esta forma de pago (administración)",
+  NETO_CERO: "El neto sale en $0 o menos (los gastos superan la comisión) — lo revisa administración",
   LISTA: "Lista para capturar",
 };
 
@@ -175,9 +190,25 @@ export function calcularComisionCuota(p, c, ctx) {
       : n(c.prima_neta);
 
   const { ambito, clave } = claveRegla(p);
-  const pct = reglaVigente(ctx.reglas, ambito, clave, fechaRegistro(p));
-  const monto =
-    pct != null && primaNeta > 0 ? redondear((primaNeta * pct) / 100) : null;
+  const fecha = fechaRegistro(p);
+  const pct = reglaVigente(ctx.reglas, ambito, clave, fecha);
+  const pctRetenido = reglaVigente(ctx.reglas, "DEDUCCION", "RETENIDO", fecha);
+  const pctImpuesto = reglaVigente(ctx.reglas, "DEDUCCION", "IMPUESTO", fecha);
+  const gastos = reglaVigente(ctx.reglas, "GASTOS", claveGastos(p), fecha);
+
+  // Cadena exacta (sin redondear en medio):
+  //   comisión − retenido − impuesto (sobre lo que queda) − gastos = neto.
+  // Solo el neto final se redondea al peso.
+  let bruto = null, retenido = null, impuesto = null, netoExacto = null, neto = null;
+  if (pct != null && primaNeta > 0) {
+    bruto = (primaNeta * pct) / 100;
+    if (pctRetenido != null && pctImpuesto != null && gastos != null) {
+      retenido = (bruto * pctRetenido) / 100;
+      impuesto = ((bruto - retenido) * pctImpuesto) / 100;
+      netoExacto = bruto - retenido - impuesto - gastos;
+      neto = netoExacto > 0 ? Math.round(netoExacto) : null;
+    }
+  }
 
   // Primer motivo que impide capturar, en el orden en que se resuelve.
   let estado = "LISTA";
@@ -187,6 +218,8 @@ export function calcularComisionCuota(p, c, ctx) {
   // como faltante: hay que elegir uno de la lista.
   else if (ambito === "EXTERNA" && !TIPOS_VEHICULO.includes(clave)) estado = "FALTA_TIPO";
   else if (pct == null) estado = "SIN_REGLA";
+  else if (netoExacto == null) estado = "SIN_DEDUCCION";
+  else if (netoExacto <= 0) estado = "NETO_CERO";
 
   return {
     cobrada,
@@ -195,7 +228,15 @@ export function calcularComisionCuota(p, c, ctx) {
     primaNeta: primaNeta || null,
     iva: gaman ? n(gaman.iva) : null,
     porcentaje: pct ?? null,
-    monto,
+    // Desglose: comisión (lo que ve el admin en "Comisión $"), retenido,
+    // impuesto, gastos y el NETO A PAGAR (monto del vale).
+    comision: bruto != null ? redondear(bruto) : null,
+    retenido: retenido != null ? redondear(retenido) : null,
+    impuesto: impuesto != null ? redondear(impuesto) : null,
+    gastos: gastos ?? null,
+    pctRetenido: pctRetenido ?? null,
+    pctImpuesto: pctImpuesto ?? null,
+    monto: neto,
     estado,
     motivo: ESTADO_COMISION[estado],
     ambito,
