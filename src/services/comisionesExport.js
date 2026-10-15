@@ -92,7 +92,7 @@ function celda(col, valor, estiloBase) {
       return { v: Number(valor), t: "n", s: { ...estiloBase, alignment: { horizontal: "center" } } };
     case "fecha":
       // Texto (p. ej. "AÚN NO CAPTURADO") en vez de fecha ISO.
-      if (!/^d{4}-d{2}-d{2}$/.test(String(valor)))
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(valor)))
         return { v: String(valor), t: "s", s: estiloBase };
       return { v: aSerialExcel(valor), t: "n", z: DATE_FORMAT, s: estiloBase };
     default:
