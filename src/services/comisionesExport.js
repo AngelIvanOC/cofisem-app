@@ -35,6 +35,19 @@ export const COLUMNAS_EXPORT = [
   { key: "fechaComision", label: "Fecha pago comisión", w: 13, tipo: "fecha" },
 ];
 
+// Archivo para compartir con el vendedor: sin montos ni totales.
+export const COLUMNAS_VENDEDOR = [
+  { key: "aseguradora", label: "Aseguradora", w: 14 },
+  { key: "poliza", label: "Póliza", w: 22 },
+  { key: "vigInicio", label: "Inicio vigencia", w: 13, tipo: "fecha" },
+  { key: "asegurado", label: "Asegurado", w: 34 },
+  { key: "cobertura", label: "Cobertura", w: 24 },
+  { key: "tipo", label: "Tipo", w: 10 },
+  { key: "serie", label: "Serie", w: 22 },
+  { key: "formaPago", label: "Forma de pago", w: 14 },
+  { key: "cuota", label: "Pago", w: 7, tipo: "num" },
+];
+
 // Columnas que llevan total por vendedor y total general.
 export const COLUMNAS_TOTAL = ["primaTotal", "primaNeta", "comision", "gastosAdmin", "impuesto", "neto"];
 
@@ -89,7 +102,7 @@ function celda(col, valor, estiloBase) {
     case "pct":
       return { v: Number(valor) / 100, t: "n", z: PCT_FORMAT, s: estiloBase };
     case "num":
-      return { v: Number(valor), t: "n", s: { ...estiloBase, alignment: { horizontal: "center" } } };
+      return { v: Number(valor), t: "n", z: "0", s: { ...estiloBase, alignment: { horizontal: "center" } } };
     case "fecha":
       // Texto (p. ej. "AÚN NO CAPTURADO") en vez de fecha ISO.
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(valor)))
@@ -100,8 +113,8 @@ function celda(col, valor, estiloBase) {
   }
 }
 
-function filaTotal(etiqueta, totales, estilo) {
-  return COLUMNAS_EXPORT.map((col, i) => {
+function filaTotal(columnas, etiqueta, totales, estilo) {
+  return columnas.map((col, i) => {
     if (i === 0) return { v: etiqueta, t: "s", s: estilo };
     if (COLUMNAS_TOTAL.includes(col.key))
       return { v: totales[col.key] ?? 0, t: "n", z: MONEY_FORMAT, s: estilo };
@@ -110,17 +123,22 @@ function filaTotal(etiqueta, totales, estilo) {
 }
 
 export function exportarComisionesExcel({
+  modo,
   grupos,
   periodoLabel,
   filtrosLabel,
   totalGeneral,
   nombreArchivo,
 }) {
-  const ultimaCol = COLUMNAS_EXPORT.length - 1;
+  const paraVendedor = modo === "VENDEDOR";
+  const columnas = paraVendedor ? COLUMNAS_VENDEDOR : COLUMNAS_EXPORT;
+  const ultimaCol = columnas.length - 1;
   const filas = [];
   const merges = [];
 
-  filas.push([{ v: "Reporte de comisiones", t: "s", s: S_TITULO }]);
+  filas.push([
+    { v: paraVendedor ? "Relación de pagos cobrados" : "Reporte de comisiones", t: "s", s: S_TITULO },
+  ]);
   filas.push([{ v: `Periodo: ${periodoLabel}`, t: "s", s: S_SUB }]);
   filas.push([{ v: filtrosLabel, t: "s", s: S_SUB }]);
   filas.push([]);
@@ -136,18 +154,19 @@ export function exportarComisionesExcel({
       ...Array.from({ length: ultimaCol }, () => ({ v: "", t: "s", s: S_VENDEDOR })),
     ]);
     merges.push({ s: { r, c: 0 }, e: { r, c: ultimaCol } });
-    filas.push(COLUMNAS_EXPORT.map((c) => ({ v: c.label, t: "s", s: S_HEADER })));
+    filas.push(columnas.map((c) => ({ v: c.label, t: "s", s: S_HEADER })));
     for (const f of g.filas) {
-      filas.push(COLUMNAS_EXPORT.map((c) => celda(c, f[c.key], S_CELDA)));
+      filas.push(columnas.map((c) => celda(c, f[c.key], S_CELDA)));
     }
-    filas.push(filaTotal(`Total ${g.nombre}`, g.totales, S_TOTAL));
+    if (!paraVendedor) filas.push(filaTotal(columnas, `Total ${g.nombre}`, g.totales, S_TOTAL));
     filas.push([]);
   }
 
-  filas.push(filaTotal("TOTAL GENERAL", totalGeneral, S_TOTAL_GENERAL));
+  if (!paraVendedor)
+    filas.push(filaTotal(columnas, "TOTAL GENERAL", totalGeneral, S_TOTAL_GENERAL));
 
   const ws = XLSX.utils.aoa_to_sheet(filas);
-  ws["!cols"] = COLUMNAS_EXPORT.map((c) => ({ wch: c.w }));
+  ws["!cols"] = columnas.map((c) => ({ wch: c.w }));
   ws["!merges"] = merges;
 
   const wb = XLSX.utils.book_new();

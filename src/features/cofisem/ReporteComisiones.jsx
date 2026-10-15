@@ -25,6 +25,7 @@ import {
   Check,
 } from "lucide-react";
 import { exportarComisionesExcel } from "../../services/comisionesExport";
+import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
 import { hoyISO } from "../../utils/fecha";
 import { cuotasDePoliza } from "../pagos/cuotasCofisem";
@@ -107,6 +108,24 @@ function filaExport(f) {
         : f.comisionEstimada
           ? "AÚN NO CAPTURADO"
           : f.comisionFecha,
+  };
+}
+
+// Versión para compartir con el vendedor: solo datos de la póliza y el
+// no. de pago (columnas COLUMNAS_VENDEDOR del exportador).
+function filaExportVendedor(f) {
+  const p = f.p;
+  return {
+    id: f.id,
+    aseguradora: p.aseguradora,
+    poliza: p.numero_poliza,
+    vigInicio: p.vigencia_inicio,
+    asegurado: p.asegurado_nombre,
+    cobertura: p.cobertura,
+    tipo: p.tipo,
+    serie: p.num_serie,
+    formaPago: p.forma_pago,
+    cuota: f.numCuota,
   };
 }
 
@@ -370,8 +389,31 @@ export default function ReporteComisiones() {
     { cuotas: 0, primaTotal: 0, primaNeta: 0, comision: 0, gastos: 0, impuesto: 0, neto: 0 },
   );
 
-  // Lo mismo que se ve en pantalla, aplanado para el Excel y el PDF.
-  function datosExport() {
+  // Antes de descargar: archivo completo o versión para el vendedor (solo
+  // datos de la póliza y el no. de pago, sin montos). null = canceló.
+  async function elegirModoExport() {
+    const r = await Swal.fire({
+      title: "¿Qué archivo necesitas?",
+      html:
+        '<b>Completo:</b> todas las columnas de la tabla.<br/>' +
+        '<b>Para el vendedor:</b> solo datos de la póliza y no. de pago, sin montos.',
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: "Completo",
+      denyButtonText: "Para el vendedor",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#1447e6",
+      denyButtonColor: "#13193a",
+    });
+    if (r.isConfirmed) return "COMPLETO";
+    if (r.isDenied) return "VENDEDOR";
+    return null;
+  }
+
+  // Lo mismo que se ve en pantalla, aplanado para el Excel y el PDF. La
+  // versión para el vendedor no lleva montos ni totales (ni en los datos).
+  function datosExport(modo) {
+    const paraVendedor = modo === "VENDEDOR";
     const vendedor = vendedores.find((v) => String(v.id) === String(vendedorId));
     const oficina = oficinas.find((o) => String(o.id) === String(oficinaId));
     const filtrosLabel = [
@@ -384,39 +426,48 @@ export default function ReporteComisiones() {
       }`,
       `Oficina: ${oficina?.nombre ?? "Todas"}`,
       `Aseguradora: ${aseguradora || "Todas"}`,
-      excluirCofisem ? "Sin ventas de oficina (COFISEM)" : "Incluye ventas de oficina (COFISEM)",
-    ].join("  ·  ");
+      !paraVendedor &&
+        (excluirCofisem ? "Sin ventas de oficina (COFISEM)" : "Incluye ventas de oficina (COFISEM)"),
+    ]
+      .filter(Boolean)
+      .join("  ·  ");
     return {
+      modo: paraVendedor ? "VENDEDOR" : "COMPLETO",
       periodoLabel: `${fmt(desde)} al ${fmt(hasta)}`,
       filtrosLabel,
       generado: new Date().toLocaleString("es-MX"),
       // Las exportaciones nombran la columna de gastos "gastosAdmin".
-      totalGeneral: { ...totalGeneral, gastosAdmin: totalGeneral.gastos },
+      totalGeneral: paraVendedor ? null : { ...totalGeneral, gastosAdmin: totalGeneral.gastos },
       grupos: grupos.map((g) => ({
         key: String(g.key),
-        nombre: g.informativo ? `${g.nombre} (comisión solo informativa)` : g.nombre,
+        nombre:
+          g.informativo && !paraVendedor ? `${g.nombre} (comisión solo informativa)` : g.nombre,
         polizas: g.polizas,
-        totales: { ...g.totales, gastosAdmin: g.totales.gastos },
-        filas: g.filas.map(filaExport),
+        totales: paraVendedor ? null : { ...g.totales, gastosAdmin: g.totales.gastos },
+        filas: g.filas.map(paraVendedor ? filaExportVendedor : filaExport),
       })),
     };
   }
 
-  function exportarExcel() {
+  async function exportarExcel() {
+    const modo = await elegirModoExport();
+    if (!modo) return;
     try {
-      const d = datosExport();
+      const d = datosExport(modo);
       exportarComisionesExcel({
         ...d,
-        nombreArchivo: `Comisiones_${desde}_a_${hasta}.xlsx`,
+        nombreArchivo: `${modo === "VENDEDOR" ? "Polizas_vendedor" : "Comisiones"}_${desde}_a_${hasta}.xlsx`,
       });
     } catch (e) {
       setErrorMsg("No se pudo generar el Excel: " + e.message);
     }
   }
 
-  function exportarPDF() {
+  async function exportarPDF() {
+    const modo = await elegirModoExport();
+    if (!modo) return;
     try {
-      localStorage.setItem("comisiones_pdf_data", JSON.stringify(datosExport()));
+      localStorage.setItem("comisiones_pdf_data", JSON.stringify(datosExport(modo)));
       window.open("/gaman/comisiones-preview", "_blank");
     } catch (e) {
       setErrorMsg("No se pudo generar el PDF: " + e.message);

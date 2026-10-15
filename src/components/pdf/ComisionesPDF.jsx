@@ -41,6 +41,18 @@ const COLS = [
   { key: "neto", label: "Neto a pagar", w: 36, tipo: "dinero" },
   { key: "fechaComision", label: "Pago comisión", w: 36, tipo: "fecha", align: "center" },
 ];
+// Archivo para compartir con el vendedor: sin montos ni totales (suman 802).
+const COLS_VENDEDOR = [
+  { key: "aseguradora", label: "Aseguradora", w: 80 },
+  { key: "poliza", label: "Póliza", w: 110 },
+  { key: "vigInicio", label: "Inicio vigencia", w: 60, tipo: "fecha", align: "center" },
+  { key: "asegurado", label: "Asegurado", w: 180 },
+  { key: "cobertura", label: "Cobertura", w: 130 },
+  { key: "tipo", label: "Tipo", w: 50 },
+  { key: "serie", label: "Serie", w: 110 },
+  { key: "formaPago", label: "Forma de pago", w: 52 },
+  { key: "cuota", label: "Pago", w: 30, align: "center" },
+];
 const COLS_TOTAL = ["primaTotal", "primaNeta", "comision", "gastosAdmin", "impuesto", "neto"];
 // Ancho de las columnas antes de la primera que lleva total.
 const ANCHO_ETIQUETA = COLS.slice(
@@ -48,17 +60,21 @@ const ANCHO_ETIQUETA = COLS.slice(
   COLS.findIndex((c) => c.key === "primaTotal"),
 ).reduce((s, c) => s + c.w, 0);
 
-const FS = 5.6;
-const th = { fontFamily: "Helvetica-Bold", fontSize: FS, color: COLORS.white };
-const td = { fontFamily: "Helvetica", fontSize: FS, color: COLORS.ink };
-const tdBold = { fontFamily: "Helvetica-Bold", fontSize: FS, color: COLORS.navy };
+// Tamaño de letra: la versión del vendedor tiene menos columnas y cabe más grande.
+const estilos = (fs) => ({
+  th: { fontFamily: "Helvetica-Bold", fontSize: fs, color: COLORS.white },
+  td: { fontFamily: "Helvetica", fontSize: fs, color: COLORS.ink },
+  tdBold: { fontFamily: "Helvetica-Bold", fontSize: fs, color: COLORS.navy },
+});
+const E_COMPLETO = estilos(5.6);
+const E_VENDEDOR = estilos(7.5);
 
 function valor(col, v) {
   if (v == null || v === "") return "—";
   if (col.tipo === "dinero") return $(v);
   if (col.tipo === "pct") return `${n(v).toFixed(2)}%`;
   if (col.tipo === "fecha")
-    return /^d{4}-d{2}-d{2}$/.test(String(v)) ? fmtFecha(v) : String(v);
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? fmtFecha(v) : String(v);
   return String(v);
 }
 
@@ -101,7 +117,9 @@ function FilaTotal({ etiqueta, totales, fondo, estilo }) {
   );
 }
 
-function BloqueVendedor({ g }) {
+function BloqueVendedor({ g, paraVendedor }) {
+  const cols = paraVendedor ? COLS_VENDEDOR : COLS;
+  const { th, td, tdBold } = paraVendedor ? E_VENDEDOR : E_COMPLETO;
   return (
     <View style={{ marginBottom: 10 }}>
       {/* Nombre + encabezado no se separan de la primera fila */}
@@ -118,11 +136,12 @@ function BloqueVendedor({ g }) {
             {g.nombre}
           </Text>
           <Text style={{ fontFamily: "Helvetica", fontSize: 6.5, color: COLORS.white }}>
-            {g.polizas} póliza(s) · {g.filas.length} cuota(s) · Comisión {$(g.totales.comision)}
+            {g.polizas} póliza(s) · {g.filas.length} cuota(s)
+            {!paraVendedor && ` · Comisión ${$(g.totales.comision)}`}
           </Text>
         </Fila>
         <Fila style={{ backgroundColor: COLORS.grayHead }}>
-          {COLS.map((c) => (
+          {cols.map((c) => (
             <Celda key={c.key} col={c} estilo={th}>
               {c.label}
             </Celda>
@@ -139,25 +158,29 @@ function BloqueVendedor({ g }) {
             borderBottomColor: COLORS.rule,
           }}
         >
-          {COLS.map((c) => (
+          {cols.map((c) => (
             <Celda key={c.key} col={c} estilo={c.key === "comision" ? tdBold : td}>
               {valor(c, f[c.key])}
             </Celda>
           ))}
         </Fila>
       ))}
-      <FilaTotal
-        etiqueta={`Total ${g.nombre}`}
-        totales={g.totales}
-        fondo={COLORS.subtot}
-        estilo={tdBold}
-      />
+      {!paraVendedor && (
+        <FilaTotal
+          etiqueta={`Total ${g.nombre}`}
+          totales={g.totales}
+          fondo={COLORS.subtot}
+          estilo={tdBold}
+        />
+      )}
     </View>
   );
 }
 
 export default function ComisionesPDF({ datos }) {
   const d = datos ?? { grupos: [], totalGeneral: {} };
+  const paraVendedor = d.modo === "VENDEDOR";
+  const titulo = paraVendedor ? "RELACIÓN DE PAGOS COBRADOS" : "REPORTE DE COMISIONES";
   return (
     <Document>
       <Page
@@ -178,7 +201,7 @@ export default function ComisionesPDF({ datos }) {
           </View>
           <View style={{ flex: 1, alignItems: "center" }}>
             <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 14, color: COLORS.navy }}>
-              REPORTE DE COMISIONES
+              {titulo}
             </Text>
             <Text style={{ fontSize: 8, color: COLORS.dim, marginTop: 2 }}>
               Periodo: {d.periodoLabel}
@@ -197,16 +220,16 @@ export default function ComisionesPDF({ datos }) {
             No hay cuotas cobradas con estos filtros.
           </Text>
         ) : (
-          d.grupos.map((g) => <BloqueVendedor key={g.key} g={g} />)
+          d.grupos.map((g) => <BloqueVendedor key={g.key} g={g} paraVendedor={paraVendedor} />)
         )}
 
-        {d.grupos.length > 0 && (
+        {d.grupos.length > 0 && !paraVendedor && (
           <View wrap={false}>
             <FilaTotal
               etiqueta="TOTAL GENERAL"
               totales={d.totalGeneral}
               fondo="#1447e6"
-              estilo={{ ...tdBold, color: COLORS.white }}
+              estilo={{ ...E_COMPLETO.tdBold, color: COLORS.white }}
             />
           </View>
         )}
@@ -223,7 +246,7 @@ export default function ComisionesPDF({ datos }) {
           }}
           fixed
           render={({ pageNumber, totalPages }) =>
-            `COFISEM — Reporte de comisiones · ${d.periodoLabel || ""} · Página ${pageNumber} de ${totalPages}`
+            `COFISEM — ${paraVendedor ? "Relación de pagos cobrados" : "Reporte de comisiones"} · ${d.periodoLabel || ""} · Página ${pageNumber} de ${totalPages}`
           }
         />
       </Page>
