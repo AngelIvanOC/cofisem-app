@@ -110,6 +110,11 @@ function filaExport(f) {
   };
 }
 
+// Misma aseguradora aunque venga con espacios o en minúsculas.
+function nombreAseguradora(p) {
+  return (p.aseguradora ?? "").trim().toUpperCase();
+}
+
 // PostgREST corta en 1000 filas por petición — se pide por páginas.
 async function traerTodo(construir) {
   const PAG = 1000;
@@ -166,6 +171,7 @@ export default function ReporteComisiones() {
   const rangoInvalido = !!desde && !!hasta && desde > hasta;
   const [vendedorId, setVendedorId] = useState("");
   const [oficinaId, setOficinaId] = useState("");
+  const [aseguradora, setAseguradora] = useState("");
   const [excluirCofisem, setExcluirCofisem] = useState(false);
   const [vendedores, setVendedores] = useState([]);
   const [oficinas, setOficinas] = useState([]);
@@ -245,6 +251,7 @@ export default function ReporteComisiones() {
     const porVendedor = new Map();
     if (!ctx) return [];
     for (const p of polizas) {
+      if (aseguradora && nombreAseguradora(p) !== aseguradora) continue;
       const cuotas = cuotasDePoliza(p);
       const comisiones = comisionesDe(p);
       for (const c of cuotas) {
@@ -331,7 +338,13 @@ export default function ReporteComisiones() {
       return ra - rb || a.nombre.localeCompare(b.nombre);
     });
     return arr;
-  }, [polizas, ctx, desde, hasta]);
+  }, [polizas, ctx, desde, hasta, aseguradora]);
+
+  // Aseguradoras de las pólizas cargadas (ya filtradas por vendedor/oficina).
+  const aseguradoras = useMemo(
+    () => [...new Set(polizas.map(nombreAseguradora).filter(Boolean))].sort(),
+    [polizas],
+  );
 
   // "Excluir COFISEM" oculta las ventas de oficina (vendedor_id = 1) en
   // pantalla, totales y exportaciones.
@@ -370,6 +383,7 @@ export default function ReporteComisiones() {
           : "Todos"
       }`,
       `Oficina: ${oficina?.nombre ?? "Todas"}`,
+      `Aseguradora: ${aseguradora || "Todas"}`,
       excluirCofisem ? "Sin ventas de oficina (COFISEM)" : "Incluye ventas de oficina (COFISEM)",
     ].join("  ·  ");
     return {
@@ -508,6 +522,23 @@ export default function ReporteComisiones() {
                 {o.nombre}
               </option>
             ))}
+          </select>
+          <select
+            value={aseguradora}
+            onChange={(e) => setAseguradora(e.target.value)}
+            aria-label="Aseguradora"
+            className={`${inputCls} flex-1 min-w-[7rem] max-w-[12rem] truncate`}
+          >
+            <option value="">Todas las aseguradoras</option>
+            {aseguradoras.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+            {/* La elegida se conserva aunque el nuevo filtro ya no la traiga. */}
+            {aseguradora && !aseguradoras.includes(aseguradora) && (
+              <option value={aseguradora}>{aseguradora}</option>
+            )}
           </select>
           <label
             className="ml-auto flex items-center gap-2 cursor-pointer select-none shrink-0"
