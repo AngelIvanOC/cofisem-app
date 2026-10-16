@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
+import { traerTodoConError } from "../../utils/supabasePaginado";
 import { calcularEstatus } from "../../services/polizas";
 import StatusBadge from "../operador/components/StatusBadge";
 import { usePagination } from "../../hooks/usePagination";
@@ -171,7 +172,7 @@ export default function AnalistaPolizas() {
 
   const cargar = useCallback(async () => {
     setCargando(true);
-    const { data, error } = await supabase
+    const { data, error } = await traerTodoConError(() => supabase
       .from("polizas")
       .select(`
         id, numero_poliza, constancia, estatus, forma_pago,
@@ -184,7 +185,7 @@ export default function AnalistaPolizas() {
         coberturas(nombre, prima_neta, recargo, prima_total)
       `)
       .in("estatus", ["VIGENTE", "POR VENCER", "VENCIDA", "CANCELADA", "ANULADA"])
-      .order("fecha_inicio", { ascending: false });
+      .order("fecha_inicio", { ascending: false }));
 
     if (error) console.error("Error cargando pólizas analista:", error.message);
     setPolizas(

@@ -54,8 +54,16 @@ const VACIO = {
 // Igual criterio que faltantesCompletado() en CompletarPolizaModal.jsx,
 // aplicado a una sola cuota (sin vigencia/documentación, eso ya se
 // verificó cuando se registró la póliza).
-function faltantes(f) {
+// `gaman`: el pago tal como lo recibió GAMAN ({ monto, fecha_pago,
+// estatus }) cuando la cuota es de GAMAN; null si no aplica.
+function faltantes(f, gaman) {
+  const cobrado = n(f.efectivo) + n(f.cheque) + n(f.tdc);
   const detalle = {
+    // Cuota GAMAN: el cobro se recibe primero en GAMAN.
+    gamanNoRecibido: !!gaman && !gaman.recibido,
+    // Lo capturado debe cuadrar con lo que GAMAN recibió.
+    montoGaman:
+      !!gaman?.recibido && cobrado > 0 && Math.abs(cobrado - n(gaman.monto)) > 0.01,
     folio: !(f.folio && f.folio.trim()),
     pago: !(n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0),
     // La comisión del vendedor se calcula sobre la prima neta de ESTE pago.
@@ -65,6 +73,9 @@ function faltantes(f) {
     comprobanteCheque: n(f.cheque) > 0 && !f.comprobante_cheque_path,
   };
   const labels = {
+    gamanNoRecibido:
+      "Este pago todavía no se recibe en GAMAN — primero regístralo allá (Pagos → recepción)",
+    montoGaman: `Efectivo + Transf/Dep. + T. Crédito/Déb. debe sumar lo que se recibió en GAMAN ($${n(gaman?.monto).toFixed(2)})`,
     folio: "Folio de este cobro",
     pago: "Marca al menos una forma de pago (Efectivo, Cheque/Dep. o T. Crédito/Déb.)",
     primas: "Prima Total y Prima Neta de la cuota (ambas mayores a $0 — con la neta se calcula la comisión)",
@@ -95,6 +106,14 @@ export default function RegistrarCobroModal({
   const [perdidaNota, setPerdidaNota] = useState("");
   const [dandoBaja, setDandoBaja] = useState(false);
   const [endosoAbierto, setEndosoAbierto] = useState(false);
+  // Pago de GAMAN ligado a esta cuota, leído en vivo (fuente de verdad del
+  // monto y la fecha del cobro). Se guarda con el id del pago para no usar
+  // el de otra cuota mientras llega el nuevo.
+  const [gamanLeido, setGamanLeido] = useState({ id: null, data: null });
+  const gaman =
+    row?.pago_gaman_id && gamanLeido.id === row.pago_gaman_id
+      ? gamanLeido.data
+      : null;
 
   useEffect(() => {
     if (!row) return;
@@ -140,6 +159,33 @@ export default function RegistrarCobroModal({
     const polizaId = row?.polizas_cofisem?.poliza_id;
     if (!row?.pago_gaman_id || !polizaId) return;
     let vivo = true;
+    supabase
+      .from("pagos")
+      .select("monto, fecha_pago, estatus")
+      .eq("id", row.pago_gaman_id)
+      .maybeSingle()
+      .then(({ data, error: err }) => {
+        if (!vivo) return;
+        if (err || !data) {
+          setError("No se pudo leer el pago en GAMAN: " + (err?.message ?? "no existe"));
+          return;
+        }
+        const recibido =
+          !!data.fecha_pago && (data.estatus === "PAGADO" || data.estatus === "ADEUDO");
+        setGamanLeido({ id: row.pago_gaman_id, data: { ...data, recibido } });
+        if (!recibido) return;
+        setForm((f) => {
+          const sinForma = !n(f.efectivo) && !n(f.cheque) && !n(f.tdc);
+          return {
+            ...f,
+            // La fecha del cobro es la que quedó en GAMAN (no se edita aquí).
+            fecha_recibido: data.fecha_pago,
+            // Primera captura: se propone todo en efectivo; se ajusta si
+            // se pagó con transferencia o tarjeta.
+            efectivo: sinForma ? String(n(data.monto)) : f.efectivo,
+          };
+        });
+      });
     obtenerImportesCuotaGaman(polizaId, row.num_cuota)
       .then((importes) => {
         if (!vivo || !importes) return;
@@ -165,7 +211,7 @@ export default function RegistrarCobroModal({
   // esos no se abren para editar desde ningún lado.
   const esEdicion = !row._virtual && row.estatus === "RECIBIDO";
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const chk = faltantes(form);
+  const chk = faltantes(form, esGaman ? (gaman ?? { recibido: false, cargando: true }) : null);
   const falta = (k) => intento && chk.detalle[k];
   const campoCls = (k) =>
     `${inp}${falta(k) ? " border-red-300 ring-2 ring-red-100" : ""}`;
@@ -226,6 +272,7 @@ export default function RegistrarCobroModal({
     e.preventDefault();
     if (guardando) return;
     setError(null);
+    if (esGaman && !gaman) return; // todavía leyendo el pago de GAMAN
     if (!chk.completo) {
       setIntento(true);
       await Swal.fire({
@@ -241,7 +288,9 @@ export default function RegistrarCobroModal({
     // cobro que ya está en un corte) y el de destino (la fecha de recibido).
     const oficinaId =
       row.oficina_id ?? p.oficina_id ?? usuario?.oficina_id ?? null;
-    const fechaDestino = form.fecha_recibido || hoyISO();
+    const fechaDestino = esGaman
+      ? gaman.fecha_pago
+      : form.fecha_recibido || hoyISO();
     const fechaOrigen = esEdicion ? row.fecha_recibido : null;
     const cerrado = await corteCerradoQueEstorba(oficinaId, [
       fechaOrigen,
@@ -270,7 +319,7 @@ export default function RegistrarCobroModal({
         folio: form.folio.trim() || null,
         prima_total: n(form.prima_total),
         prima_neta: n(form.prima_neta),
-        fecha_recibido: form.fecha_recibido || hoyISO(),
+        fecha_recibido: fechaDestino,
         efectivo: n(form.efectivo),
         cheque: n(form.cheque),
         tdc: n(form.tdc),
@@ -387,7 +436,13 @@ export default function RegistrarCobroModal({
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
           <p className="text-sm font-bold text-[#1447e6]">
-            {esEdicion ? "Editar cobro de cuota" : "Registrar cobro de cuota"}
+            {esGaman
+              ? esEdicion
+                ? "Editar pago de cuota (GAMAN)"
+                : "Completar pago de cuota (GAMAN)"
+              : esEdicion
+                ? "Editar cobro de cuota"
+                : "Registrar cobro de cuota"}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
             Póliza{" "}
@@ -410,12 +465,41 @@ export default function RegistrarCobroModal({
             </div>
           )}
 
-          <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 flex items-center gap-2 text-[11px] text-gray-500">
-            <Lock className="w-3.5 h-3.5 shrink-0" />
-            Los datos de la póliza ({p.aseguradora || "—"},{" "}
-            {p.forma_pago || "—"}) ya están registrados — aquí solo se captura
-            cómo se pagó esta cuota.
-          </div>
+          {esGaman ? (
+            <div
+              className={`rounded-xl border px-4 py-3 flex items-start gap-2 text-[11px] ${
+                gaman && !gaman.recibido
+                  ? "bg-amber-50 border-amber-200 text-amber-800"
+                  : "bg-gray-50 border-gray-100 text-gray-500"
+              }`}
+            >
+              <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              {!gaman ? (
+                "Leyendo el pago en GAMAN…"
+              ) : gaman.recibido ? (
+                <span>
+                  Recibido en GAMAN el{" "}
+                  <strong>{gaman.fecha_pago.split("-").reverse().join("/")}</strong> por{" "}
+                  <strong>${n(gaman.monto).toFixed(2)}</strong>. Monto, primas y fecha
+                  vienen de GAMAN — aquí solo se captura folio, forma de pago,
+                  comprobantes y endoso.
+                </span>
+              ) : (
+                <span>
+                  Este pago todavía <strong>no se recibe en GAMAN</strong>. Primero
+                  regístralo allá (Pagos → recepción); después aquí se completa
+                  folio y forma de pago.
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 flex items-center gap-2 text-[11px] text-gray-500">
+              <Lock className="w-3.5 h-3.5 shrink-0" />
+              Los datos de la póliza ({p.aseguradora || "—"},{" "}
+              {p.forma_pago || "—"}) ya están registrados — aquí solo se captura
+              cómo se pagó esta cuota.
+            </div>
+          )}
 
           <div className="sm:max-w-xs">
             <label className={lbl}>
@@ -469,8 +553,11 @@ export default function RegistrarCobroModal({
             <input
               type="date"
               value={form.fecha_recibido}
+              disabled={esGaman}
               onChange={(e) => setF("fecha_recibido", e.target.value)}
-              className={inp + " sm:max-w-xs"}
+              className={
+                inp + " sm:max-w-xs" + (esGaman ? " bg-gray-100 text-gray-400" : "")
+              }
             />
           </div>
 

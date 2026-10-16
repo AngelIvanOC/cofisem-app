@@ -25,11 +25,13 @@ import { exportarCorteExcel } from "../../services/corteExport";
 import { fetchEndososManualesDia, aplanarAdjuntoGaman } from "../../services/endososCofisem";
 import { verComprobantePago } from "../../services/comprobantesPagoCofisem";
 import { hoyISO } from "../../utils/fecha";
+import { traerTodo } from "../../utils/supabasePaginado";
 import CompletarPolizaModal, {
   CompletarBadge,
   FotosCarrusel,
 } from "./CompletarPolizaModal";
 import RegistrarCobroModal from "../pagos/RegistrarCobroModal";
+import { cobradoEnGaman, recibidoEnGaman } from "../pagos/cuotasCofisem";
 
 const DENOMINACIONES = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.5];
 const HOY_ISO = hoyISO();
@@ -149,11 +151,18 @@ export default function CorteOperador({ usuario }) {
     // vencimiento, o porque GAMAN ya registró el pago) y todavía NO se ha
     // cobrado. Si llegó a este corte por adelanto o ya se cobró (pago
     // tardío), NO lleva el color de alerta.
-    row._cuotaPorCobrar =
-      (c.num_cuota ?? 1) > 1 &&
+    // Cuota GAMAN que GAMAN ya recibió este día y aquí falta completar
+    // (folio / forma de pago). Incluye la cuota 1 que quedó "pend. pago".
+    row._porCompletarGaman =
       c.estatus === "PENDIENTE" &&
-      c.fecha_recibido !== fechaCorte &&
-      c.fecha_adelantado !== fechaCorte;
+      cobradoEnGaman(c) &&
+      c.pago_gaman.fecha_pago === fechaCorte;
+    row._cuotaPorCobrar =
+      row._porCompletarGaman ||
+      ((c.num_cuota ?? 1) > 1 &&
+        c.estatus === "PENDIENTE" &&
+        c.fecha_recibido !== fechaCorte &&
+        c.fecha_adelantado !== fechaCorte);
     return row;
   });
   const filasTabla = [...registros, ...filasCuotas];
@@ -169,7 +178,9 @@ export default function CorteOperador({ usuario }) {
   );
   const sumaPrimaAnual = registros.reduce((s, r) => s + n(r.prima_anual), 0);
   const sumaPrimaNeta = registros.reduce((s, r) => s + n(r.prima_neta), 0);
-  const pendientes = registros.filter((r) => !r.completado).length;
+  const pendientes =
+    registros.filter((r) => !r.completado).length +
+    filasCuotas.filter((r) => r._porCompletarGaman).length;
 
   // Los vales (comisiones) son dinero que sale del efectivo recibido,
   // igual que los Gastos, así que también se restan aquí — el Total ya
@@ -287,32 +298,44 @@ export default function CorteOperador({ usuario }) {
   // debe entrar al corte de ese día, igual que un pago subsecuente.
   async function cargarCuotasDia(corteEstaCerrado) {
     try {
-      let query = supabase
-        .from("pagos_cofisem")
-        .select(
-          "*, polizas_cofisem(*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)), pago_gaman:pagos(fecha_pago)",
-        )
-        .gte("num_cuota", 1);
-      if (usuario?.oficina_id)
-        query = query.eq("oficina_id", usuario.oficina_id);
-      const { data, error } = await query;
-      if (error) throw error;
+      // Paginado: la oficina 1 ya pasa de 1000 cuotas y PostgREST corta
+      // ahí sin avisar — las de más no llegaban y faltaban en el corte.
+      const data = await traerTodo(() => {
+        let query = supabase
+          .from("pagos_cofisem")
+          .select(
+            "*, polizas_cofisem(*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)), pago_gaman:pagos(fecha_pago, estatus, monto)",
+          )
+          .gte("num_cuota", 1);
+        if (usuario?.oficina_id)
+          query = query.eq("oficina_id", usuario.oficina_id);
+        return query;
+      });
       const relevantes = (data ?? []).filter((c) => {
-        if (c.num_cuota === 1) {
-          return c.estatus === "RECIBIDO" && c.fecha_recibido === fechaCorte;
-        }
-        if (c.fecha_recibido === fechaCorte) return true;
+        // Cobro ya registrado ese día (RECIBIDO o ya APLICADO por el
+        // analista — antes la cuota 1 desaparecía del corte al aplicarse).
+        if (c.estatus !== "PENDIENTE")
+          return !!c.fecha_recibido && c.fecha_recibido === fechaCorte;
         if (corteEstaCerrado) return false;
-        if (
-          c.pago_gaman_id &&
-          c.estatus === "PENDIENTE" &&
-          c.pago_gaman?.fecha_pago === fechaCorte
-        )
-          return true;
+        const pc = c.polizas_cofisem ?? {};
+        // GAMAN ya recibió el pago: va al corte del día en que lo recibió
+        // (no al de su vencimiento), para completar folio / forma de pago.
+        if (cobradoEnGaman(c)) {
+          // La cuota 1 normal se completa en la póliza (polizas_cofisem);
+          // solo entra aquí si quedó "pól. pend. pago" al emitir.
+          if (
+            c.num_cuota === 1 &&
+            !(n(pc.pol_pend_pago) > 0 && !pc.registro_parcial)
+          )
+            return false;
+          return c.pago_gaman.fecha_pago === fechaCorte;
+        }
+        // Cobrada en GAMAN antes de que existiera COFISEM: histórico.
+        if (recibidoEnGaman(c)) return false;
+        if (c.num_cuota === 1) return false;
         return (
-          c.estatus === "PENDIENTE" &&
-          (c.fecha_vencimiento === fechaCorte ||
-            c.fecha_adelantado === fechaCorte)
+          c.fecha_vencimiento === fechaCorte ||
+          c.fecha_adelantado === fechaCorte
         );
       });
       const filtradas = relevantes.filter(
@@ -499,7 +522,12 @@ export default function CorteOperador({ usuario }) {
   }
 
   function handleCerrarCorte() {
-    const incompletas = registros.filter((r) => !r.completado);
+    // Pólizas sin completar + cobros que GAMAN ya recibió este día y aquí
+    // no se han completado (ese dinero no cuadraría en la caja).
+    const incompletas = [
+      ...registros.filter((r) => !r.completado),
+      ...filasCuotas.filter((r) => r._porCompletarGaman),
+    ];
     if (incompletas.length > 0) {
       setNotaIncompleto("");
       setAlertaIncompletas(incompletas);
@@ -1003,7 +1031,9 @@ export default function CorteOperador({ usuario }) {
                               : "bg-amber-100 text-amber-700"
                           }`}
                         >
-                          {r._cuotaPorCobrar
+                          {r._porCompletarGaman
+                            ? "por completar"
+                            : r._cuotaPorCobrar
                             ? "por cobrar"
                             : r._esPagoTardio
                               ? "pago tardío"
@@ -1371,18 +1401,31 @@ export default function CorteOperador({ usuario }) {
                     <td className="px-3 py-2.5 text-center">
                       {r._esCuotaSubsecuente ? (
                         r._cuotaEstatus === "PENDIENTE" ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              !corteCerrado && setModalCuota(r._cuotaRaw)
-                            }
-                            disabled={corteCerrado}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 text-white text-[11px] font-bold hover:bg-amber-600 disabled:opacity-50 transition-colors"
-                          >
-                            {r.num_cuota_pago === 1
-                              ? "Poner al corriente"
-                              : "Registrar cobro"}
-                          </button>
+                          r._cuotaRaw?.pago_gaman_id && !r._porCompletarGaman ? (
+                            // Cuota GAMAN que GAMAN aún no recibe: el cobro se
+                            // registra allá primero (monto y fecha salen de ahí).
+                            <span
+                              className="text-[11px] font-semibold text-gray-400 whitespace-nowrap"
+                              title="Primero se recibe el pago en GAMAN; después aquí se completa folio y forma de pago"
+                            >
+                              Se cobra en GAMAN
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                !corteCerrado && setModalCuota(r._cuotaRaw)
+                              }
+                              disabled={corteCerrado}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 text-white text-[11px] font-bold hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                            >
+                              {r._porCompletarGaman
+                                ? "Completar pago"
+                                : r.num_cuota_pago === 1
+                                  ? "Poner al corriente"
+                                  : "Registrar cobro"}
+                            </button>
+                          )
                         ) : r._cuotaEstatus === "RECIBIDO" ? (
                           // pagos_cofisem.estatus solo llega a RECIBIDO desde
                           // RegistrarCobroModal — folio/monto/forma de pago
@@ -1830,8 +1873,8 @@ export default function CorteOperador({ usuario }) {
               </p>
               <p className="text-sm text-gray-500">
                 {alertaIncompletas.length === 1
-                  ? "Esta póliza sigue sin completarse:"
-                  : `Estas ${alertaIncompletas.length} pólizas siguen sin completarse:`}
+                  ? "Este registro sigue sin completarse:"
+                  : `Estos ${alertaIncompletas.length} registros siguen sin completarse:`}
               </p>
             </div>
             <div className="max-h-56 overflow-y-auto border-y border-gray-100 divide-y divide-gray-50">
@@ -1841,13 +1884,19 @@ export default function CorteOperador({ usuario }) {
                   type="button"
                   onClick={() => {
                     setAlertaIncompletas(null);
-                    setModalRow(r);
+                    if (r._esCuotaSubsecuente) setModalCuota(r._cuotaRaw);
+                    else setModalRow(r);
                   }}
                   className="w-full flex items-center justify-between gap-3 px-6 py-3 text-left hover:bg-gray-50 transition-colors"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-mono font-bold text-[#1447e6] truncate">
                       {r.numero_poliza || "—"}
+                      {r._esCuotaSubsecuente && (
+                        <span className="ml-1.5 font-sans text-[10px] font-semibold text-orange-600">
+                          pago {r.num_cuota_pago} cobrado en GAMAN
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-gray-500 truncate">
                       {r.asegurado_nombre || "—"}

@@ -230,7 +230,8 @@ function valorColumna(r, col, index) {
   if (r?._esNota && !CLAVES_NOTA.has(col.key)) return "";
   // Marca "POR COBRAR" en la columna Cobertura de las cuotas subsecuentes
   // que tocan cobrarse ese día y aún no se cobran (fila azul).
-  if (r?._cuotaPorCobrar && col.key === "cobertura") return "• POR COBRAR";
+  if (r?._cuotaPorCobrar && col.key === "cobertura")
+    return r._porCompletarGaman ? "• POR COMPLETAR (cobrado en GAMAN)" : "• POR COBRAR";
   const raw = r?.[col.key];
   switch (col.tipo) {
     case "dinero":

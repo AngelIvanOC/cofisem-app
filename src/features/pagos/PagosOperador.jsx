@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Paperclip, CreditCard, CheckCircle2, Loader2, Search } from "lucide-react";
 import { supabase } from "../../supabaseClient";
+import { traerTodo } from "../../utils/supabasePaginado";
 import {
   subirComprobantePago,
   verComprobantePago,
@@ -10,7 +11,7 @@ import { hoyISO } from "../../utils/fecha";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 import RegistrarCobroModal from "./RegistrarCobroModal";
-import { infoFila, cuotasDePoliza } from "./cuotasCofisem";
+import { infoFila, cuotasDePoliza, recibidoEnGaman } from "./cuotasCofisem";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) =>
@@ -115,25 +116,26 @@ export default function PagosOperador({ usuario }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from("polizas_cofisem")
-        .select(
-          `
-          id, poliza_id, aseguradora, numero_poliza, asegurado_nombre,
-          fecha_emision, fecha_corte, prima_primer_pago, prima_primer_pago_neta,
-          efectivo, cheque, tdc, pol_pend_pago, poliza_gaman_estatus, oficina_id,
-          comprobante_cheque_url, comprobante_tdc_url,
-          perdida, perdida_nota, registro_parcial, num_cuota_pago,
-          pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
-        `,
-        )
-        .order("fecha_emision", { ascending: true });
-      // Pagos de toda la oficina (los lleva la encargada).
-      if (usuario?.oficina_id)
-        query = query.eq("oficina_id", usuario.oficina_id);
-      const { data, error } = await query;
-      if (error) throw error;
-      setPolizas(data ?? []);
+      const data = await traerTodo(() => {
+        let query = supabase
+          .from("polizas_cofisem")
+          .select(
+            `
+            id, poliza_id, aseguradora, numero_poliza, asegurado_nombre,
+            fecha_emision, fecha_corte, prima_primer_pago, prima_primer_pago_neta,
+            efectivo, cheque, tdc, pol_pend_pago, poliza_gaman_estatus, oficina_id,
+            comprobante_cheque_url, comprobante_tdc_url,
+            perdida, perdida_nota, registro_parcial, num_cuota_pago,
+            pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
+          `,
+          )
+          .order("fecha_emision", { ascending: true });
+        // Pagos de toda la oficina (los lleva la encargada).
+        if (usuario?.oficina_id)
+          query = query.eq("oficina_id", usuario.oficina_id);
+        return query;
+      });
+      setPolizas(data);
       setErrorMsg(null);
     } catch (e) {
       setErrorMsg(e.message);
@@ -531,6 +533,7 @@ function ModalCuotasPoliza({
                 fecha,
                 _saldoPendiente,
                 _capturaLocal,
+                _porCompletarGaman,
               } = c._info;
               return (
                 <div
@@ -626,7 +629,7 @@ function ModalCuotasPoliza({
                           </button>
                         ) : (
                           <>
-                            {!_saldoPendiente && (
+                            {!_saldoPendiente && !_porCompletarGaman && (
                               <button
                                 type="button"
                                 onClick={() => onAdjuntarArchivo(c)}
@@ -637,20 +640,30 @@ function ModalCuotasPoliza({
                                   : "Adjuntar archivo"}
                               </button>
                             )}
-                            {/* Cuota 1 de una póliza GAMAN se cobra desde
-                                "Completar" al emitir. Solo aparece "Registrar
-                                cobro" aquí cuando quedó con saldo pendiente de
-                                pago (_saldoPendiente) para liquidarlo otro día,
-                                o para las cuotas 2+ pendientes. */}
-                            {((c.num_cuota > 1 && c.estatus === "PENDIENTE") ||
-                              _saldoPendiente) && (
+                            {/* El cobro de una cuota GAMAN se recibe en GAMAN
+                                (monto y fecha salen de ahí). Aquí solo se
+                                completa folio / forma de pago / archivo, y
+                                solo cuando GAMAN ya lo recibió. */}
+                            {_porCompletarGaman ? (
                               <button
                                 type="button"
                                 onClick={() => onMarcarRecibido(c)}
-                                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold whitespace-nowrap"
+                                className="px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold whitespace-nowrap"
                               >
-                                Registrar cobro
+                                Completar pago
                               </button>
+                            ) : (
+                              ((c.num_cuota > 1 &&
+                                c.estatus === "PENDIENTE" &&
+                                !recibidoEnGaman(c)) ||
+                                _saldoPendiente) && (
+                                <span
+                                  className="text-[11px] font-semibold text-gray-400 whitespace-nowrap"
+                                  title="Primero se recibe el pago en GAMAN; después aquí se completa folio y forma de pago"
+                                >
+                                  Se cobra en GAMAN
+                                </span>
+                              )
                             )}
                           </>
                         )

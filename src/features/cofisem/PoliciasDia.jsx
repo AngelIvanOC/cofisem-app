@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
+import { traerTodo } from "../../utils/supabasePaginado";
 import CompletarPolizaModal, {
   ComprobanteField,
   FotosVehiculoField,
@@ -374,27 +375,28 @@ export default function PoliciasDia({ usuario }) {
   async function cargar() {
     setLoading(true);
     try {
-      let query = supabase
-        .from("polizas_cofisem")
-        .select(
-          "*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)",
-        );
-      // Pólizas de TODA la oficina (las lleva la encargada).
-      if (usuario?.oficina_id)
-        query = query.eq("oficina_id", usuario.oficina_id);
-      if (modoLista === "DIA") {
-        query = query
-          .eq("fecha_corte", fechaVista)
-          .order("created_at", { ascending: true });
-      } else {
-        // Todas: más recientes primero, por día de corte.
-        query = query
-          .order("fecha_corte", { ascending: false })
-          .order("created_at", { ascending: true });
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      setPolizas(data ?? []);
+      const data = await traerTodo(() => {
+        let query = supabase
+          .from("polizas_cofisem")
+          .select(
+            "*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)",
+          );
+        // Pólizas de TODA la oficina (las lleva la encargada).
+        if (usuario?.oficina_id)
+          query = query.eq("oficina_id", usuario.oficina_id);
+        if (modoLista === "DIA") {
+          query = query
+            .eq("fecha_corte", fechaVista)
+            .order("created_at", { ascending: true });
+        } else {
+          // Todas: más recientes primero, por día de corte.
+          query = query
+            .order("fecha_corte", { ascending: false })
+            .order("created_at", { ascending: true });
+        }
+        return query;
+      });
+      setPolizas(data);
     } catch (e) {
       setErrorMsg(e.message);
     } finally {

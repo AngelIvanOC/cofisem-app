@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
+import { traerTodoConError } from "../../utils/supabasePaginado";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 
@@ -46,7 +47,7 @@ export default function AnalistaPagos({ usuario }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: pagosDB, error: e1 } = await supabase
+      const { data: pagosDB, error: e1 } = await traerTodoConError(() => supabase
         .from('pagos')
         .select(`
           id, poliza_id, monto, fecha_pago, estatus, num_cuota,
@@ -58,7 +59,7 @@ export default function AnalistaPagos({ usuario }) {
           )
         `)
         .in('estatus', ['ADEUDO', 'PAGADO'])
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }));
 
       if (e1) throw e1;
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
+import { traerTodoConError } from "../../utils/supabasePaginado";
 import { getState, subscribe } from "../../auth";
 import {
   fetchPolizaById,
@@ -2051,7 +2052,7 @@ export default function AdminPolizas() {
 
   const cargar = useCallback(async () => {
     setCargando(true);
-    const { data, error } = await supabase
+    const { data, error } = await traerTodoConError(() => supabase
       .from("polizas")
       .select(
         `
@@ -2072,7 +2073,7 @@ export default function AdminPolizas() {
         "CANCELADA",
         "ANULADA",
       ])
-      .order("fecha_inicio", { ascending: false });
+      .order("fecha_inicio", { ascending: false }));
     if (error) console.error("Error cargando pólizas admin:", error.message);
     setPolizas(
       (data ?? []).map((p) => ({

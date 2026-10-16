@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { traerTodoConError } from "../utils/supabasePaginado";
 import { EMPRESA } from "../components/pdf/mockData";
 import { mockCoberturas, mockCondiciones } from "../components/pdf/mockData";
 import { obtenerPrimaGaman } from "./primaGaman";
@@ -964,20 +965,23 @@ export async function contarPolizasConcesionario(concesionarioId) {
 
 // ── Cargar pólizas de la lista ─────────────────────────────────────────────
 export async function fetchPolizas(oficinaId = null, creadoPorId = null) {
-  let q = supabase
-    .from('polizas')
-    .select(`
-      id, numero_poliza, constancia, estatus, forma_pago,
-      fecha_inicio, fecha_fin, created_at,
-      clientes(nombre, apellido),
-      vendedores(nombre, apellido),
-      coberturas(nombre, prima_neta, recargo, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
-    `)
-    .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA','ANULADA'])
-    .order('fecha_inicio', { ascending: false });
-  if (oficinaId) q = q.eq('oficina_id', oficinaId);
-  if (creadoPorId) q = q.eq('creado_por', creadoPorId);
-  const { data, error } = await q;
+  const construir = () => {
+    let q = supabase
+      .from('polizas')
+      .select(`
+        id, numero_poliza, constancia, estatus, forma_pago,
+        fecha_inicio, fecha_fin, created_at,
+        clientes(nombre, apellido),
+        vendedores(nombre, apellido),
+        coberturas(nombre, prima_neta, recargo, prima_total, cobertura_rubros(id, rubro, prima_neta, monto_maximo, es_sublimite, orden))
+      `)
+      .in('estatus', ['VIGENTE','POR VENCER','VENCIDA','CANCELADA','ANULADA'])
+      .order('fecha_inicio', { ascending: false });
+    if (oficinaId) q = q.eq('oficina_id', oficinaId);
+    if (creadoPorId) q = q.eq('creado_por', creadoPorId);
+    return q;
+  };
+  const { data, error } = await traerTodoConError(construir);
   if (error) throw error;
   return (data ?? []).map(p => ({ ...p, estatus: calcularEstatus(p.estatus, p.fecha_fin) }));
 }

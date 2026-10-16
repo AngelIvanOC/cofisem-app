@@ -28,6 +28,7 @@ import { exportarComisionesExcel } from "../../services/comisionesExport";
 import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
 import { hoyISO } from "../../utils/fecha";
+import { traerTodo } from "../../utils/supabasePaginado";
 import { cuotasDePoliza } from "../pagos/cuotasCofisem";
 import {
   cargarContextoComisiones,
@@ -132,19 +133,6 @@ function filaExportVendedor(f) {
 // Misma aseguradora aunque venga con espacios o en minúsculas.
 function nombreAseguradora(p) {
   return (p.aseguradora ?? "").trim().toUpperCase();
-}
-
-// PostgREST corta en 1000 filas por petición — se pide por páginas.
-async function traerTodo(construir) {
-  const PAG = 1000;
-  const todo = [];
-  for (let desde = 0; ; desde += PAG) {
-    const { data, error } = await construir().range(desde, desde + PAG - 1);
-    if (error) throw error;
-    todo.push(...(data ?? []));
-    if (!data || data.length < PAG) break;
-  }
-  return todo;
 }
 
 const PERIODOS = [

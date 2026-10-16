@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
+import { traerTodoConError } from "../../utils/supabasePaginado";
 import {
   fetchTodasVersionesConfig,
   configParaFecha,
@@ -586,26 +587,29 @@ export default function OperadorPagos({ usuario }) {
     const oid = usuario?.oficinas?.id;
     setLoading(true);
     try {
-      let polizasQuery = supabase
-        .from("polizas")
-        .select(
-          `
-          id, constancia, numero_poliza, forma_pago,
-          fecha_inicio, fecha_fin, hora_inicio, hora_fin, estatus,
-          clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
-          oficinas(id, nombre),
-          vendedores(nombre, apellido, codigo),
-          coberturas(id, nombre, prima_neta, recargo, prima_total, regla_pago, prima_base)
-        `,
-        )
-        .neq("estatus", "COTIZACION")
-        .order("fecha_inicio", { ascending: false });
-      if (oid) polizasQuery = polizasQuery.eq("oficina_id", oid);
-      if (oid === OFICINA_EZAPATA_ID && usuario?.id) polizasQuery = polizasQuery.eq("creado_por", usuario.id);
+      const polizasQuery = () => {
+        let q = supabase
+          .from("polizas")
+          .select(
+            `
+            id, constancia, numero_poliza, forma_pago,
+            fecha_inicio, fecha_fin, hora_inicio, hora_fin, estatus,
+            clientes(nombre, apellido, rfc, curp, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp),
+            oficinas(id, nombre),
+            vendedores(nombre, apellido, codigo),
+            coberturas(id, nombre, prima_neta, recargo, prima_total, regla_pago, prima_base)
+          `,
+          )
+          .neq("estatus", "COTIZACION")
+          .order("fecha_inicio", { ascending: false });
+        if (oid) q = q.eq("oficina_id", oid);
+        if (oid === OFICINA_EZAPATA_ID && usuario?.id) q = q.eq("creado_por", usuario.id);
+        return q;
+      };
 
       const [versionesConfig, { data: polizasDB, error }] = await Promise.all([
         fetchTodasVersionesConfig(),
-        polizasQuery,
+        traerTodoConError(polizasQuery),
       ]);
       if (error) throw error;
 

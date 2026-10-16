@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Paperclip, CreditCard, CheckCircle2, Loader2 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
+import { traerTodo } from "../../utils/supabasePaginado";
 import { verComprobantePago } from "../../services/comprobantesPagoCofisem";
 
 const n = (v) => parseFloat(v) || 0;
@@ -153,7 +154,7 @@ export default function PagosAnalista({ usuario }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const data = await traerTodo(() => supabase
         .from("polizas_cofisem")
         .select(`
           id, poliza_id, aseguradora, numero_poliza, asegurado_nombre,
@@ -165,9 +166,8 @@ export default function PagosAnalista({ usuario }) {
           oficina:oficina_id(nombre),
           pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
         `)
-        .order("fecha_emision", { ascending: true });
-      if (error) throw error;
-      setPolizas(data ?? []);
+        .order("fecha_emision", { ascending: true }));
+      setPolizas(data);
       setErrorMsg(null);
     } catch (e) {
       setErrorMsg(e.message);

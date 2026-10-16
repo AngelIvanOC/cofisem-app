@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { History, Banknote, Search, Calendar } from "lucide-react";
 import { supabase } from "../../supabaseClient";
+import { traerTodo } from "../../utils/supabasePaginado";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 
@@ -43,12 +44,12 @@ export default function CorteHistorial({ usuario }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      let qp = supabase
-        .from("polizas_cofisem")
-        .select("fecha_corte, prima_primer_pago");
-      qp = usuario?.oficina_id ? qp.eq("oficina_id", usuario.oficina_id) : qp;
-      const { data: dPolizas, error: e2 } = await qp;
-      if (e2) throw e2;
+      const dPolizas = await traerTodo(() => {
+        const qp = supabase
+          .from("polizas_cofisem")
+          .select("fecha_corte, prima_primer_pago");
+        return usuario?.oficina_id ? qp.eq("oficina_id", usuario.oficina_id) : qp;
+      });
 
       let qe = supabase.from("corte_efectivo_entrega").select("*");
       qe = usuario?.oficina_id ? qe.eq("oficina_id", usuario.oficina_id) : qe.is("oficina_id", null);

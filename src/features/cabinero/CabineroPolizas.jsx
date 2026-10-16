@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
+import { traerTodoConError } from "../../utils/supabasePaginado";
 import { fetchPolizaById, calcularEstatus } from "../../services/polizas";
 import { fetchConfigCostos, desglosePrimaCobertura } from "../../services/configuracion";
 import StatusBadge from "../operador/components/StatusBadge";
@@ -314,7 +315,7 @@ export default function CabineroPolizas() {
 
   const cargar = useCallback(async () => {
     setCargando(true);
-    const { data, error } = await supabase
+    const { data, error } = await traerTodoConError(() => supabase
       .from("polizas")
       .select(
         `
@@ -342,7 +343,7 @@ export default function CabineroPolizas() {
         "CANCELADA",
         "ANULADA",
       ])
-      .order("fecha_inicio", { ascending: false });
+      .order("fecha_inicio", { ascending: false }));
     if (error) console.error("Error cargando pólizas admin:", error.message);
     setPolizas(
       (data ?? []).map((p) => ({

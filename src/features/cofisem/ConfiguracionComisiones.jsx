@@ -21,6 +21,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Loader2, Check, X, Inbox, FunctionSquare, Table2 } from "lucide-react";
 import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
+import { traerTodo } from "../../utils/supabasePaginado";
 import { hoyISO } from "../../utils/fecha";
 import { getState } from "../../auth.js";
 import { cuotasDePoliza } from "../pagos/cuotasCofisem";
@@ -679,8 +680,8 @@ function HojaPorRevisar({ onCuenta, onFormula }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data, error: err }, ctx] = await Promise.all([
-        supabase
+      const [data, ctx] = await Promise.all([
+        traerTodo(() => supabase
           .from("polizas_cofisem")
           .select(
             `${SELECT_POLIZA_COMISION},
@@ -689,10 +690,9 @@ function HojaPorRevisar({ onCuenta, onFormula }) {
              oficinas(nombre)`,
           )
           .not("vendedor_id", "is", null)
-          .neq("vendedor_id", 1),
+          .neq("vendedor_id", 1)),
         cargarContextoComisiones(),
       ]);
-      if (err) throw err;
       const out = [];
       for (const p of data ?? []) {
         const conVale = new Set((p.comisiones_cofisem ?? []).map((c) => c.num_cuota));

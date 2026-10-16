@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
+import { traerTodoConError } from "../../utils/supabasePaginado";
 import {
   fetchTodasVersionesConfig,
   configParaFecha,
@@ -469,7 +470,7 @@ export default function AdminPagos({ usuario }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const polizasQuery = supabase
+      const polizasQuery = () => supabase
         .from("polizas")
         .select(`
           id, constancia, numero_poliza, forma_pago,
@@ -484,7 +485,7 @@ export default function AdminPagos({ usuario }) {
 
       const [versionesConfig, { data: polizasDB, error }] = await Promise.all([
         fetchTodasVersionesConfig(),
-        polizasQuery,
+        traerTodoConError(polizasQuery),
       ]);
       if (error) throw error;
 

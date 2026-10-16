@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
+import { traerTodo } from "../../utils/supabasePaginado";
 import { ComprobanteField } from "../corte/CompletarPolizaModal";
 import {
   subirComprobante,
@@ -177,24 +178,26 @@ export default function Comisiones({ usuario }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from("polizas_cofisem")
-        .select(
-          `${SELECT_POLIZA_COMISION},
-          comisiones_cofisem(id, num_cuota, monto, fecha_pago, comprobante_url, folio, porcentaje, prima_neta_base, origen, comision_bruta, retenido, impuesto, gastos_admin),
-          comision_solicitudes(id, num_cuota, monto, motivo, estatus, nota_resolucion, created_at)`,
-        )
-        .not("vendedor_id", "is", null)
-        .neq("vendedor_id", 1);
-      // Comisiones de toda la oficina (las lleva la encargada).
-      if (usuario?.oficina_id)
-        query = query.eq("oficina_id", usuario.oficina_id);
-      const [{ data, error }, contexto] = await Promise.all([
-        query,
+      const construir = () => {
+        let query = supabase
+          .from("polizas_cofisem")
+          .select(
+            `${SELECT_POLIZA_COMISION},
+            comisiones_cofisem(id, num_cuota, monto, fecha_pago, comprobante_url, folio, porcentaje, prima_neta_base, origen, comision_bruta, retenido, impuesto, gastos_admin),
+            comision_solicitudes(id, num_cuota, monto, motivo, estatus, nota_resolucion, created_at)`,
+          )
+          .not("vendedor_id", "is", null)
+          .neq("vendedor_id", 1);
+        // Comisiones de toda la oficina (las lleva la encargada).
+        if (usuario?.oficina_id)
+          query = query.eq("oficina_id", usuario.oficina_id);
+        return query;
+      };
+      const [data, contexto] = await Promise.all([
+        traerTodo(construir),
         cargarContextoComisiones(),
       ]);
-      if (error) throw error;
-      setPolizas(data ?? []);
+      setPolizas(data);
       setCtx(contexto);
       setErrorMsg(null);
     } catch (e) {

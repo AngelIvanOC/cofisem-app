@@ -81,6 +81,36 @@ export const GAMAN_META = {
   },
 };
 
+// El cobro de una cuota GAMAN se RECIBE en GAMAN (Pagos → recepción): ahí
+// queda el monto y la fecha. En COFISEM solo se completa cómo se pagó
+// (folio, forma de pago, comprobantes, endoso). Esto dice si GAMAN ya lo
+// recibió — sin eso no hay nada que completar en COFISEM todavía.
+export function recibidoEnGaman(c) {
+  const g = c?.pago_gaman;
+  return (
+    !!c?.pago_gaman_id &&
+    !!g?.fecha_pago &&
+    (g.estatus === "PAGADO" || g.estatus === "ADEUDO")
+  );
+}
+
+// Día en que empezó el puente GAMAN → COFISEM (primer registro automático).
+// Lo cobrado en GAMAN antes de esa fecha es histórico: no se pide completar
+// en COFISEM (son ~390 pagos que nunca pasaron por una caja de COFISEM).
+export const INICIO_PUENTE_GAMAN = "2026-08-12";
+
+// Recibido en GAMAN desde que existe el puente: esto sí se completa aquí.
+export function cobradoEnGaman(c) {
+  return recibidoEnGaman(c) && c.pago_gaman.fecha_pago >= INICIO_PUENTE_GAMAN;
+}
+
+// Ya cobrado en GAMAN pero en COFISEM falta capturar folio / forma de pago:
+// hasta que se complete, ese dinero no cuadra en el corte de su día.
+const META_POR_COMPLETAR = {
+  label: "Cobrado en GAMAN — por completar",
+  cls: "bg-orange-50 text-orange-700 border-orange-200",
+};
+
 export function infoFila(c, p) {
   // ── Cuota 1 que quedó como "pól. pend. pago" al emitir (no se cobró ese
   //    día). Aplica IGUAL a GAMAN y a cualquier otra aseguradora. El cobro
@@ -108,6 +138,20 @@ export function infoFila(c, p) {
         primaTotal: cobrado || p.pol_pend_pago,
         primaNeta: c.prima_neta ?? null,
         fecha: c.fecha_recibido,
+        vence: p.fecha_corte,
+      };
+    }
+    // GAMAN ya recibió el pago: queda "por completar" con su fecha y monto.
+    if (cobradoEnGaman(c)) {
+      return {
+        esGaman: true,
+        _porCompletarGaman: true,
+        // Mismo cajón que una cuota 2+ cobrada en GAMAN (ver más abajo).
+        bucket: GAMAN_BUCKET[c.pago_gaman.estatus],
+        meta: META_POR_COMPLETAR,
+        primaTotal: c.pago_gaman.monto ?? p.pol_pend_pago,
+        primaNeta: null,
+        fecha: c.pago_gaman.fecha_pago,
         vence: p.fecha_corte,
       };
     }
@@ -156,10 +200,17 @@ export function infoFila(c, p) {
       };
     }
     const g = c.pago_gaman ?? {};
+    // Cuota 2+ ya cobrada en GAMAN que nadie completó en COFISEM. Antes se
+    // mostraba como "Pagado (GAMAN)" y parecía terminada — por eso se
+    // quedaban sin capturar (y fuera del corte de su día).
+    const porCompletar = (c.num_cuota ?? 1) > 1 && cobradoEnGaman(c);
     return {
       esGaman: true,
+      _porCompletarGaman: porCompletar,
       bucket: GAMAN_BUCKET[g.estatus] ?? "PENDIENTE",
-      meta: GAMAN_META[g.estatus] ?? GAMAN_META.PENDIENTE,
+      meta: porCompletar
+        ? META_POR_COMPLETAR
+        : (GAMAN_META[g.estatus] ?? GAMAN_META.PENDIENTE),
       primaTotal: g.monto,
       primaNeta: null,
       fecha: g.fecha_pago,

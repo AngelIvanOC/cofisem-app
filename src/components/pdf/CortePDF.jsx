@@ -136,7 +136,9 @@ function FilaPoliza({ r, i }) {
     cuota: r.num_cuota_pago ?? 1,
     pago: $(r.prima_primer_pago),
     cobertura: r._cuotaPorCobrar
-      ? "• POR COBRAR"
+      ? r._porCompletarGaman
+        ? "• POR COMPLETAR"
+        : "• POR COBRAR"
       : r.cobertura || "—",
     placas: r.placas || "—",
     tipo: r.tipo || "—",
@@ -239,7 +241,11 @@ function FilaPago({ r, i }) {
     polPendPago: n(r.pol_pend_pago) > 0 ? $(r.pol_pend_pago) : "—",
     telefono: r.telefono || "—",
     observaciones:
-      (r._cuotaPorCobrar ? "• POR COBRAR — " : "") + (r.observaciones || "—"),
+      (r._cuotaPorCobrar
+        ? r._porCompletarGaman
+          ? "• POR COMPLETAR (cobrado en GAMAN) — "
+          : "• POR COBRAR — "
+        : "") + (r.observaciones || "—"),
     fotos:
       (Array.isArray(r.fotos_url) ? r.fotos_url.length > 0 : !!r.fotos_url) ||
       r.fotos_verificado

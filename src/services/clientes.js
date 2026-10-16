@@ -1,10 +1,11 @@
 import { supabase } from "../supabaseClient";
+import { traerTodoConError } from "../utils/supabasePaginado";
 
 export async function fetchClientes() {
-  const { data, error } = await supabase
+  const { data, error } = await traerTodoConError(() => supabase
     .from("clientes")
     .select("id, nombre, apellido, rfc, curp, telefono, email, direccion, calle, numero_ext, numero_int, colonia, ciudad, estado, cp, activo, polizas(id)")
-    .order("nombre");
+    .order("nombre"));
   if (error) throw error;
   return data.map(c => ({ ...c, polizasCount: c.polizas?.length ?? 0 }));
 }
