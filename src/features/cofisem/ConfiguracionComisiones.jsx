@@ -25,6 +25,7 @@ import { traerTodo } from "../../utils/supabasePaginado";
 import { hoyISO } from "../../utils/fecha";
 import { getState } from "../../auth.js";
 import { cuotasDePoliza } from "../pagos/cuotasCofisem";
+import { COBERTURAS_OTROS_RAMOS } from "./ramos";
 import {
   TIPOS_VEHICULO,
   SELECT_POLIZA_COMISION,
@@ -76,6 +77,7 @@ const GASTOS = [
 const HOJAS = [
   { k: "EXTERNA", label: "% Externas" },
   { k: "GAMAN", label: "% GAMAN" },
+  { k: "RAMO", label: "% Otros ramos" },
   { k: "DEDUCCION", label: "Deducciones" },
   { k: "GASTOS", label: "Gastos admin." },
   { k: "REVISAR", label: "Por revisar" },
@@ -85,12 +87,14 @@ const HOJAS = [
 const TITULO_VALOR = {
   EXTERNA: "% comisión",
   GAMAN: "% comisión",
+  RAMO: "% comisión",
   DEDUCCION: "%",
   GASTOS: "$ por pago",
 };
 const TITULO_CONCEPTO = {
   EXTERNA: "Tipo de vehículo",
   GAMAN: "Producto",
+  RAMO: "Ramo",
   DEDUCCION: "Concepto",
   GASTOS: "Forma de pago",
 };
@@ -170,6 +174,7 @@ export default function ConfiguracionComisiones() {
   const filasPorHoja = {
     EXTERNA: TIPOS_VEHICULO.map((t) => ({ clave: t, etiqueta: t })),
     GAMAN: productosGaman,
+    RAMO: COBERTURAS_OTROS_RAMOS.map((c) => ({ clave: c, etiqueta: c })),
     DEDUCCION: DEDUCCIONES,
     GASTOS,
   };

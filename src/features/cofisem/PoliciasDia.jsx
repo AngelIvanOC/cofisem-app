@@ -37,6 +37,13 @@ import ModalNuevoVendedor from "../operador/components/ModalNuevoVendedor";
 import ModalEndososPoliza from "./ModalEndososPoliza";
 import { hoyISO } from "../../utils/fecha";
 import { TIPOS_VEHICULO } from "./comisionesCalculo";
+import {
+  RAMO_AUTOS,
+  RAMO_OTROS,
+  COBERTURAS_OTROS_RAMOS,
+  esOtrosRamos,
+  esAseguradoraSoloAutos,
+} from "./ramos";
 
 const HOY_ISO = hoyISO();
 const HOY_LABEL = new Date().toLocaleDateString("es-MX", {
@@ -145,6 +152,7 @@ function calcularPrimerPago(primaAnual, formaPago) {
 const TIPO_OPT = TIPOS_VEHICULO;
 
 const FORM_VACIO = {
+  ramo: RAMO_AUTOS,
   aseguradora: "",
   numero_poliza: "",
   tipo_persona: "FISICA",
@@ -477,8 +485,34 @@ export default function PoliciasDia({ usuario }) {
   // libre y no bloquea el guardado.
   const usoObligatorio = usosDisponibles.length > 0;
   const servicioObligatorio = serviciosDisponibles.length > 0;
-  const coberturaOpts =
-    form.aseguradora === "GAMAN" ? coberturasGaman : COBERTURA_OPT;
+  const otrosRamos = esOtrosRamos(form);
+  const coberturaOpts = otrosRamos
+    ? COBERTURAS_OTROS_RAMOS
+    : form.aseguradora === "GAMAN"
+      ? coberturasGaman
+      : COBERTURA_OPT;
+  const soloAutos = esAseguradoraSoloAutos(form.aseguradora);
+
+  // Cambiar de ramo limpia todo lo que no aplica al otro: cobertura (son
+  // catálogos distintos) y los datos/documentos del vehículo.
+  function cambiarRamo(ramo) {
+    if (ramo === form.ramo) return;
+    setForm((prev) => ({
+      ...prev,
+      ramo,
+      cobertura: "",
+      tipo: "",
+      uso: "",
+      servicio: "",
+      placas: "",
+      num_serie: "",
+      fotos_path: [],
+      factura_path: null,
+      t_circ_path: null,
+      fotos_verificado: false,
+      fotos_verificado_nota: "",
+    }));
+  }
 
   function handleNueva() {
     setForm({ ...FORM_VACIO });
@@ -666,13 +700,14 @@ export default function PoliciasDia({ usuario }) {
             // (no se tienen) — pero el tipo de pago de esta cuota sí se
             // captura aquí mismo, igual que la cuota 1 de una póliza
             // completa.
+            ramo: form.ramo,
             aseguradora: form.aseguradora,
             numero_poliza: form.numero_poliza,
             tipo_persona: form.tipo_persona,
             folio: form.folio || null,
             cobertura: form.cobertura || null,
-            uso: form.uso || null,
-            servicio: form.servicio || null,
+            uso: otrosRamos ? null : form.uso || null,
+            servicio: otrosRamos ? null : form.servicio || null,
             forma_pago: form.forma_pago,
             fecha_emision: HOY_ISO,
             vigencia_inicio: null,
@@ -687,7 +722,7 @@ export default function PoliciasDia({ usuario }) {
             placas: null,
             num_serie: null,
             // El tipo sí se captura en registro parcial: define la comisión.
-            tipo: form.tipo || null,
+            tipo: otrosRamos ? null : form.tipo || null,
             autorizacion: form.autorizacion || null,
             observaciones: form.observaciones || null,
             fecha_corte: fechaCorteSel,
@@ -721,13 +756,14 @@ export default function PoliciasDia({ usuario }) {
             constancia_fiscal_url: null,
           }
         : {
+            ramo: form.ramo,
             aseguradora: form.aseguradora,
             numero_poliza: form.numero_poliza,
             tipo_persona: form.tipo_persona,
             folio: form.folio || null,
             cobertura: form.cobertura || null,
-            uso: form.uso || null,
-            servicio: form.servicio || null,
+            uso: otrosRamos ? null : form.uso || null,
+            servicio: otrosRamos ? null : form.servicio || null,
             forma_pago: form.forma_pago,
             fecha_emision: form.fecha_emision,
             vigencia_inicio: form.vigencia_inicio,
@@ -739,9 +775,12 @@ export default function PoliciasDia({ usuario }) {
             telefono: form.telefono || null,
             vendedor_id: vendedorId,
             vendedor_nombre: vendedorNombre,
-            placas: form.placas || null,
-            num_serie: form.num_serie ? form.num_serie.toUpperCase() : null,
-            tipo: form.tipo,
+            placas: otrosRamos ? null : form.placas || null,
+            num_serie:
+              !otrosRamos && form.num_serie
+                ? form.num_serie.toUpperCase()
+                : null,
+            tipo: otrosRamos ? null : form.tipo,
             autorizacion: form.autorizacion || null,
             observaciones: form.observaciones || null,
             fecha_corte: fechaCorteSel,
@@ -758,9 +797,9 @@ export default function PoliciasDia({ usuario }) {
             tdc: n(form.tdc),
             comprobante_tdc_url: form.comprobante_tdc_path,
             comprobante_cheque_url: form.comprobante_cheque_path,
-            fotos_url: form.fotos_path,
-            factura_url: form.factura_path,
-            t_circ_url: form.t_circ_path,
+            fotos_url: otrosRamos ? [] : form.fotos_path,
+            factura_url: otrosRamos ? null : form.factura_path,
+            t_circ_url: otrosRamos ? null : form.t_circ_path,
             identif_url: form.identif_path,
             identif_reverso_url: form.identif_reverso_path,
             pol_ant_url: form.pol_ant_path,
@@ -770,10 +809,11 @@ export default function PoliciasDia({ usuario }) {
             poderes_url: form.poderes_path,
             comprobante_domicilio_url: form.comprobante_domicilio_path,
             constancia_fiscal_url: form.constancia_fiscal_path,
-            fotos_verificado: form.fotos_verificado,
-            fotos_verificado_nota: form.fotos_verificado
-              ? form.fotos_verificado_nota || null
-              : null,
+            fotos_verificado: !otrosRamos && form.fotos_verificado,
+            fotos_verificado_nota:
+              !otrosRamos && form.fotos_verificado
+                ? form.fotos_verificado_nota || null
+                : null,
           };
 
       // Las cuotas 2..N (para COMPLETA y PARCIAL) las genera solo el
@@ -1003,7 +1043,7 @@ export default function PoliciasDia({ usuario }) {
               </p>
               <p className="text-xs text-gray-400 mt-0.5">
                 Póliza nueva o su primer pago — se captura completa: vigencia,
-                vehículo, documentación.
+                {otrosRamos ? "" : " vehículo,"} documentación.
               </p>
             </button>
             <button
@@ -1097,6 +1137,10 @@ export default function PoliciasDia({ usuario }) {
                     setForm((prev) => ({
                       ...prev,
                       aseguradora,
+                      // Estas aseguradoras solo venden autos.
+                      ramo: esAseguradoraSoloAutos(aseguradora)
+                        ? RAMO_AUTOS
+                        : prev.ramo,
                       uso: esGaman ? "SERVICIO" : "",
                       servicio: esGaman ? "PUBLICO" : "",
                       tipo: esGaman ? "TAXI" : prev.tipo,
@@ -1110,6 +1154,25 @@ export default function PoliciasDia({ usuario }) {
                   {aseguradoras.map((o) => (
                     <option key={o}>{o}</option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <label className={lblCls}>Ramo</label>
+                <select
+                  value={form.ramo}
+                  onChange={(e) => cambiarRamo(e.target.value)}
+                  disabled={!form.aseguradora || soloAutos}
+                  title={
+                    soloAutos
+                      ? `${form.aseguradora} solo maneja pólizas de autos`
+                      : undefined
+                  }
+                  className={inpCls}
+                >
+                  <option value={RAMO_AUTOS}>Autos</option>
+                  <option value={RAMO_OTROS}>
+                    Otros ramos (GMM, Vida, Daños)
+                  </option>
                 </select>
               </div>
               <div>
@@ -1423,111 +1486,113 @@ export default function PoliciasDia({ usuario }) {
 
           {/* ── S4: Vehículo — Placas/Serie/Tipo solo si tienes la póliza;
               Uso y Servicio son obligatorios en ambos modos. ── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <SeccionHeader>Vehículo</SeccionHeader>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {modo === "COMPLETA" && (
-                <>
-                  <div>
-                    <label className={lblCls}>Placas</label>
-                    <input
-                      value={form.placas}
-                      onChange={(e) =>
-                        setF("placas", e.target.value.toUpperCase())
-                      }
-                      placeholder="Ej. ABC-123 o TRÁMITE"
-                      className={inpCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={lblCls}>Número de serie</label>
-                    <input
-                      value={form.num_serie}
-                      onChange={(e) =>
-                        setF("num_serie", e.target.value.toUpperCase())
-                      }
-                      placeholder="Opcional — VIN del vehículo"
-                      className={inpCls}
-                    />
-                  </div>
-                </>
-              )}
-              {/* Tipo de vehículo: obligatorio en ambos modos — define el %
+          {!otrosRamos && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <SeccionHeader>Vehículo</SeccionHeader>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {modo === "COMPLETA" && (
+                  <>
+                    <div>
+                      <label className={lblCls}>Placas</label>
+                      <input
+                        value={form.placas}
+                        onChange={(e) =>
+                          setF("placas", e.target.value.toUpperCase())
+                        }
+                        placeholder="Ej. ABC-123 o TRÁMITE"
+                        className={inpCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={lblCls}>Número de serie</label>
+                      <input
+                        value={form.num_serie}
+                        onChange={(e) =>
+                          setF("num_serie", e.target.value.toUpperCase())
+                        }
+                        placeholder="Opcional — VIN del vehículo"
+                        className={inpCls}
+                      />
+                    </div>
+                  </>
+                )}
+                {/* Tipo de vehículo: obligatorio en ambos modos — define el %
                   de comisión del vendedor (aseguradoras externas). */}
-              <div>
-                <label className={lblCls}>
-                  Tipo de vehículo <span className="text-red-400">*</span>
-                </label>
-                <select
-                  value={form.tipo}
-                  required
-                  onChange={(e) => setF("tipo", e.target.value)}
-                  className={inpCls}
-                >
-                  <option value="">Selecciona…</option>
-                  {TIPO_OPT.map((o) => (
-                    <option key={o}>{o}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={lblCls}>
-                  Uso{" "}
-                  {usoObligatorio && <span className="text-red-400">*</span>}
-                </label>
-                <select
-                  value={form.uso}
-                  required={usoObligatorio}
-                  disabled={!form.aseguradora}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      uso: e.target.value,
-                      servicio: "",
-                    }))
-                  }
-                  className={inpCls}
-                >
-                  <option value="">
-                    {!form.aseguradora
-                      ? "Elige aseguradora primero"
-                      : usosDisponibles.length === 0
-                        ? "Sin uso definido para esta aseguradora"
-                        : "Selecciona..."}
-                  </option>
-                  {usosDisponibles.map((o) => (
-                    <option key={o}>{o}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={lblCls}>
-                  Servicio{" "}
-                  {servicioObligatorio && (
-                    <span className="text-red-400">*</span>
-                  )}
-                </label>
-                <select
-                  value={form.servicio}
-                  required={servicioObligatorio}
-                  disabled={!form.uso}
-                  onChange={(e) => setF("servicio", e.target.value)}
-                  className={inpCls}
-                >
-                  <option value="">
-                    {!form.uso
-                      ? "Elige uso primero"
-                      : serviciosDisponibles.length === 0
-                        ? "Sin servicio definido para este uso"
-                        : "Selecciona..."}
-                  </option>
-                  {serviciosDisponibles.map((o) => (
-                    <option key={o}>{o}</option>
-                  ))}
-                </select>
+                <div>
+                  <label className={lblCls}>
+                    Tipo de vehículo <span className="text-red-400">*</span>
+                  </label>
+                  <select
+                    value={form.tipo}
+                    required
+                    onChange={(e) => setF("tipo", e.target.value)}
+                    className={inpCls}
+                  >
+                    <option value="">Selecciona…</option>
+                    {TIPO_OPT.map((o) => (
+                      <option key={o}>{o}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={lblCls}>
+                    Uso{" "}
+                    {usoObligatorio && <span className="text-red-400">*</span>}
+                  </label>
+                  <select
+                    value={form.uso}
+                    required={usoObligatorio}
+                    disabled={!form.aseguradora}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        uso: e.target.value,
+                        servicio: "",
+                      }))
+                    }
+                    className={inpCls}
+                  >
+                    <option value="">
+                      {!form.aseguradora
+                        ? "Elige aseguradora primero"
+                        : usosDisponibles.length === 0
+                          ? "Sin uso definido para esta aseguradora"
+                          : "Selecciona..."}
+                    </option>
+                    {usosDisponibles.map((o) => (
+                      <option key={o}>{o}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={lblCls}>
+                    Servicio{" "}
+                    {servicioObligatorio && (
+                      <span className="text-red-400">*</span>
+                    )}
+                  </label>
+                  <select
+                    value={form.servicio}
+                    required={servicioObligatorio}
+                    disabled={!form.uso}
+                    onChange={(e) => setF("servicio", e.target.value)}
+                    className={inpCls}
+                  >
+                    <option value="">
+                      {!form.uso
+                        ? "Elige uso primero"
+                        : serviciosDisponibles.length === 0
+                          ? "Sin servicio definido para este uso"
+                          : "Selecciona..."}
+                    </option>
+                    {serviciosDisponibles.map((o) => (
+                      <option key={o}>{o}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* ── S5: Cobro ── */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -1679,9 +1744,11 @@ export default function PoliciasDia({ usuario }) {
               <p className="text-[11px] text-gray-400 -mt-2 mb-4">
                 Opcional por ahora — puedes dejarla pendiente y subirla después,
                 pero para cerrar el corte se exige identificación
-                {esAmpliaOLimitada(form.cobertura)
-                  ? ", fotos del vehículo (cobertura amplia/limitada) y al menos una de Factura, T. Circulación, Póliza anterior u Otro."
-                  : " y al menos una de Fotos, Factura, T. Circulación, Póliza anterior u Otro."}
+                {otrosRamos
+                  ? "."
+                  : esAmpliaOLimitada(form.cobertura)
+                    ? ", fotos del vehículo (cobertura amplia/limitada) y al menos una de Factura, T. Circulación, Póliza anterior u Otro."
+                    : " y al menos una de Fotos, Factura, T. Circulación, Póliza anterior u Otro."}
                 {esPersonaMoral(form.tipo_persona) &&
                   " Por ser persona moral, también se exigen Acta constitutiva, Poderes, Comprobante de domicilio y Constancia de situación fiscal."}
               </p>
@@ -1702,33 +1769,37 @@ export default function PoliciasDia({ usuario }) {
                   onVer={() => handleVerDocumento(form.identif_reverso_path)}
                   obligatorio={false}
                 />
-                <FotosVehiculoField
-                  paths={form.fotos_path}
-                  verificado={form.fotos_verificado}
-                  nota={form.fotos_verificado_nota}
-                  subiendo={subiendoDocumento === "fotos"}
-                  onFiles={handleFotosChange}
-                  onVerCarrusel={() => setCarruselFotosAbierto(true)}
-                  onToggleVerificado={(v) => setF("fotos_verificado", v)}
-                  onNotaChange={(v) => setF("fotos_verificado_nota", v)}
-                  obligatorio={false}
-                />
-                <ComprobanteField
-                  label="Factura"
-                  path={form.factura_path}
-                  subiendo={subiendoDocumento === "factura"}
-                  onFile={(f) => handleDocumentoChange("factura", f)}
-                  onVer={() => handleVerDocumento(form.factura_path)}
-                  obligatorio={false}
-                />
-                <ComprobanteField
-                  label="Tarjeta de circulación"
-                  path={form.t_circ_path}
-                  subiendo={subiendoDocumento === "t_circ"}
-                  onFile={(f) => handleDocumentoChange("t_circ", f)}
-                  onVer={() => handleVerDocumento(form.t_circ_path)}
-                  obligatorio={false}
-                />
+                {!otrosRamos && (
+                  <>
+                    <FotosVehiculoField
+                      paths={form.fotos_path}
+                      verificado={form.fotos_verificado}
+                      nota={form.fotos_verificado_nota}
+                      subiendo={subiendoDocumento === "fotos"}
+                      onFiles={handleFotosChange}
+                      onVerCarrusel={() => setCarruselFotosAbierto(true)}
+                      onToggleVerificado={(v) => setF("fotos_verificado", v)}
+                      onNotaChange={(v) => setF("fotos_verificado_nota", v)}
+                      obligatorio={false}
+                    />
+                    <ComprobanteField
+                      label="Factura"
+                      path={form.factura_path}
+                      subiendo={subiendoDocumento === "factura"}
+                      onFile={(f) => handleDocumentoChange("factura", f)}
+                      onVer={() => handleVerDocumento(form.factura_path)}
+                      obligatorio={false}
+                    />
+                    <ComprobanteField
+                      label="Tarjeta de circulación"
+                      path={form.t_circ_path}
+                      subiendo={subiendoDocumento === "t_circ"}
+                      onFile={(f) => handleDocumentoChange("t_circ", f)}
+                      onVer={() => handleVerDocumento(form.t_circ_path)}
+                      obligatorio={false}
+                    />
+                  </>
+                )}
                 <ComprobanteField
                   label="Póliza anterior"
                   path={form.pol_ant_path}
@@ -2378,6 +2449,9 @@ function DetallePolizaModal({ row, onClose }) {
             <Campo label="Tipo de persona">
               {p.tipo_persona === "MORAL" ? "Persona moral" : "Persona física"}
             </Campo>
+            <Campo label="Ramo">
+              {esOtrosRamos(p) ? "Otros ramos" : "Autos"}
+            </Campo>
             <Campo label="Cobertura">{p.cobertura}</Campo>
             <Campo label="F. emisión">{fmt(p.fecha_emision)}</Campo>
             <Campo label="Vigencia">
@@ -2386,14 +2460,21 @@ function DetallePolizaModal({ row, onClose }) {
             <Campo label="Día de corte">{fmt(p.fecha_corte)}</Campo>
           </Seccion>
 
-          <Seccion titulo="Asegurado y vehículo">
+          <Seccion
+            titulo={esOtrosRamos(p) ? "Asegurado" : "Asegurado y vehículo"}
+          >
             <Campo label="Asegurado">{p.asegurado_nombre}</Campo>
             <Campo label="Teléfono">{p.telefono}</Campo>
-            <Campo label="Placas">{p.placas}</Campo>
-            <Campo label="Núm. serie">{p.num_serie}</Campo>
-            <Campo label="Tipo / uso / servicio">
-              {[p.tipo, p.uso, p.servicio].filter(Boolean).join(" · ") || "—"}
-            </Campo>
+            {!esOtrosRamos(p) && (
+              <>
+                <Campo label="Placas">{p.placas}</Campo>
+                <Campo label="Núm. serie">{p.num_serie}</Campo>
+                <Campo label="Tipo / uso / servicio">
+                  {[p.tipo, p.uso, p.servicio].filter(Boolean).join(" · ") ||
+                    "—"}
+                </Campo>
+              </>
+            )}
           </Seccion>
 
           <Seccion titulo="Pago">

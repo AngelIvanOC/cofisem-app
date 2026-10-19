@@ -217,7 +217,7 @@ export default function ReporteComisiones() {
             .select(
               `
               id, poliza_id, oficina_id, aseguradora, numero_poliza, vigencia_inicio,
-              fecha_emision, fecha_corte, asegurado_nombre, cobertura, tipo, num_serie, created_at,
+              fecha_emision, fecha_corte, asegurado_nombre, cobertura, tipo, ramo, num_serie, created_at,
               forma_pago, prima_anual, prima_primer_pago, prima_primer_pago_neta,
               efectivo, cheque, tdc, pol_pend_pago, registro_parcial, num_cuota_pago,
               comprobante_cheque_url, comprobante_tdc_url,

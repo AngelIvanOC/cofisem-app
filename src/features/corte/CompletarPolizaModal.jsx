@@ -35,6 +35,7 @@ import { fetchVendedores } from "../../services/vendedores";
 import SelectTypeahead from "../../components/SelectTypeahead";
 import { hoyISO } from "../../utils/fecha";
 import { TIPOS_VEHICULO } from "../cofisem/comisionesCalculo";
+import { COBERTURAS_OTROS_RAMOS, esOtrosRamos } from "../cofisem/ramos";
 
 const n = (v) => parseFloat(v) || 0;
 
@@ -78,6 +79,7 @@ const VACIO = {
   // el modal se haya abierto en modo "completar".
   aseguradora: "",
   numero_poliza: "",
+  ramo: "AUTOS",
   tipo_persona: "FISICA",
   fecha_emision: "",
   vigencia_inicio: "",
@@ -176,6 +178,10 @@ const lblModal =
 //   - Si tipo_persona = MORAL: además se exigen Acta constitutiva, Poderes,
 //     Comprobante de domicilio y Constancia de situación fiscal (la
 //     identificación ya es obligatoria para ambos tipos de persona).
+//   - Ramo OTROS (GMM, Vida, Daños — ver ramos.js): no hay vehículo, así
+//     que no se piden tipo de vehículo, placas, fotos ni el mínimo de
+//     documentos del vehículo; solo la identificación (y lo de persona
+//     moral).
 // Igual que evaluarCompletado(), pero además regresa CUÁLES requisitos
 // faltan — para el botón "Completar": si no está listo, se le dice al
 // operador exactamente qué le falta en vez de solo negarse en silencio.
@@ -187,7 +193,8 @@ const lblModal =
 // el tipo de pago (cómo se pagó esta cuota) SÍ aplica igual que a
 // cualquier otra póliza — se captura aquí mismo, en el mismo formulario.
 export function faltantesCompletado(f, { registroParcial = false, esGaman = false } = {}) {
-  const amplLim = esAmpliaOLimitada(f.cobertura);
+  const otrosRamos = esOtrosRamos(f);
+  const amplLim = !otrosRamos && esAmpliaOLimitada(f.cobertura);
   const esMoral = f.tipo_persona === "MORAL";
   const grupoMinimo = amplLim
     ? [f.factura_path, f.t_circ_path, f.pol_ant_path, f.otro_path]
@@ -198,9 +205,10 @@ export function faltantesCompletado(f, { registroParcial = false, esGaman = fals
     cobertura: !(f.cobertura && f.cobertura.trim()),
     // Las externas cobran comisión según el tipo de vehículo (GAMAN según
     // su cobertura) — por eso se pide también en registro parcial.
-    tipo: !esGaman && !TIPOS_VEHICULO.includes(f.tipo),
+    tipo: !esGaman && !otrosRamos && !TIPOS_VEHICULO.includes(f.tipo),
     vigenciaFin: !registroParcial && !f.vigencia_fin,
-    placas: !registroParcial && !(f.placas && f.placas.trim()),
+    placas:
+      !registroParcial && !otrosRamos && !(f.placas && f.placas.trim()),
     primas: !registroParcial
       ? !(
           n(f.prima_anual) > 0 &&
@@ -224,7 +232,8 @@ export function faltantesCompletado(f, { registroParcial = false, esGaman = fals
       !registroParcial &&
       f.fotos_verificado &&
       !(f.fotos_verificado_nota && f.fotos_verificado_nota.trim()),
-    documentoMinimo: !registroParcial && !grupoMinimo.some(Boolean),
+    documentoMinimo:
+      !registroParcial && !otrosRamos && !grupoMinimo.some(Boolean),
     actaConstitutiva:
       !registroParcial && esMoral && !f.acta_constitutiva_path,
     poderes: !registroParcial && esMoral && !f.poderes_path,
@@ -707,6 +716,9 @@ export default function CompletarPolizaModal({
   // trae folio/cobertura/vendedor/teléfono, nunca vigencia, vehículo,
   // primas ni documentación, porque esos datos no existen para esta venta.
   const esRegistroParcial = !!row?.registro_parcial;
+  // GMM / Vida / Daños: sin vehículo (ni tipo, uso, servicio, placas, serie,
+  // fotos, factura o T. circulación).
+  const otrosRamos = esOtrosRamos(row);
   // Persona moral exige documentos adicionales — ver faltantesCompletado().
   const esMoral = form.tipo_persona === "MORAL";
   // Mientras no se confirme que GAMAN ya tiene el primer pago recibido, no
@@ -720,7 +732,9 @@ export default function CompletarPolizaModal({
     ? form.cobertura && !coberturasGaman.includes(form.cobertura)
       ? [form.cobertura, ...coberturasGaman]
       : coberturasGaman
-    : COBERTURA_OPT;
+    : otrosRamos
+      ? COBERTURAS_OTROS_RAMOS
+      : COBERTURA_OPT;
 
   useEffect(() => {
     if (!row?.poliza_id) {
@@ -786,6 +800,7 @@ export default function CompletarPolizaModal({
     setForm({
       aseguradora: row.aseguradora ?? "",
       numero_poliza: row.numero_poliza ?? "",
+      ramo: row.ramo ?? "AUTOS",
       tipo_persona: row.tipo_persona ?? "FISICA",
       fecha_emision: row.fecha_emision ?? "",
       vigencia_inicio: row.vigencia_inicio ?? "",
@@ -1417,7 +1432,7 @@ export default function CompletarPolizaModal({
                     </div>
                   </>
                 )}
-                {!esGaman && (
+                {!esGaman && !otrosRamos && (
                   <div>
                     <label className={lblModal}>
                       Tipo de vehículo <span className="text-red-400">*</span>
@@ -1434,7 +1449,7 @@ export default function CompletarPolizaModal({
                     </select>
                   </div>
                 )}
-                {!esRegistroParcial && (
+                {!esRegistroParcial && !otrosRamos && (
                   <div>
                     <label className={lblModal}>Uso</label>
                     <input
@@ -1446,7 +1461,7 @@ export default function CompletarPolizaModal({
                     />
                   </div>
                 )}
-                {!esRegistroParcial && (
+                {!esRegistroParcial && !otrosRamos && (
                   <div>
                     <label className={lblModal}>Servicio</label>
                     <input
@@ -1536,7 +1551,7 @@ export default function CompletarPolizaModal({
                   />
                 </div>
               )}
-              {!esRegistroParcial && (
+              {!esRegistroParcial && !otrosRamos && (
                 <div>
                   <label className={lblModal}>
                     Placas <span className={astCls("placas")}>*</span>
@@ -1551,7 +1566,7 @@ export default function CompletarPolizaModal({
                   />
                 </div>
               )}
-              {!esRegistroParcial && (
+              {!esRegistroParcial && !otrosRamos && (
                 <div>
                   <label className={lblModal}>Número de serie</label>
                   <input
@@ -1863,7 +1878,9 @@ export default function CompletarPolizaModal({
               </p>
               <p className="text-[11px] text-gray-400 mb-3">
                 Identificación siempre obligatoria.{" "}
-                {esAmpliaOLimitada(form.cobertura)
+                {otrosRamos
+                  ? "Póliza anterior u Otro, opcionales."
+                  : esAmpliaOLimitada(form.cobertura)
                   ? "Cobertura amplia/limitada: fotos también obligatorias (o marca Verificado con una nota), y mínimo una de Factura, T. Circulación, Póliza anterior u Otro."
                   : "Mínimo una de Fotos, Factura, T. Circulación, Póliza anterior u Otro."}
                 {esMoral &&
@@ -1885,34 +1902,38 @@ export default function CompletarPolizaModal({
                   onVer={() => handleVerDocumento(form.identif_reverso_path)}
                   obligatorio={false}
                 />
-                <FotosVehiculoField
-                  paths={form.fotos_path}
-                  verificado={form.fotos_verificado}
-                  nota={form.fotos_verificado_nota}
-                  subiendo={subiendoDocumento === "fotos"}
-                  onFiles={handleFotosChange}
-                  onVerCarrusel={() => setCarruselFotosAbierto(true)}
-                  onToggleVerificado={(v) => setF("fotos_verificado", v)}
-                  onNotaChange={(v) => setF("fotos_verificado_nota", v)}
-                  obligatorio={esAmpliaOLimitada(form.cobertura)}
-                  notaFalta={falta("fotosVerificadoNota")}
-                />
-                <ComprobanteField
-                  label="Factura"
-                  path={form.factura_path}
-                  subiendo={subiendoDocumento === "factura"}
-                  onFile={(f) => handleDocumentoChange("factura", f)}
-                  onVer={() => handleVerDocumento(form.factura_path)}
-                  obligatorio={false}
-                />
-                <ComprobanteField
-                  label="Tarjeta de circulación"
-                  path={form.t_circ_path}
-                  subiendo={subiendoDocumento === "t_circ"}
-                  onFile={(f) => handleDocumentoChange("t_circ", f)}
-                  onVer={() => handleVerDocumento(form.t_circ_path)}
-                  obligatorio={false}
-                />
+                {!otrosRamos && (
+                  <>
+                    <FotosVehiculoField
+                      paths={form.fotos_path}
+                      verificado={form.fotos_verificado}
+                      nota={form.fotos_verificado_nota}
+                      subiendo={subiendoDocumento === "fotos"}
+                      onFiles={handleFotosChange}
+                      onVerCarrusel={() => setCarruselFotosAbierto(true)}
+                      onToggleVerificado={(v) => setF("fotos_verificado", v)}
+                      onNotaChange={(v) => setF("fotos_verificado_nota", v)}
+                      obligatorio={esAmpliaOLimitada(form.cobertura)}
+                      notaFalta={falta("fotosVerificadoNota")}
+                    />
+                    <ComprobanteField
+                      label="Factura"
+                      path={form.factura_path}
+                      subiendo={subiendoDocumento === "factura"}
+                      onFile={(f) => handleDocumentoChange("factura", f)}
+                      onVer={() => handleVerDocumento(form.factura_path)}
+                      obligatorio={false}
+                    />
+                    <ComprobanteField
+                      label="Tarjeta de circulación"
+                      path={form.t_circ_path}
+                      subiendo={subiendoDocumento === "t_circ"}
+                      onFile={(f) => handleDocumentoChange("t_circ", f)}
+                      onVer={() => handleVerDocumento(form.t_circ_path)}
+                      obligatorio={false}
+                    />
+                  </>
+                )}
                 <ComprobanteField
                   label="Póliza anterior"
                   path={form.pol_ant_path}

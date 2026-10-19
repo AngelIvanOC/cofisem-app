@@ -51,7 +51,7 @@ export const TIPOS_VEHICULO = [
 // polizas_cofisem de cada pantalla.
 export const SELECT_POLIZA_COMISION = `
   id, poliza_id, oficina_id, aseguradora, numero_poliza, asegurado_nombre,
-  tipo, cobertura, created_at, fecha_emision, fecha_corte, forma_pago,
+  tipo, ramo, cobertura, created_at, fecha_emision, fecha_corte, forma_pago,
   prima_anual, prima_primer_pago, prima_primer_pago_neta,
   efectivo, cheque, tdc, pol_pend_pago, registro_parcial, num_cuota_pago,
   comprobante_cheque_url, comprobante_tdc_url,
@@ -141,6 +141,8 @@ export function claveRegla(p) {
   if (p.poliza_id) {
     return { ambito: "GAMAN", clave: p.gaman?.coberturas?.nombre ?? null };
   }
+  // GMM / Vida / Daños: el % depende del producto (la cobertura).
+  if (p.ramo === "OTROS") return { ambito: "RAMO", clave: p.cobertura || null };
   return { ambito: "EXTERNA", clave: p.tipo || null };
 }
 
