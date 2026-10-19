@@ -58,6 +58,8 @@ const COLS_PAGO = [
   { key: "otro", label: "Otro", w: 28, align: "center" },
 ];
 
+const DENOMINACIONES = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.5];
+
 const th = { fontFamily: "Helvetica-Bold", fontSize: 6.5, color: COLORS.white };
 const td = { fontFamily: "Helvetica", fontSize: 6.5, color: COLORS.ink };
 // Azul claro — cuota subsecuente que toca cobrar ese día y aún no se cobra.
@@ -444,6 +446,59 @@ function TablaSeccion({ titulo, children }) {
   );
 }
 
+// Conteo de billetes por denominación, en dos columnas como en pantalla.
+function DesgloseBilletes({ billetes }) {
+  const b = billetes ?? {};
+  const fila = (den) => {
+    const cant = n(b[den]);
+    return (
+      <Fila
+        key={den}
+        style={{
+          borderBottomWidth: 0.5,
+          borderBottomColor: COLORS.rule,
+          paddingVertical: 2,
+        }}
+      >
+        <Text style={{ ...td, fontSize: 7.5, width: "34%" }}>
+          ${den < 1 ? den.toFixed(2) : den}
+        </Text>
+        <Text style={{ ...td, fontSize: 7.5, width: "22%", textAlign: "center" }}>
+          × {cant}
+        </Text>
+        <Text
+          style={{
+            ...(cant ? td : tdDash),
+            fontSize: 7.5,
+            width: "44%",
+            textAlign: "right",
+          }}
+        >
+          {cant ? $(cant * den) : "—"}
+        </Text>
+      </Fila>
+    );
+  };
+  return (
+    <View style={{ marginTop: 2, marginBottom: 6 }}>
+      <Text
+        style={{
+          fontFamily: "Helvetica-Bold",
+          fontSize: 7,
+          color: COLORS.dim,
+          marginBottom: 2,
+        }}
+      >
+        DESGLOSE DE BILLETES
+      </Text>
+      <Fila style={{ gap: 10 }}>
+        <View style={{ flex: 1 }}>{DENOMINACIONES.slice(0, 5).map(fila)}</View>
+        <View style={{ flex: 1 }}>{DENOMINACIONES.slice(5).map(fila)}</View>
+      </Fila>
+    </View>
+  );
+}
+
 function CampoResumen({ label, value, bold, warn }) {
   return (
     <Fila style={{ justifyContent: "space-between", marginBottom: 3 }}>
@@ -700,6 +755,7 @@ export default function CortePDF({ datos }) {
               }
               bold
             />
+            <DesgloseBilletes billetes={d.billetes} />
             <CampoResumen
               label="Total en billetes contados"
               value={$(t.totalBilletes)}
