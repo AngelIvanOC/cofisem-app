@@ -76,6 +76,8 @@ function cuotaARow(c) {
     tdc: c.tdc,
     pol_pend_pago: c.pol_pend_pago,
     autorizacion: c.autorizacion,
+    // Observaciones del cobro (pagos_cofisem.notas), no las de la póliza.
+    observaciones: c.notas ?? null,
     comprobante_vale_url: c.comprobante_vale_url,
     comprobante_cheque_url: c.comprobante_cheque_url,
     comprobante_tdc_url: c.comprobante_tdc_url,
@@ -182,19 +184,17 @@ export default function CorteOperador({ usuario }) {
     registros.filter((r) => !r.completado).length +
     filasCuotas.filter((r) => r._porCompletarGaman).length;
 
-  // Los vales (comisiones) son dinero que sale del efectivo recibido,
-  // igual que los Gastos, así que también se restan aquí — el Total ya
-  // no incluye lo que se pagó en comisiones.
-  const subEfectivo = totalEfectivo - n(gastos) - totalVales;
-  const totalCobro = subEfectivo + totalTDC + totalCheque;
+  // Vales (comisiones) y Gastos se restan SOLO del Total — no del
+  // efectivo ni de ninguna otra forma de pago (decisión 2026-10-20).
+  const subEfectivo = totalEfectivo;
+  const totalCobro =
+    totalEfectivo + totalTDC + totalCheque - totalVales - n(gastos);
   const totalBilletes = DENOMINACIONES.reduce(
     (s, d) => s + n(billetes[d]) * d,
     0,
   );
-  // La comparación es contra subEfectivo (efectivo ya neto de gastos y
-  // vales, ambos ya salieron físicamente de la caja) — no contra
-  // totalEfectivo bruto ni contra totalCobro (que además suma TDC y
-  // cheques, que no son billetes).
+  // La comparación es contra el efectivo cobrado — no contra totalCobro
+  // (que además suma TDC y cheques, que no son billetes).
   const diferencia = +(totalBilletes - subEfectivo).toFixed(2);
   const efectivoBloqueado = totalEfectivo === 0;
   const tabEntregaMostrada = efectivoBloqueado ? "PERSONAL" : tabEntrega;
@@ -1500,9 +1500,9 @@ export default function CorteOperador({ usuario }) {
             <div className="p-5 space-y-1">
               {[
                 { label: "Efectivo", value: totalEfectivo },
-                { label: "Vales", value: totalVales },
                 { label: "T. Crédito / Débito", value: totalTDC },
                 { label: "Fichas Cheques/Trans", value: totalCheque },
+                { label: "Vales", value: totalVales },
               ].map((f) => (
                 <div key={f.label} className="flex items-center gap-3">
                   <label className="text-xs font-bold text-gray-500 w-44 shrink-0">

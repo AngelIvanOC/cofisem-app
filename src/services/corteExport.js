@@ -503,11 +503,11 @@ function construirHojaPolizas({ registros, comisiones = [], notasEndoso = [], bi
 
   const resumenFilas = [
     ["EFECTIVO", n(totales?.efectivo)],
+    ["T. CRED O DEB", n(totales?.tdc)],
+    ["FICHAS-CHEQUES-TRANSF", n(totales?.cheque)],
     ["VALES", n(totales?.vale)],
     ["GASTOS", n(totales?.gastos)],
     ["SUBT EFECTIVO", n(totales?.subEfectivo)],
-    ["T. CRED O DEB", n(totales?.tdc)],
-    ["FICHAS-CHEQUES-TRANSF", n(totales?.cheque)],
     ["TOTAL", n(totales?.totalCobro)],
     ["POL PEND PAGO", n(totales?.polPendPago)],
   ];
@@ -761,14 +761,14 @@ function construirHojaResumen({ registros, comisiones = [], observaciones, ofici
   });
 
   // ---- Encabezado de la tabla por aseguradora ----
+  // Vales y Gastos se restan solo del TOTAL, no del efectivo.
   const encabezados = [
     "Aseguradora",
     "Efectivo",
-    "Total\nEfectivo",
-    "Gastos",
-    "SUBTOTAL\nEFECTIVO",
     "Tarjeta de\nCrédito",
     "Cheques\nDepósitos",
+    "Vales",
+    "Gastos",
     "TOTAL",
     "Pol. Pend\nPago",
   ];
@@ -788,13 +788,11 @@ function construirHojaResumen({ registros, comisiones = [], observaciones, ofici
   const filaInicio = filaEncabezado + 2;
   grupos.forEach((g, index) => {
     const fila = filaInicio + index;
-    // Las comisiones (vale) se restan del efectivo, igual que en pantalla.
-    const totalEfectivo = g.efectivo - g.vale;
+    // Los gastos son del corte, no de una aseguradora: van en la fila TOTAL.
     const gastosFila = 0;
-    const subtotalEfectivo = totalEfectivo - gastosFila;
-    const total = subtotalEfectivo + g.tdc + g.cheque;
+    const total = g.efectivo + g.tdc + g.cheque - g.vale - gastosFila;
 
-    const valores = [g.aseguradora, g.efectivo, totalEfectivo, gastosFila, subtotalEfectivo, g.tdc, g.cheque, total, g.polPendPago];
+    const valores = [g.aseguradora, g.efectivo, g.tdc, g.cheque, g.vale, gastosFila, total, g.polPendPago];
 
     valores.forEach((valor, c) => {
       const ref = XLSX.utils.encode_cell({ r: fila - 1, c });
@@ -819,10 +817,9 @@ function construirHojaResumen({ registros, comisiones = [], observaciones, ofici
   const totalCheque = n(totales?.cheque);
   const totalTdc = n(totales?.tdc);
   const totalPendiente = n(totales?.polPendPago);
-  // Las comisiones (vale) se restan del efectivo, igual que en pantalla.
-  // subEfectivo/totalCobro ya vienen calculados así desde CorteOperador —
-  // se usan tal cual (no con `||`, que trataría un 0 legítimo como vacío).
-  const totalEfectivoConVales = totalEfectivo - totalVale;
+  // subEfectivo/totalCobro ya vienen calculados desde CorteOperador (vales
+  // y gastos restados solo del total) — se usan tal cual (no con `||`, que
+  // trataría un 0 legítimo como vacío).
   const gastosGenerales = n(totales?.gastos);
   const subtotalEfectivoGeneral = n(totales?.subEfectivo);
   const totalCobradoGeneral = n(totales?.totalCobro);
@@ -830,11 +827,10 @@ function construirHojaResumen({ registros, comisiones = [], observaciones, ofici
   const filaTotalValores = [
     "TOTAL",
     totalEfectivo,
-    totalEfectivoConVales,
-    gastosGenerales,
-    subtotalEfectivoGeneral,
     totalTdc,
     totalCheque,
+    totalVale,
+    gastosGenerales,
     totalCobradoGeneral,
     totalPendiente,
   ];
@@ -931,8 +927,8 @@ function construirHojaResumen({ registros, comisiones = [], observaciones, ofici
   });
 
   // ---- TOTAL EFECTIVO final ----
-  // subtotalEfectivoGeneral (= totales.subEfectivo) ya viene con gastos y
-  // comisiones restados una vez — no se vuelve a restar aquí.
+  // subtotalEfectivoGeneral (= totales.subEfectivo) es el efectivo cobrado:
+  // vales y gastos ya no se le restan.
   const filaEfectivoFinal = filaGastosTotal + 3;
   const totalEfectivoFinal = subtotalEfectivoGeneral;
 

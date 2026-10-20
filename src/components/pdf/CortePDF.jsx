@@ -696,9 +696,9 @@ export default function CortePDF({ datos }) {
               RESUMEN DE COBRO
             </Text>
             <CampoResumen label="Efectivo" value={$(t.efectivo)} />
-            <CampoResumen label="Vales" value={$(t.vale)} />
             <CampoResumen label="T. Crédito / Débito" value={$(t.tdc)} />
             <CampoResumen label="Fichas Cheques/Trans" value={$(t.cheque)} />
+            <CampoResumen label="Vales" value={$(t.vale)} />
             <CampoResumen label="Gastos" value={$(t.gastos)} />
             <View
               style={{

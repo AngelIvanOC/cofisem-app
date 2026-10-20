@@ -33,9 +33,8 @@ const PAGO_ADMIN_CICLO = { DESCONOCIDO: "PAGADA", PAGADA: "NO_PAGADA", NO_PAGADA
 // cheque/tdc y 1er pago suman también las cuotas subsecuentes cobradas ese
 // día; prima anual/neta y el vale de emisión son solo de las emisiones del
 // día. "valesPagados" son las comisiones (vales) pagadas a vendedores ese
-// día, que salen del efectivo. No hay "gastos" aquí: ese dato lo captura el
-// operador en pantalla y no se persiste, así que el subtotal del analista es
-// efectivo − valesPagados (sin gastos).
+// día; igual que en /corte, se restan solo del total, no del efectivo, así
+// que el subtotal efectivo es el efectivo cobrado.
 function totalesDeCorte(regs, cuotas = [], comis = []) {
   const filas = [...regs, ...cuotas];
   const efectivo = filas.reduce((s, r) => s + n(r.efectivo), 0);
@@ -50,7 +49,7 @@ function totalesDeCorte(regs, cuotas = [], comis = []) {
     cheque: filas.reduce((s, r) => s + n(r.cheque), 0),
     tdc: filas.reduce((s, r) => s + n(r.tdc), 0),
     valesPagados,
-    subEfectivo: efectivo - valesPagados,
+    subEfectivo: efectivo,
   };
 }
 
@@ -804,11 +803,11 @@ export default function CorteAnalista({ usuario }) {
                                   {cuotas.length > 0 && (
                                     <>Efectivo incluye {cuotas.length} pago{cuotas.length === 1 ? "" : "s"} subsecuente{cuotas.length === 1 ? "" : "s"}. </>
                                   )}
-                                  {comisiones.length > 0 && (
-                                    <>Vales pagados <span className="text-red-600 font-bold">-{$(t.valesPagados)}</span> · </>
-                                  )}
                                   Subtotal efectivo{" "}
                                   <span className="text-emerald-700 font-bold">{$(t.subEfectivo)}</span>
+                                  {comisiones.length > 0 && (
+                                    <> · Vales pagados (se restan del total) <span className="text-red-600 font-bold">-{$(t.valesPagados)}</span></>
+                                  )}
                                 </td>
                                 <td colSpan={10} />
                               </tr>

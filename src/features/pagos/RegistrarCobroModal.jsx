@@ -49,6 +49,7 @@ const VACIO = {
   comprobante_tdc_path: null,
   endoso_path: null,
   endoso_nota: "",
+  notas: "",
 };
 
 // Igual criterio que faltantesCompletado() en CompletarPolizaModal.jsx,
@@ -63,7 +64,9 @@ function faltantes(f, gaman) {
     gamanNoRecibido: !!gaman && !gaman.recibido,
     // Lo capturado debe cuadrar con lo que GAMAN recibió.
     montoGaman:
-      !!gaman?.recibido && cobrado > 0 && Math.abs(cobrado - n(gaman.monto)) > 0.01,
+      !!gaman?.recibido &&
+      cobrado > 0 &&
+      Math.abs(cobrado - n(gaman.monto)) > 0.01,
     folio: !(f.folio && f.folio.trim()),
     pago: !(n(f.efectivo) > 0 || n(f.cheque) > 0 || n(f.tdc) > 0),
     // La comisión del vendedor se calcula sobre la prima neta de ESTE pago.
@@ -78,7 +81,8 @@ function faltantes(f, gaman) {
     montoGaman: `Efectivo + Transf/Dep. + T. Crédito/Déb. debe sumar lo que se recibió en GAMAN ($${n(gaman?.monto).toFixed(2)})`,
     folio: "Folio de este cobro",
     pago: "Marca al menos una forma de pago (Efectivo, Cheque/Dep. o T. Crédito/Déb.)",
-    primas: "Prima Total y Prima Neta de la cuota (ambas mayores a $0 — con la neta se calcula la comisión)",
+    primas:
+      "Prima Total y Prima Neta de la cuota (ambas mayores a $0 — con la neta se calcula la comisión)",
     autorizacion:
       "Autorización (obligatoria porque se pagó con T. Crédito/Déb.)",
     comprobanteTdc: "Comprobante de la terminal (TDC)",
@@ -143,6 +147,7 @@ export default function RegistrarCobroModal({
       comprobante_tdc_path: row.comprobante_tdc_url ?? null,
       endoso_path: row.endoso_url ?? null,
       endoso_nota: row.endoso_nota ?? "",
+      notas: row.notas ?? "",
     });
     setError(null);
     setIntento(false);
@@ -167,11 +172,15 @@ export default function RegistrarCobroModal({
       .then(({ data, error: err }) => {
         if (!vivo) return;
         if (err || !data) {
-          setError("No se pudo leer el pago en GAMAN: " + (err?.message ?? "no existe"));
+          setError(
+            "No se pudo leer el pago en GAMAN: " +
+              (err?.message ?? "no existe"),
+          );
           return;
         }
         const recibido =
-          !!data.fecha_pago && (data.estatus === "PAGADO" || data.estatus === "ADEUDO");
+          !!data.fecha_pago &&
+          (data.estatus === "PAGADO" || data.estatus === "ADEUDO");
         setGamanLeido({ id: row.pago_gaman_id, data: { ...data, recibido } });
         if (!recibido) return;
         setForm((f) => {
@@ -211,7 +220,10 @@ export default function RegistrarCobroModal({
   // esos no se abren para editar desde ningún lado.
   const esEdicion = !row._virtual && row.estatus === "RECIBIDO";
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const chk = faltantes(form, esGaman ? (gaman ?? { recibido: false, cargando: true }) : null);
+  const chk = faltantes(
+    form,
+    esGaman ? (gaman ?? { recibido: false, cargando: true }) : null,
+  );
   const falta = (k) => intento && chk.detalle[k];
   const campoCls = (k) =>
     `${inp}${falta(k) ? " border-red-300 ring-2 ring-red-100" : ""}`;
@@ -329,6 +341,7 @@ export default function RegistrarCobroModal({
         comprobante_tdc_url: form.comprobante_tdc_path,
         endoso_url: form.endoso_path,
         endoso_nota: form.endoso_nota || null,
+        notas: form.notas.trim() || null,
         estatus: "RECIBIDO",
         recibido_por: usuario?.id ?? null,
       };
@@ -478,43 +491,55 @@ export default function RegistrarCobroModal({
                 "Leyendo el pago en GAMAN…"
               ) : gaman.recibido ? (
                 <span>
-                  Recibido en GAMAN el{" "}
-                  <strong>{gaman.fecha_pago.split("-").reverse().join("/")}</strong> por{" "}
-                  <strong>${n(gaman.monto).toFixed(2)}</strong>. Monto, primas y fecha
-                  vienen de GAMAN — aquí solo se captura folio, forma de pago,
-                  comprobantes y endoso.
+                  Recibido en GAMAN — captura folio, forma de pago, comprobantes
+                  y endoso.
                 </span>
               ) : (
                 <span>
-                  Este pago todavía <strong>no se recibe en GAMAN</strong>. Primero
-                  regístralo allá (Pagos → recepción); después aquí se completa
-                  folio y forma de pago.
+                  Este pago todavía <strong>no se recibe en GAMAN</strong>.
+                  Primero regístralo allá (Pagos → recepción); después aquí se
+                  completa folio y forma de pago.
                 </span>
               )}
             </div>
           ) : (
             <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 flex items-center gap-2 text-[11px] text-gray-500">
               <Lock className="w-3.5 h-3.5 shrink-0" />
-              Los datos de la póliza ({p.aseguradora || "—"},{" "}
-              {p.forma_pago || "—"}) ya están registrados — aquí solo se captura
-              cómo se pagó esta cuota.
+              Datos de póliza ya registrados — aquí solo se captura cómo se pagó
+              esta cuota.
             </div>
           )}
 
-          <div className="sm:max-w-xs">
-            <label className={lbl}>
-              Folio de este cobro{" "}
-              <span className={falta("folio") ? "text-red-500" : "text-gray-300"}>*</span>
-            </label>
-            <input
-              value={form.folio}
-              onChange={(e) => setF("folio", e.target.value.toUpperCase())}
-              placeholder="Ej. EZ43134"
-              className={campoCls("folio")}
-            />
-            <p className="text-[11px] text-gray-400 mt-1">
-              Distinto al de la póliza — con este folio se ubica este cobro en el corte del día.
-            </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={lbl}>
+                Folio de este cobro{" "}
+                <span
+                  className={falta("folio") ? "text-red-500" : "text-gray-300"}
+                >
+                  *
+                </span>
+              </label>
+              <input
+                value={form.folio}
+                onChange={(e) => setF("folio", e.target.value.toUpperCase())}
+                placeholder="Ej. EZ43134"
+                className={campoCls("folio")}
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Folio unico de operacion.
+              </p>
+            </div>
+            <div>
+              <label className={lbl}>Fecha en que se recibió el pago</label>
+              <input
+                type="date"
+                value={form.fecha_recibido}
+                disabled={esGaman}
+                onChange={(e) => setF("fecha_recibido", e.target.value)}
+                className={inp + (esGaman ? " bg-gray-100 text-gray-400" : "")}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -527,9 +552,7 @@ export default function RegistrarCobroModal({
                 value={form.prima_total}
                 disabled={esGaman}
                 onChange={(e) => setF("prima_total", e.target.value)}
-                className={
-                  inp + (esGaman ? " bg-gray-100 text-gray-400" : "")
-                }
+                className={inp + (esGaman ? " bg-gray-100 text-gray-400" : "")}
               />
             </div>
             <div>
@@ -541,24 +564,9 @@ export default function RegistrarCobroModal({
                 value={form.prima_neta}
                 disabled={esGaman}
                 onChange={(e) => setF("prima_neta", e.target.value)}
-                className={
-                  inp + (esGaman ? " bg-gray-100 text-gray-400" : "")
-                }
+                className={inp + (esGaman ? " bg-gray-100 text-gray-400" : "")}
               />
             </div>
-          </div>
-
-          <div>
-            <label className={lbl}>Fecha en que se recibió el pago</label>
-            <input
-              type="date"
-              value={form.fecha_recibido}
-              disabled={esGaman}
-              onChange={(e) => setF("fecha_recibido", e.target.value)}
-              className={
-                inp + " sm:max-w-xs" + (esGaman ? " bg-gray-100 text-gray-400" : "")
-              }
-            />
           </div>
 
           <div>
@@ -657,16 +665,44 @@ export default function RegistrarCobroModal({
           </div>
 
           <div>
-            {!endosoAbierto ? (
-              <button
-                type="button"
-                onClick={() => setEndosoAbierto(true)}
-                className="flex items-center gap-1.5 text-xs font-semibold text-[#1447e6] hover:text-[#0f36b3]"
-              >
-                <FileSignature className="w-3.5 h-3.5" />
-                Adjuntar endoso
-              </button>
-            ) : (
+            <label className={lbl}>Observaciones</label>
+            <textarea
+              value={form.notas}
+              onChange={(e) => setF("notas", e.target.value)}
+              placeholder="Notas de este cobro (opcional)…"
+              className="w-full h-16 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1447e6]/15 focus:border-[#1447e6] resize-none"
+            />
+          </div>
+
+          {/* Endoso a la izquierda, baja de la póliza a la derecha; el
+              panel de cada uno se abre debajo de esta fila. */}
+          <div className="space-y-3">
+            {(!endosoAbierto || (!esEdicion && !perdidaAbierto)) && (
+              <div className="flex items-center justify-between gap-3">
+                {!endosoAbierto ? (
+                  <button
+                    type="button"
+                    onClick={() => setEndosoAbierto(true)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-[#1447e6] hover:text-[#0f36b3]"
+                  >
+                    <FileSignature className="w-3.5 h-3.5" />
+                    Adjuntar endoso
+                  </button>
+                ) : (
+                  <span />
+                )}
+                {!esEdicion && !perdidaAbierto && (
+                  <button
+                    type="button"
+                    onClick={() => setPerdidaAbierto(true)}
+                    className="text-[11px] font-semibold text-gray-400 hover:text-red-500 underline underline-offset-2"
+                  >
+                    El cliente no acudió a pagar — dar de baja esta póliza
+                  </button>
+                )}
+              </div>
+            )}
+            {endosoAbierto && (
               <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase tracking-wide">
@@ -702,39 +738,7 @@ export default function RegistrarCobroModal({
                 </div>
               </div>
             )}
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={guardando}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50"
-            >
-              {guardando
-                ? "Guardando…"
-                : esEdicion
-                  ? "Guardar cambios"
-                  : "Registrar cobro"}
-            </button>
-          </div>
-
-          <div className="pt-1" hidden={esEdicion}>
-            {!perdidaAbierto ? (
-              <button
-                type="button"
-                onClick={() => setPerdidaAbierto(true)}
-                className="text-[11px] font-semibold text-gray-400 hover:text-red-500 underline underline-offset-2"
-              >
-                El cliente no acudió a pagar — dar de baja esta póliza
-              </button>
-            ) : (
+            {!esEdicion && perdidaAbierto && (
               <div className="rounded-xl border border-red-200 bg-red-50/60 p-4 space-y-3">
                 <p className="text-xs font-bold text-red-700">
                   Esto da por perdida TODA la póliza ({p.numero_poliza || "—"}),
@@ -767,6 +771,27 @@ export default function RegistrarCobroModal({
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardando}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1447e6] hover:bg-[#0f36b3] text-white text-sm font-bold disabled:opacity-50"
+            >
+              {guardando
+                ? "Guardando…"
+                : esEdicion
+                  ? "Guardar cambios"
+                  : "Registrar cobro"}
+            </button>
           </div>
         </form>
       </div>
