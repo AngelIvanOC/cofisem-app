@@ -7,6 +7,7 @@ import {
   ChevronRight,
   X as XIcon,
   FileSignature,
+  Ban,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { supabase } from "../../supabaseClient";
@@ -30,6 +31,10 @@ import {
   DOCUMENTACION_BUCKET,
 } from "../../services/documentacionPoliza";
 import { PAGOS_COMPROBANTE_BUCKET } from "../../services/comprobantesPagoCofisem";
+import {
+  polizaCancelada,
+  etiquetaCancelada,
+} from "../pagos/cuotasCofisem";
 import { fetchVendedores, crearVendedor } from "../../services/vendedores";
 import { fetchCoberturasActivas } from "../../services/coberturas";
 import SelectTypeahead from "../../components/SelectTypeahead";
@@ -284,7 +289,7 @@ export default function PoliciasDia({ usuario }) {
   const [modoLista, setModoLista] = useState("DIA");
   const [busqueda, setBusqueda] = useState("");
   const [filtroAseg, setFiltroAseg] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState(""); // "" | "COMPLETA" | "PENDIENTE"
+  const [filtroEstado, setFiltroEstado] = useState(""); // "" | "COMPLETA" | "PENDIENTE" | "CANCELADA"
   const [fechaFiltro, setFechaFiltro] = useState(""); // filtro de día en modo "Todas" (vacío = todas)
   const [pagina, setPagina] = useState(1);
   const compUuidsRef = useRef({});
@@ -387,7 +392,7 @@ export default function PoliciasDia({ usuario }) {
         let query = supabase
           .from("polizas_cofisem")
           .select(
-            "*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido)",
+            "*, creador:usuarios!corte_registros_creado_por_fkey(nombre, apellido), cancelador:usuarios!polizas_cofisem_cancelada_por_fkey(nombre, apellido)",
           );
         // Pólizas de TODA la oficina (las lleva la encargada).
         if (usuario?.oficina_id)
@@ -420,6 +425,7 @@ export default function PoliciasDia({ usuario }) {
       if (filtroAseg && p.aseguradora !== filtroAseg) return false;
       if (filtroEstado === "COMPLETA" && !p.completado) return false;
       if (filtroEstado === "PENDIENTE" && p.completado) return false;
+      if (filtroEstado === "CANCELADA" && !polizaCancelada(p)) return false;
       if (modoLista === "TODAS" && fechaFiltro && p.fecha_corte !== fechaFiltro)
         return false;
       if (!q) return true;
@@ -959,6 +965,62 @@ export default function PoliciasDia({ usuario }) {
       Swal.fire({
         icon: "error",
         title: "No se pudo eliminar",
+        text: e.message,
+        confirmButtonColor: "#13193a",
+      });
+    }
+  }
+
+  // Cancelar (solo pólizas COFISEM; las de GAMAN se cancelan en GAMAN). No
+  // borra nada: la póliza sigue en la lista deshabilitada, y desde ahora
+  // sus cuotas pendientes ya no salen en el corte ni se pueden cobrar.
+  // Va por RPC para que funcione aunque el corte de su día ya esté cerrado.
+  async function handleCancelar(p) {
+    const { isConfirmed, value: motivo } = await Swal.fire({
+      icon: "warning",
+      title: "¿Cancelar esta póliza?",
+      html: `La póliza <strong>${p.numero_poliza || p.folio || "sin número"}</strong> se quedará en la lista como cancelada. Sus pagos pendientes ya no saldrán en el corte ni se podrán cobrar; lo ya cobrado no cambia.<br/><br/><strong>Esta acción no se puede deshacer.</strong>`,
+      input: "textarea",
+      inputLabel: "Motivo de la cancelación",
+      inputPlaceholder: "Escribe por qué se cancela…",
+      inputValidator: (v) =>
+        !v?.trim() ? "Escribe el motivo de la cancelación." : undefined,
+      showCancelButton: true,
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Sí, cancelar póliza",
+      cancelButtonText: "Volver",
+      focusCancel: true,
+    });
+    if (!isConfirmed) return;
+
+    try {
+      const { data, error } = await supabase.rpc("cancelar_poliza_cofisem", {
+        p_id: p.id,
+        p_motivo: motivo.trim(),
+      });
+      if (error) throw error;
+      const cancelador = {
+        nombre: usuario?.nombre,
+        apellido: usuario?.apellido,
+      };
+      setPolizas((prev) =>
+        prev.map((row) =>
+          row.id === p.id ? { ...row, ...data, cancelador } : row,
+        ),
+      );
+      Swal.fire({
+        icon: "success",
+        title: "Póliza cancelada",
+        text: "Sus pagos pendientes ya no saldrán en el corte.",
+        confirmButtonColor: "#13193a",
+        timer: 3500,
+        timerProgressBar: true,
+      });
+    } catch (e) {
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo cancelar",
         text: e.message,
         confirmButtonColor: "#13193a",
       });
@@ -2055,6 +2117,7 @@ export default function PoliciasDia({ usuario }) {
           <option value="">Todos los estados</option>
           <option value="COMPLETA">Completas</option>
           <option value="PENDIENTE">Pendientes</option>
+          <option value="CANCELADA">Canceladas</option>
         </select>
 
         <input
@@ -2169,10 +2232,16 @@ export default function PoliciasDia({ usuario }) {
               </tr>
             ) : (
               <>
-                {polizasPagina.map((p) => (
+                {polizasPagina.map((p) => {
+                  const cancelada = polizaCancelada(p);
+                  return (
                   <tr
                     key={p.id}
-                    className="h-11 hover:bg-gray-50/60 transition-colors"
+                    className={`h-11 transition-colors ${
+                      cancelada
+                        ? "opacity-60 bg-gray-50/80"
+                        : "hover:bg-gray-50/60"
+                    }`}
                   >
                     <td
                       className="px-4 font-mono font-bold text-[#1447e6] truncate"
@@ -2220,15 +2289,28 @@ export default function PoliciasDia({ usuario }) {
                       {$(p.prima_primer_pago)}
                     </td>
                     <td className="px-4">
-                      <span
-                        className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                          p.completado
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-amber-50 text-amber-700 border-amber-200"
-                        }`}
-                      >
-                        {p.completado ? "Completa" : "Incompleta"}
-                      </span>
+                      {cancelada ? (
+                        <span
+                          title={
+                            p.cancelada
+                              ? `Motivo: ${p.cancelada_motivo || "—"}`
+                              : `Póliza ${p.poliza_gaman_estatus} en GAMAN`
+                          }
+                          className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border bg-gray-100 text-gray-600 border-gray-300"
+                        >
+                          {p.cancelada ? "Cancelada" : etiquetaCancelada(p)}
+                        </span>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            p.completado
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-amber-50 text-amber-700 border-amber-200"
+                          }`}
+                        >
+                          {p.completado ? "Completa" : "Incompleta"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4">
                       <div className="flex items-center justify-end gap-1">
@@ -2248,7 +2330,7 @@ export default function PoliciasDia({ usuario }) {
                         >
                           <FileSignature className="w-3.5 h-3.5" />
                         </button>
-                        {!corteCerrado && (
+                        {!corteCerrado && !cancelada && (
                           <button
                             type="button"
                             title="Editar todos los datos de la póliza"
@@ -2269,7 +2351,19 @@ export default function PoliciasDia({ usuario }) {
                         {/* Las pólizas de GAMAN nunca se borran desde aquí:
                             su registro viene de GAMAN y borrarlo se llevaría
                             en cascada sus cuotas, vales y archivos. */}
-                        {!corteCerrado && !p.poliza_id && (
+                        {/* Cancelar: solo COFISEM, y aunque el corte de
+                            hoy esté cerrado (no mueve dinero). */}
+                        {!p.poliza_id && !cancelada && (
+                          <button
+                            type="button"
+                            title="Cancelar póliza"
+                            onClick={() => handleCancelar(p)}
+                            className="w-7 h-7 rounded-lg border border-gray-200 hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {!corteCerrado && !p.poliza_id && !cancelada && (
                           <button
                             type="button"
                             title="Eliminar"
@@ -2294,7 +2388,8 @@ export default function PoliciasDia({ usuario }) {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {Array.from({
                   length: POR_PAGINA - polizasPagina.length,
                 }).map((_, k) => (
@@ -2422,6 +2517,11 @@ function DetallePolizaModal({ row, onClose }) {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {polizaCancelada(p) && (
+              <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border bg-gray-100 text-gray-600 border-gray-300">
+                {p.cancelada ? "Cancelada" : `${p.poliza_gaman_estatus} en GAMAN`}
+              </span>
+            )}
             <span
               className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                 p.completado
@@ -2442,6 +2542,29 @@ function DetallePolizaModal({ row, onClose }) {
         </div>
 
         <div className="p-6 space-y-6">
+          {p.cancelada && (
+            <Seccion titulo="Cancelación">
+              <Campo label="Cancelada el">
+                {p.cancelada_at
+                  ? new Date(p.cancelada_at).toLocaleString("es-MX", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : "—"}
+              </Campo>
+              <Campo label="Canceló">
+                {p.cancelador
+                  ? [p.cancelador.nombre, p.cancelador.apellido]
+                      .filter(Boolean)
+                      .join(" ")
+                  : "—"}
+              </Campo>
+              <Campo label="Motivo">{p.cancelada_motivo}</Campo>
+            </Seccion>
+          )}
           <Seccion titulo="Póliza">
             <Campo label="Número">{p.numero_poliza}</Campo>
             <Campo label="Folio">{p.folio}</Campo>

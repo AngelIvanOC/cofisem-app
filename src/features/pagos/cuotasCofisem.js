@@ -6,6 +6,23 @@
 
 const n = (v) => parseFloat(v) || 0;
 
+// Póliza cancelada: COFISEM (cancelar_poliza_cofisem, con motivo) o GAMAN
+// (estatus copiado en poliza_gaman_estatus). Sus cuotas PENDIENTES ya no
+// salen en el corte ni se pueden cobrar; lo ya cobrado queda de histórico.
+// VENCIDA no cuenta aquí — no es una cancelación.
+export const ESTATUS_GAMAN_CANCELADA = ["CANCELADA", "ANULADA", "ELIMINADA"];
+
+export function polizaCancelada(p) {
+  return (
+    !!p?.cancelada || ESTATUS_GAMAN_CANCELADA.includes(p?.poliza_gaman_estatus)
+  );
+}
+
+// Texto corto para el distintivo: "CANCELADA" o el estatus de GAMAN.
+export function etiquetaCancelada(p) {
+  return p?.cancelada ? "CANCELADA" : p?.poliza_gaman_estatus;
+}
+
 export const ESTATUS_META = {
   PENDIENTE: {
     label: "Pendiente",

@@ -11,7 +11,13 @@ import { hoyISO } from "../../utils/fecha";
 import { usePagination } from "../../hooks/usePagination";
 import Paginator from "../../components/Paginator";
 import RegistrarCobroModal from "./RegistrarCobroModal";
-import { infoFila, cuotasDePoliza, recibidoEnGaman } from "./cuotasCofisem";
+import {
+  infoFila,
+  cuotasDePoliza,
+  recibidoEnGaman,
+  polizaCancelada,
+  etiquetaCancelada,
+} from "./cuotasCofisem";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) =>
@@ -47,10 +53,13 @@ function agruparPorPoliza(polizas) {
         .filter(Boolean)
         .sort()[0] ?? null;
     // "perdida" (el cliente no volvió a pagar, se dio de baja la póliza en
-    // COFISEM) se trata igual que una cancelación en GAMAN: se sigue
-    // mostrando como historial, pero ya no se puede registrar ningún cobro.
+    // COFISEM) y la cancelación en COFISEM se tratan igual que una
+    // cancelación en GAMAN: se sigue mostrando como historial, pero ya no
+    // se puede registrar ningún cobro.
     const cancelada =
-      ESTATUS_GAMAN_BLOQUEADOS.includes(p.poliza_gaman_estatus) || !!p.perdida;
+      ESTATUS_GAMAN_BLOQUEADOS.includes(p.poliza_gaman_estatus) ||
+      !!p.perdida ||
+      polizaCancelada(p);
     return {
       polizaId: p.id,
       poliza: p,
@@ -126,6 +135,7 @@ export default function PagosOperador({ usuario }) {
             efectivo, cheque, tdc, pol_pend_pago, poliza_gaman_estatus, oficina_id,
             comprobante_cheque_url, comprobante_tdc_url,
             perdida, perdida_nota, registro_parcial, num_cuota_pago,
+            cancelada, cancelada_motivo,
             pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
           `,
           )
@@ -336,7 +346,9 @@ export default function PagosOperador({ usuario }) {
                         {p.numero_poliza || "—"}
                         {g.cancelada && (
                           <span className="ml-1.5 inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600">
-                            {p.poliza_gaman_estatus || "PERDIDA"}
+                            {p.cancelada
+                              ? etiquetaCancelada(p)
+                              : p.poliza_gaman_estatus || "PERDIDA"}
                           </span>
                         )}
                       </td>
@@ -490,7 +502,12 @@ function ModalCuotasPoliza({
           {grupo.cancelada && (
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-100 border border-gray-200 text-gray-500 text-xs font-semibold">
               🔒{" "}
-              {p.perdida ? (
+              {p.cancelada ? (
+                <>
+                  Póliza cancelada — no se pueden registrar más cobros aquí.
+                  {p.cancelada_motivo && <> Motivo: {p.cancelada_motivo}</>}
+                </>
+              ) : p.perdida ? (
                 <>
                   Póliza dada de baja — el cliente no acudió a pagar. No se
                   pueden registrar más cobros aquí.

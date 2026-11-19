@@ -31,7 +31,11 @@ import CompletarPolizaModal, {
   FotosCarrusel,
 } from "./CompletarPolizaModal";
 import RegistrarCobroModal from "../pagos/RegistrarCobroModal";
-import { cobradoEnGaman, recibidoEnGaman } from "../pagos/cuotasCofisem";
+import {
+  cobradoEnGaman,
+  recibidoEnGaman,
+  polizaCancelada,
+} from "../pagos/cuotasCofisem";
 
 const DENOMINACIONES = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.5];
 const HOY_ISO = hoyISO();
@@ -318,6 +322,9 @@ export default function CorteOperador({ usuario }) {
           return !!c.fecha_recibido && c.fecha_recibido === fechaCorte;
         if (corteEstaCerrado) return false;
         const pc = c.polizas_cofisem ?? {};
+        // Póliza cancelada (COFISEM o GAMAN): sus cuotas pendientes ya no
+        // se cobran — lo ya cobrado sí sigue saliendo (arriba).
+        if (polizaCancelada(pc)) return false;
         // GAMAN ya recibió el pago: va al corte del día en que lo recibió
         // (no al de su vencimiento), para completar folio / forma de pago.
         if (cobradoEnGaman(c)) {

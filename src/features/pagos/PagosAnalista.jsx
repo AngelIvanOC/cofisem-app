@@ -114,7 +114,10 @@ function agruparPorPoliza(polizas) {
     const porAplicar = cuotas.filter((c) => c._info.bucket === "RECIBIDO");
     const aplicados = cuotas.filter((c) => c._info.bucket === "APLICADO");
     const montoPorAplicar = porAplicar.reduce((s, c) => s + n(c._info.primaTotal), 0);
-    const cancelada = ESTATUS_GAMAN_BLOQUEADOS.includes(p.poliza_gaman_estatus);
+    // Cancelada en COFISEM: lo que ya se recibió antes de cancelar se puede
+    // seguir aplicando — solo se bloquean los cobros nuevos.
+    const cancelada =
+      ESTATUS_GAMAN_BLOQUEADOS.includes(p.poliza_gaman_estatus) || !!p.cancelada;
     return {
       polizaId: p.id, poliza: p, oficina: p.oficina, operador: p.operador,
       cuotas, pendientes, porAplicar, aplicados, montoPorAplicar, cancelada,
@@ -161,7 +164,7 @@ export default function PagosAnalista({ usuario }) {
           fecha_emision, prima_primer_pago, prima_primer_pago_neta,
           efectivo, cheque, tdc, pol_pend_pago, poliza_gaman_estatus,
           comprobante_cheque_url, comprobante_tdc_url,
-          registro_parcial, num_cuota_pago,
+          registro_parcial, num_cuota_pago, cancelada, cancelada_motivo,
           operador:creado_por(nombre, apellido),
           oficina:oficina_id(nombre),
           pagos_cofisem(*, pago_gaman:pagos(monto, estatus, fecha_pago, fecha_vencimiento))
@@ -301,7 +304,7 @@ export default function PagosAnalista({ usuario }) {
                         {p.numero_poliza || "—"}
                         {g.cancelada && (
                           <span className="ml-1.5 inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600">
-                            {p.poliza_gaman_estatus}
+                            {p.cancelada ? "CANCELADA" : p.poliza_gaman_estatus}
                           </span>
                         )}
                       </td>
@@ -314,7 +317,7 @@ export default function PagosAnalista({ usuario }) {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {g.cancelada ? (
+                        {g.cancelada && !(p.cancelada && g.montoPorAplicar > 0) ? (
                           <span className="text-gray-400 font-semibold">Cancelada</span>
                         ) : g.montoPorAplicar > 0 ? (
                           <span className="font-bold text-blue-700">{$(g.montoPorAplicar)}</span>
@@ -377,7 +380,14 @@ function ModalCuotasPoliza({ grupo, onClose, onVerComprobante, onAplicar, aplica
         <div className="p-6 space-y-5">
           {grupo.cancelada && (
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-100 border border-gray-200 text-gray-500 text-xs font-semibold">
-              🔒 Póliza {p.poliza_gaman_estatus} en GAMAN — no se pueden aplicar más cobros aquí.
+              {p.cancelada ? (
+                <>
+                  🔒 Póliza cancelada — ya no se registran cobros nuevos; lo ya recibido sí se puede aplicar.
+                  {p.cancelada_motivo && <> Motivo: {p.cancelada_motivo}</>}
+                </>
+              ) : (
+                <>🔒 Póliza {p.poliza_gaman_estatus} en GAMAN — no se pueden aplicar más cobros aquí.</>
+              )}
             </div>
           )}
           <div className="grid grid-cols-3 gap-3">
@@ -429,7 +439,7 @@ function ModalCuotasPoliza({ grupo, onClose, onVerComprobante, onAplicar, aplica
                         <Paperclip className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    {!c._virtual && !esGaman && !grupo.cancelada && c.estatus === "RECIBIDO" && (
+                    {!c._virtual && !esGaman && c.estatus === "RECIBIDO" && (
                       <button
                         type="button"
                         onClick={() => onAplicar(c)}
