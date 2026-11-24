@@ -726,6 +726,14 @@ export default function CompletarPolizaModal({
   // no tiene registrado.
   const pagoBloqueado =
     esGaman && (gamanLoading || !gaman || !gaman.cuota1Pagada);
+  // GAMAN confirmó que el primer pago NO se ha recibido: el cliente no pagó
+  // al emitir. La única forma de pago que el operador puede capturar es
+  // "Pól. Pend. Pago" (la escribe él, como siempre), para poder completar y
+  // cerrar el corte de emisión. Cuando GAMAN lo reciba, la cuota 1 aparece
+  // en el corte de ese día como "Completar pago" (ver CorteOperador /
+  // cuotasCofisem).
+  const gamanSinCobro =
+    esGaman && !gamanLoading && !!gaman && !gaman.cuota1Pagada;
   // Si la póliza es de GAMAN: catálogo real de coberturas, agregando la que
   // ya traiga el registro por si fuera una cobertura ya desactivada allá.
   const coberturaOpts = esGaman
@@ -943,7 +951,12 @@ export default function CompletarPolizaModal({
           }
         : {}),
       ...(pagoBloqueado
-        ? { efectivo: 0, cheque: 0, tdc: 0, pol_pend_pago: 0 }
+        ? {
+            efectivo: 0,
+            cheque: 0,
+            tdc: 0,
+            pol_pend_pago: gamanSinCobro ? form.pol_pend_pago : 0,
+          }
         : {}),
     };
   }
@@ -1727,7 +1740,9 @@ export default function CompletarPolizaModal({
                 <Lock className="w-3.5 h-3.5 shrink-0" />
                 {gamanLoading
                   ? "Verificando con GAMAN…"
-                  : "GAMAN aún no registra el cobro del primer pago — no se puede indicar cómo se pagó hasta que se reciba allá."}
+                  : gamanSinCobro
+                    ? "GAMAN aún no registra el cobro del primer pago — solo se puede capturar como Pól. Pend. Pago. Cuando se reciba en GAMAN, aparecerá en el corte de ese día para completar cómo se pagó. Si el cliente ya pagó, primero recíbelo en GAMAN y vuelve a abrir este registro."
+                    : "No se pudo confirmar con GAMAN si ya se recibió el primer pago."}
               </div>
             )}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1776,8 +1791,10 @@ export default function CompletarPolizaModal({
                   type="number"
                   min="0"
                   step="0.01"
-                  disabled={pagoBloqueado}
-                  value={pagoBloqueado ? 0 : form.pol_pend_pago}
+                  disabled={pagoBloqueado && !gamanSinCobro}
+                  value={
+                    pagoBloqueado && !gamanSinCobro ? 0 : form.pol_pend_pago
+                  }
                   onChange={(e) => setF("pol_pend_pago", e.target.value)}
                   placeholder="0.00"
                   className={`${campoCls("pago")} disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed`}
