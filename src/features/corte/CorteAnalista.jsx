@@ -6,6 +6,7 @@ import { verComprobante as abrirComprobante } from "../../services/comprobantesP
 import { verComprobantePago } from "../../services/comprobantesPagoCofisem";
 import { fetchEndososManualesDia, aplanarAdjuntoGaman } from "../../services/endososCofisem";
 import { hoyISO } from "../../utils/fecha";
+import { valePorMetodo, SELECT_POLIZA_VALE } from "../pagos/cuotasCofisem";
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) => `$${n(v).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -33,12 +34,18 @@ const PAGO_ADMIN_CICLO = { DESCONOCIDO: "PAGADA", PAGADA: "NO_PAGADA", NO_PAGADA
 // cheque/tdc y 1er pago suman también las cuotas subsecuentes cobradas ese
 // día; prima anual/neta y el vale de emisión son solo de las emisiones del
 // día. "valesPagados" son las comisiones (vales) pagadas a vendedores ese
-// día; igual que en /corte, se restan solo del total, no del efectivo, así
-// que el subtotal efectivo es el efectivo cobrado.
+// día; igual que en /corte, cada vale se resta de la forma de pago con la
+// que se cobró su cuota (valePorMetodo), así que el subtotal efectivo ya
+// trae restados los vales cobrados en efectivo. (Los gastos del corte no
+// se guardan en BD, así que aquí no se pueden restar.)
 function totalesDeCorte(regs, cuotas = [], comis = []) {
   const filas = [...regs, ...cuotas];
   const efectivo = filas.reduce((s, r) => s + n(r.efectivo), 0);
   const valesPagados = comis.reduce((s, c) => s + n(c.monto), 0);
+  const valesEfectivo = comis.reduce(
+    (s, c) => s + valePorMetodo(c).efectivo,
+    0,
+  );
   return {
     count: regs.length,
     vale: regs.reduce((s, r) => s + n(r.vale), 0),
@@ -49,7 +56,8 @@ function totalesDeCorte(regs, cuotas = [], comis = []) {
     cheque: filas.reduce((s, r) => s + n(r.cheque), 0),
     tdc: filas.reduce((s, r) => s + n(r.tdc), 0),
     valesPagados,
-    subEfectivo: efectivo,
+    valesEfectivo,
+    subEfectivo: efectivo - valesEfectivo,
   };
 }
 
@@ -230,7 +238,7 @@ export default function CorteAnalista({ usuario }) {
         supabase
           .from("comisiones_cofisem")
           .select(
-            "id, folio, monto, fecha_pago, num_cuota, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, oficina_id)",
+            `id, folio, monto, fecha_pago, num_cuota, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, oficina_id, ${SELECT_POLIZA_VALE})`,
           )
           .eq("fecha_pago", fecha),
       ]);
@@ -806,7 +814,7 @@ export default function CorteAnalista({ usuario }) {
                                   Subtotal efectivo{" "}
                                   <span className="text-emerald-700 font-bold">{$(t.subEfectivo)}</span>
                                   {comisiones.length > 0 && (
-                                    <> · Vales pagados (se restan del total) <span className="text-red-600 font-bold">-{$(t.valesPagados)}</span></>
+                                    <> · Vales pagados <span className="text-red-600 font-bold">-{$(t.valesPagados)}</span> (en efectivo -{$(t.valesEfectivo)}, ya restados del subtotal)</>
                                   )}
                                 </td>
                                 <td colSpan={10} />

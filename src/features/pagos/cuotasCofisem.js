@@ -23,6 +23,43 @@ export function etiquetaCancelada(p) {
   return p?.cancelada ? "CANCELADA" : p?.poliza_gaman_estatus;
 }
 
+// De qué forma de pago sale un vale (comisión) en el corte: de la misma con
+// la que se cobró la cuota de esa comisión. El cobro está en pagos_cofisem
+// (cuotas 2+ y la cuota 1 "pago tardío") o, si ahí no hay, en la propia
+// polizas_cofisem (cuota 1, o num_cuota_pago de un registro parcial).
+// `k` = fila de comisiones_cofisem con polizas_cofisem(efectivo, cheque, tdc,
+// registro_parcial, num_cuota_pago, pagos_cofisem(num_cuota, efectivo,
+// cheque, tdc)). Pago mixto: sale primero del efectivo, luego de
+// cheque/dep. y al final de TDC. Si no se sabe cómo se cobró (cuota GAMAN
+// que nunca se completó aquí), sale del efectivo: el vale se paga de caja.
+export function valePorMetodo(k) {
+  const p = k?.polizas_cofisem ?? {};
+  const monto = n(k?.monto);
+  const cuota = (p.pagos_cofisem ?? []).find(
+    (c) => c.num_cuota === k.num_cuota,
+  );
+  const cuotaPropia = p.registro_parcial ? (p.num_cuota_pago ?? 1) : 1;
+  const cobrado = (x) => n(x?.efectivo) + n(x?.cheque) + n(x?.tdc);
+  const fuente =
+    cobrado(cuota) > 0 ? cuota : k?.num_cuota === cuotaPropia ? p : null;
+
+  const out = { efectivo: 0, cheque: 0, tdc: 0 };
+  let resto = monto;
+  if (cobrado(fuente) > 0) {
+    for (const m of ["efectivo", "cheque", "tdc"]) {
+      const parte = Math.min(resto, n(fuente[m]));
+      out[m] = parte;
+      resto -= parte;
+    }
+  }
+  out.efectivo += resto;
+  return out;
+}
+
+// Columnas que necesita valePorMetodo() al consultar comisiones_cofisem.
+export const SELECT_POLIZA_VALE =
+  "efectivo, cheque, tdc, registro_parcial, num_cuota_pago, pagos_cofisem(num_cuota, efectivo, cheque, tdc)";
+
 export const ESTATUS_META = {
   PENDIENTE: {
     label: "Pendiente",

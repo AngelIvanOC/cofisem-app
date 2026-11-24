@@ -605,7 +605,9 @@ function construirHojaPolizas({ registros, comisiones = [], notasEndoso = [], bi
     border: BORDER_MEDIUM,
   });
   const comprobacionFilas = [
-    ["EFECTIVO", n(totales?.efectivo)],
+    // Contra lo que se comparan los billetes: efectivo − vales en efectivo
+    // − gastos (igual que /corte).
+    ["EFECTIVO", n(totales?.subEfectivo)],
     ["DIFERENCIA", n(totales?.diferencia)],
   ];
   comprobacionFilas.forEach(([label, valor], idx) => {
@@ -817,9 +819,9 @@ function construirHojaResumen({ registros, comisiones = [], observaciones, ofici
   const totalCheque = n(totales?.cheque);
   const totalTdc = n(totales?.tdc);
   const totalPendiente = n(totales?.polPendPago);
-  // subEfectivo/totalCobro ya vienen calculados desde CorteOperador (vales
-  // y gastos restados solo del total) — se usan tal cual (no con `||`, que
-  // trataría un 0 legítimo como vacío).
+  // subEfectivo/totalCobro ya vienen calculados desde CorteOperador
+  // (subEfectivo = efectivo − vales cobrados en efectivo − gastos) — se usan
+  // tal cual (no con `||`, que trataría un 0 legítimo como vacío).
   const gastosGenerales = n(totales?.gastos);
   const subtotalEfectivoGeneral = n(totales?.subEfectivo);
   const totalCobradoGeneral = n(totales?.totalCobro);
@@ -927,8 +929,8 @@ function construirHojaResumen({ registros, comisiones = [], observaciones, ofici
   });
 
   // ---- TOTAL EFECTIVO final ----
-  // subtotalEfectivoGeneral (= totales.subEfectivo) es el efectivo cobrado:
-  // vales y gastos ya no se le restan.
+  // subtotalEfectivoGeneral (= totales.subEfectivo) ya trae restados los
+  // vales cobrados en efectivo y los gastos.
   const filaEfectivoFinal = filaGastosTotal + 3;
   const totalEfectivoFinal = subtotalEfectivoGeneral;
 

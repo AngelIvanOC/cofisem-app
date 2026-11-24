@@ -35,6 +35,8 @@ import {
   cobradoEnGaman,
   recibidoEnGaman,
   polizaCancelada,
+  valePorMetodo,
+  SELECT_POLIZA_VALE,
 } from "../pagos/cuotasCofisem";
 
 const DENOMINACIONES = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.5];
@@ -188,9 +190,15 @@ export default function CorteOperador({ usuario }) {
     registros.filter((r) => !r.completado).length +
     filasCuotas.filter((r) => r._porCompletarGaman).length;
 
-  // Vales (comisiones) y Gastos se restan SOLO del Total — no del
-  // efectivo ni de ninguna otra forma de pago (decisión 2026-10-20).
-  const subEfectivo = totalEfectivo;
+  // Cada vale (comisión) se resta de la forma de pago con la que se cobró
+  // su cuota (ver valePorMetodo): los cobrados en efectivo bajan el
+  // efectivo a entregar. Los Gastos SIEMPRE salen del efectivo. El Total
+  // resta todos los vales y los gastos.
+  const valesEfectivo = comisionesDia.reduce(
+    (s, c) => s + valePorMetodo(c).efectivo,
+    0,
+  );
+  const subEfectivo = totalEfectivo - valesEfectivo - n(gastos);
   const totalCobro =
     totalEfectivo + totalTDC + totalCheque - totalVales - n(gastos);
   const totalBilletes = DENOMINACIONES.reduce(
@@ -359,7 +367,7 @@ export default function CorteOperador({ usuario }) {
       let query = supabase
         .from("comisiones_cofisem")
         .select(
-          "id, folio, monto, fecha_pago, num_cuota, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, creado_por, oficina_id)",
+          `id, folio, monto, fecha_pago, num_cuota, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, creado_por, oficina_id, ${SELECT_POLIZA_VALE})`,
         )
         .eq("fecha_pago", fechaCorte);
       if (usuario?.oficina_id)
@@ -1557,6 +1565,10 @@ export default function CorteOperador({ usuario }) {
                     label: "Subtotal efectivo",
                     value: subEfectivo,
                     bold: false,
+                    nota:
+                      valesEfectivo > 0 || n(gastos) > 0
+                        ? `Efectivo ${$(totalEfectivo)} − vales en efectivo ${$(valesEfectivo)} − gastos ${$(gastos)}`
+                        : null,
                   },
                   { label: "Total", value: totalCobro, bold: true },
                   {
@@ -1566,20 +1578,24 @@ export default function CorteOperador({ usuario }) {
                     warn: true,
                   },
                 ].map((row) => (
-                  <div
-                    key={row.label}
-                    className="flex items-center justify-between"
-                  >
-                    <p
-                      className={`text-xs ${row.warn ? "text-amber-600" : "text-gray-600"} ${row.bold ? "font-bold" : "font-medium"}`}
-                    >
-                      {row.label}
-                    </p>
-                    <p
-                      className={`text-sm tabular-nums ${row.warn ? "text-amber-700" : row.bold ? "font-bold text-[#1447e6]" : "text-gray-700"}`}
-                    >
-                      ${row.value.toFixed(2)}
-                    </p>
+                  <div key={row.label}>
+                    <div className="flex items-center justify-between">
+                      <p
+                        className={`text-xs ${row.warn ? "text-amber-600" : "text-gray-600"} ${row.bold ? "font-bold" : "font-medium"}`}
+                      >
+                        {row.label}
+                      </p>
+                      <p
+                        className={`text-sm tabular-nums ${row.warn ? "text-amber-700" : row.bold ? "font-bold text-[#1447e6]" : "text-gray-700"}`}
+                      >
+                        ${row.value.toFixed(2)}
+                      </p>
+                    </div>
+                    {row.nota && (
+                      <p className="text-[11px] text-gray-400 tabular-nums">
+                        {row.nota}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1765,7 +1781,7 @@ export default function CorteOperador({ usuario }) {
                 )}
                 <div className="flex justify-between">
                   <p className="text-xs font-semibold text-gray-500">
-                    Total cobrado
+                    Efectivo a entregar
                   </p>
                   <p className="text-sm font-bold text-[#1447e6] tabular-nums">
                     ${subEfectivo.toFixed(2)}
