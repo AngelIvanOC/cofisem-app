@@ -238,7 +238,7 @@ export default function CorteAnalista({ usuario }) {
         supabase
           .from("comisiones_cofisem")
           .select(
-            `id, folio, monto, fecha_pago, num_cuota, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, oficina_id, ${SELECT_POLIZA_VALE})`,
+            `id, folio, monto, fecha_pago, num_cuota, pagado_con, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, oficina_id, ${SELECT_POLIZA_VALE})`,
           )
           .eq("fecha_pago", fecha),
       ]);

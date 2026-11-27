@@ -36,6 +36,10 @@ import { supabase } from "../../supabaseClient";
 import { traerTodo } from "../../utils/supabasePaginado";
 import { ComprobanteField } from "../corte/CompletarPolizaModal";
 import {
+  PAGADO_CON_OPCIONES,
+  pagadoConSugerido,
+} from "../pagos/cuotasCofisem";
+import {
   subirComprobante,
   verComprobante,
   MAX_COMPROBANTE_BYTES,
@@ -183,7 +187,7 @@ export default function Comisiones({ usuario }) {
           .from("polizas_cofisem")
           .select(
             `${SELECT_POLIZA_COMISION},
-            comisiones_cofisem(id, num_cuota, monto, fecha_pago, comprobante_url, folio, porcentaje, prima_neta_base, origen, comision_bruta, retenido, impuesto, gastos_admin),
+            comisiones_cofisem(id, num_cuota, monto, fecha_pago, pagado_con, comprobante_url, folio, porcentaje, prima_neta_base, origen, comision_bruta, retenido, impuesto, gastos_admin),
             comision_solicitudes(id, num_cuota, monto, motivo, estatus, nota_resolucion, created_at)`,
           )
           .not("vendedor_id", "is", null)
@@ -745,6 +749,15 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved, onSolicitar }) {
   const [intento, setIntento] = useState(false);
   const [fechaPago, setFechaPago] = useState(existente?.fecha_pago || hoyISO());
   const [comprobante, setComprobante] = useState(existente?.comprobante_url ?? null);
+  // De dónde salió el dinero del vale (de qué columna se resta en el corte).
+  // Se preselecciona como se cobró este pago; un vale viejo sin elegir
+  // muestra lo mismo que el corte ya venía calculando para él.
+  const sugerido = pagadoConSugerido({
+    monto: existente?.monto,
+    num_cuota: cuota.numCuota,
+    polizas_cofisem: poliza,
+  });
+  const [pagadoCon, setPagadoCon] = useState(existente?.pagado_con ?? sugerido);
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
@@ -822,6 +835,7 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved, onSolicitar }) {
             ...desglose,
             origen,
             fecha_pago: fechaPago || hoyISO(),
+            pagado_con: pagadoCon,
             comprobante_url: comprobante,
             capturado_por: usuario?.id ?? null,
             updated_at: new Date().toISOString(),
@@ -919,6 +933,34 @@ function FormVale({ poliza, cuota, usuario, onCancel, onSaved, onSolicitar }) {
           />
           <p className="text-[11px] text-gray-400 mt-1">Sale restado en el corte de ese día.</p>
         </div>
+      </div>
+
+      <div>
+        <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+          ¿De dónde salió el dinero del vale?
+        </label>
+        <div className="grid grid-cols-3 gap-1 rounded-xl border border-gray-200 bg-white p-1">
+          {PAGADO_CON_OPCIONES.map((o) => (
+            <button
+              key={o.k}
+              type="button"
+              onClick={() => setPagadoCon(o.k)}
+              className={`px-2 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                pagadoCon === o.k
+                  ? "bg-[#1447e6] text-white"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-gray-400 mt-1">
+          Viene marcado como se cobró este pago (
+          {PAGADO_CON_OPCIONES.find((o) => o.k === sugerido)?.label}).
+          Cámbialo si el vale se pagó de otro lado, p. ej. del efectivo de la
+          caja. Se resta de esa columna en el corte.
+        </p>
       </div>
 
       {origen === "AUTO" && !existente && !cuota.pendiente && (

@@ -44,6 +44,19 @@ const HOY_ISO = hoyISO();
 
 const n = (v) => parseFloat(v) || 0;
 const $ = (v) => `$${n(v).toFixed(2)}`;
+
+// "efectivo", "transf./dep.", "TDC" — de qué columna se restó un vale.
+const ORIGEN_VALE = [
+  ["efectivo", "efectivo"],
+  ["cheque", "transf./dep."],
+  ["tdc", "TDC"],
+];
+function origenVale(c) {
+  const partes = valePorMetodo(c);
+  return ORIGEN_VALE.filter(([k]) => partes[k] > 0)
+    .map(([, label]) => label)
+    .join(" + ");
+}
 const fmt = (d) =>
   d
     ? new Date(d + "T00:00:00").toLocaleDateString("es-MX", {
@@ -367,7 +380,7 @@ export default function CorteOperador({ usuario }) {
       let query = supabase
         .from("comisiones_cofisem")
         .select(
-          `id, folio, monto, fecha_pago, num_cuota, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, creado_por, oficina_id, ${SELECT_POLIZA_VALE})`,
+          `id, folio, monto, fecha_pago, num_cuota, pagado_con, comprobante_url, poliza_cofisem_id, polizas_cofisem!inner(aseguradora, numero_poliza, vendedor_nombre, asegurado_nombre, creado_por, oficina_id, ${SELECT_POLIZA_VALE})`,
         )
         .eq("fecha_pago", fechaCorte);
       if (usuario?.oficina_id)
@@ -1159,6 +1172,9 @@ export default function CorteOperador({ usuario }) {
                       </td>
                       <td className="px-3 py-2.5 text-center font-bold text-red-600">
                         -{$(c.monto)}
+                        <span className="block text-[10px] font-semibold text-red-400">
+                          de {origenVale(c)}
+                        </span>
                         {c.comprobante_url && (
                           <button
                             type="button"

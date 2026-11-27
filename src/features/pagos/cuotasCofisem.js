@@ -23,8 +23,28 @@ export function etiquetaCancelada(p) {
   return p?.cancelada ? "CANCELADA" : p?.poliza_gaman_estatus;
 }
 
-// De qué forma de pago sale un vale (comisión) en el corte: de la misma con
-// la que se cobró la cuota de esa comisión. El cobro está en pagos_cofisem
+// Formas de las que puede salir el dinero de un vale (comisiones_cofisem.
+// pagado_con) — las mismas columnas del corte.
+export const PAGADO_CON_OPCIONES = [
+  { k: "EFECTIVO", label: "Efectivo" },
+  { k: "CHEQUE", label: "Transf. / Dep." },
+  { k: "TDC", label: "T. Crédito/Déb." },
+];
+const CAMPO_PAGADO_CON = { EFECTIVO: "efectivo", CHEQUE: "cheque", TDC: "tdc" };
+
+// La opción que corresponde a como se cobró la cuota del vale (la de mayor
+// parte en un pago mixto) — es la que se preselecciona al capturarlo.
+export function pagadoConSugerido(k) {
+  const partes = valePorMetodo({ ...k, pagado_con: null, monto: n(k?.monto) || 1 });
+  return Object.entries(CAMPO_PAGADO_CON).reduce((mejor, [clave, campo]) =>
+    partes[campo] > partes[CAMPO_PAGADO_CON[mejor]] ? clave : mejor,
+  "EFECTIVO");
+}
+
+// De qué forma de pago sale un vale (comisión) en el corte. Si al capturarlo
+// se eligió (pagado_con), todo sale de ahí. Si no (vales anteriores a
+// 2026-11-27), de la misma con la que se cobró la cuota de esa comisión.
+// El cobro está en pagos_cofisem
 // (cuotas 2+ y la cuota 1 "pago tardío") o, si ahí no hay, en la propia
 // polizas_cofisem (cuota 1, o num_cuota_pago de un registro parcial).
 // `k` = fila de comisiones_cofisem con polizas_cofisem(efectivo, cheque, tdc,
@@ -35,6 +55,8 @@ export function etiquetaCancelada(p) {
 export function valePorMetodo(k) {
   const p = k?.polizas_cofisem ?? {};
   const monto = n(k?.monto);
+  const elegido = CAMPO_PAGADO_CON[k?.pagado_con];
+  if (elegido) return { efectivo: 0, cheque: 0, tdc: 0, [elegido]: monto };
   const cuota = (p.pagos_cofisem ?? []).find(
     (c) => c.num_cuota === k.num_cuota,
   );
